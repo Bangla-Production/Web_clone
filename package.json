@@ -1,0 +1,20 @@
+{
+  "name": "restopulse-restaurant-pos",
+  "version": "1.0.0",
+  "description": "RestoPulse - Cloud Restaurant Billing, POS & Kitchen Display System",
+  "scripts": {
+    "dev": "npm --prefix client run dev",
+    "build": "npm --prefix client run build",
+    "preview": "npm --prefix client run preview"
+  },
+  "keywords": [
+    "restaurant-pos",
+    "billing",
+    "kitchen-display",
+    "inventory",
+    "firebase",
+    "firestore"
+  ],
+  "author": "RestoPulse",
+  "license": "ISC"
+}

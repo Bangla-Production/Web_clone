@@ -1,0 +1,124 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() && (
+        getUserData().role == 'super_admin' || 
+        request.auth.token.email == 'superadmin@restopulse.com'
+      );
+    }
+
+    function isRestaurantAdmin(restId) {
+      return isAuthenticated() && (
+        getUserData().role in ['restaurant_admin', 'super_admin'] && 
+        (getUserData().restaurantId == restId || isSuperAdmin())
+      );
+    }
+
+    function isRestaurantStaff(restId) {
+      return isAuthenticated() && (
+        (getUserData().role in ['restaurant_admin', 'staff', 'waiter', 'cashier', 'kitchen', 'super_admin']) && 
+        (getUserData().restaurantId == restId || isSuperAdmin())
+      );
+    }
+
+    // 1. Users collection
+    match /users/{userId} {
+      allow read: if isSuperAdmin() || (isAuthenticated() && request.auth.uid == userId);
+      allow create: if isSuperAdmin() || isAuthenticated();
+      allow update, delete: if isSuperAdmin() || (isAuthenticated() && request.auth.uid == userId);
+    }
+
+    // 2. Restaurants collection
+    match /restaurants/{restaurantId} {
+      // Public read for customer digital menu and restaurant branding
+      allow read: if true;
+      
+      allow create, delete: if isSuperAdmin();
+      allow update: if isSuperAdmin() || isRestaurantAdmin(restaurantId);
+
+      // Subcollections under restaurants
+
+      // Categories & Menu Items: Public read (for QR digital menu), staff/admin write
+      match /categories/{categoryId} {
+        allow read: if true;
+        allow write: if isRestaurantStaff(restaurantId);
+      }
+
+      match /menuItems/{itemId} {
+        allow read: if true;
+        allow write: if isRestaurantStaff(restaurantId);
+      }
+
+      // Tables: Real-time status sync for staff/waiters/cashiers/admins
+      match /tables/{tableId} {
+        allow read: if isRestaurantStaff(restaurantId);
+        allow write: if isRestaurantStaff(restaurantId);
+      }
+
+      // Orders: Full lifecycle for orders
+      match /orders/{orderId} {
+        allow read: if isRestaurantStaff(restaurantId);
+        allow write: if isRestaurantStaff(restaurantId);
+      }
+
+      // Kitchen Order Tickets (KOTs): Real-time KDS tickets & printing
+      match /kots/{kotId} {
+        allow read: if isRestaurantStaff(restaurantId);
+        allow write: if isRestaurantStaff(restaurantId);
+      }
+
+      // Invoices: Thermal receipt and financial billing records
+      match /invoices/{invoiceId} {
+        allow read: if isRestaurantStaff(restaurantId);
+        allow write: if isRestaurantStaff(restaurantId);
+      }
+
+      // Inventory & Stock Adjustments
+      match /inventory/{itemId} {
+        allow read: if isRestaurantStaff(restaurantId);
+        allow write: if isRestaurantStaff(restaurantId);
+
+        match /transactions/{txnId} {
+          allow read: if isRestaurantStaff(restaurantId);
+          allow write: if isRestaurantStaff(restaurantId);
+        }
+      }
+
+      // Reservations: Guest table booking
+      match /reservations/{resId} {
+        allow read: if isRestaurantStaff(restaurantId);
+        allow create: if true; // Allows guests to book table online from public menu
+        allow update, delete: if isRestaurantStaff(restaurantId);
+      }
+
+      // Audit Logs: System action logs
+      match /auditLogs/{logId} {
+        allow read: if isRestaurantStaff(restaurantId);
+        allow create: if isRestaurantStaff(restaurantId);
+      }
+
+      // Printer & Station Settings
+      match /settings/{settingId} {
+        allow read: if isRestaurantStaff(restaurantId);
+        allow write: if isRestaurantAdmin(restaurantId);
+      }
+
+      // Customers
+      match /customers/{custId} {
+        allow read: if isRestaurantStaff(restaurantId);
+        allow write: if isRestaurantStaff(restaurantId);
+      }
+    }
+  }
+}

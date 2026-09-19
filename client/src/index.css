@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-950 text-slate-100 antialiased font-sans;
+  }
+}
+
+/* Custom thermal receipt & KOT printing stylesheet */
+@media print {
+  @page {
+    margin: 0;
+    size: auto;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .print-container {
+    width: 100% !important;
+    max-width: 80mm !important;
+    margin: 0 auto !important;
+    padding: 4mm !important;
+    font-family: monospace, 'Courier New', Courier !important;
+    color: #000 !important;
+    background: #fff !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+}
+
+/* Smooth scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.4);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.6);
+}
