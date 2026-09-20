@@ -17,7 +17,7 @@ import {
   runTransaction,
   writeBatch
 } from '../firebase/config';
-import { createAuthAccount, resendVerification, checkVerified } from './authAccountService';
+import { createAuthAccount, createStaffAuthAccount, resendVerification, checkVerified } from './authAccountService';
 
 // ----------------------------------------------------------------------
 // 1. RESTAURANTS (Multi-Tenant Platform)
@@ -245,23 +245,183 @@ export async function syncAccountVerification(account, password) {
 }
 
 /**
+ * Generates a random 6-digit numeric Staff ID as a string, e.g. "482913".
+ */
+function generateNumericStaffId() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+/**
  * Restaurant Admin provisions login credentials for their own staff
- * (kitchen / waiter / cashier). Same process as Super Admin -> Restaurant Admin:
- * the account stays "pending" until the staff member confirms their email.
- * Returns { account, emailResult }.
+ * (kitchen / waiter / cashier): a Name, Phone number, Role, an
+ * auto-generated unique numeric Staff ID, and a password. No email is
+ * collected and there is no confirmation step — the account is active
+ * immediately.
+ *
+ * Under the hood a real Firebase Auth login is still created (so Firestore
+ * security rules can identify the caller) using an internal synthetic email
+ * derived from the Staff ID. Nobody needs to know that email exists; staff
+ * always sign in with just their Staff ID + password.
+ *
+ * A top-level `staffLookup/{staffId}` document (publicly readable, admin-only
+ * write) maps the numeric Staff ID to that internal email so the login
+ * screen can resolve it before the person is authenticated.
+ *
+ * Returns { account, staffId, password }.
+ */
+/**
+ * Checks whether a numeric Staff ID is already taken.
+ */
+export async function checkStaffIdAvailability(staffId) {
+  const cleanId = String(staffId || '').trim();
+  if (!cleanId || !/^\d+$/.test(cleanId)) {
+    return { available: false, error: 'Staff ID must contain digits only.' };
+  }
+  try {
+    const snap = await getDoc(doc(db, 'staffLookup', cleanId));
+    return { available: !snap.exists(), exists: snap.exists() };
+  } catch (err) {
+    console.error('checkStaffIdAvailability error:', err);
+    return { available: false, error: err.message };
+  }
+}
+
+/**
+ * Restaurant Admin provisions login credentials for their own staff
+ * (kitchen / waiter / cashier): a Name, Phone number, Role, a
+ * unique numeric Staff ID (custom or auto-generated), and a unique password.
+ * No email is collected and there is no confirmation step — the account is active
+ * immediately.
+ *
+ * Under the hood a real Firebase Auth login is still created (so Firestore
+ * security rules can identify the caller) using an internal synthetic email
+ * derived from the Staff ID. Nobody needs to know that email exists; staff
+ * always sign in with just their Staff ID + password.
+ *
+ * A top-level `staffLookup/{staffId}` document (publicly readable, admin-only
+ * write) maps the numeric Staff ID to that internal email so the login
+ * screen can resolve it before the person is authenticated.
+ *
+ * Returns { account, staffId, password }.
  */
 export async function createRestaurantStaff(restaurantId, restaurantName, staffData) {
   const allowedRoles = ['waiter', 'kitchen', 'cashier'];
   const role = allowedRoles.includes(staffData.role) ? staffData.role : 'waiter';
-  return createAccountWithEmail(
-    {
-      ...staffData,
-      role,
-      restaurantId,
-      restaurantName
-    },
-    staffData.createdBy || 'Restaurant Admin'
-  );
+  const name = staffData.name?.trim() || 'Staff Member';
+  const phone = staffData.phone?.trim() || '';
+  const password = staffData.password;
+  const createdBy = staffData.createdBy || 'Restaurant Admin';
+
+  let staffId = String(staffData.staffId || '').trim();
+
+  if (staffId) {
+    if (!/^\d+$/.test(staffId)) {
+      throw new Error('Staff ID must be purely numerical (digits only).');
+    }
+    if (staffId.length < 3 || staffId.length > 10) {
+      throw new Error('Staff ID should be between 3 and 10 digits long.');
+    }
+    const lookupSnap = await getDoc(doc(db, 'staffLookup', staffId));
+    if (lookupSnap.exists()) {
+      throw new Error(`Staff ID "${staffId}" is already taken. Please choose another unique numerical ID.`);
+    }
+  } else {
+    // Auto-generate a Staff ID that isn't already taken
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const candidate = generateNumericStaffId();
+      const lookupSnap = await getDoc(doc(db, 'staffLookup', candidate));
+      if (!lookupSnap.exists()) {
+        staffId = candidate;
+        break;
+      }
+    }
+    if (!staffId) {
+      throw new Error('Could not generate a unique Staff ID. Please try again.');
+    }
+  }
+
+  const internalEmail = `staff${staffId}@${restaurantId}.restopulse.local`;
+
+  // Real Firebase Auth login, but nothing is ever emailed.
+  await createStaffAuthAccount({ email: internalEmail, password });
+
+  const profile = {
+    name,
+    phone,
+    staffId,
+    email: internalEmail,
+    username: staffId,
+    role,
+    restaurantId,
+    restaurantName: restaurantName || '',
+    status: 'active',
+    emailVerified: true,
+    // Marks this as a Staff-ID account (no real inbox, so Firebase's own
+    // email_verified token claim can never become true for it). Firestore
+    // rules trust this Firestore-side flag instead for these accounts —
+    // it can only ever be set by a Restaurant Admin, scoped to their own
+    // restaurant, via the create rule below.
+    authMethod: 'staffId',
+    createdBy,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  };
+
+  try {
+    await setDoc(doc(db, 'users', internalEmail), profile);
+  } catch (err) {
+    if (err?.code === 'permission-denied') {
+      throw new Error('Could not save the staff profile (permission denied).');
+    }
+    throw err;
+  }
+
+  await setDoc(doc(db, 'staffLookup', staffId), {
+    email: internalEmail,
+    restaurantId,
+    role,
+    name,
+    active: true,
+    createdAt: serverTimestamp()
+  });
+
+  return {
+    account: { id: internalEmail, ...profile, status: 'active' },
+    staffId,
+    password
+  };
+}
+
+/**
+ * Looks up the internal login email for a numeric Staff ID. Used by the
+ * Staff Login screen to resolve a Staff ID + password into a real Firebase
+ * Auth sign-in. Returns the staffLookup doc data, or null if not found.
+ */
+export async function getStaffLookup(staffId) {
+  try {
+    const snap = await getDoc(doc(db, 'staffLookup', String(staffId).trim()));
+    return snap.exists() ? snap.data() : null;
+  } catch (error) {
+    console.error('getStaffLookup error:', error);
+    return null;
+  }
+}
+
+/**
+ * Removes a Staff-ID based account: deletes both the users/{email} profile
+ * and the staffLookup/{staffId} mapping so the ID can be reissued later.
+ * (The underlying Firebase Auth login itself cannot be deleted from the
+ * browser, but without a profile or lookup entry it can no longer sign in
+ * anywhere useful.)
+ */
+export async function deleteRestaurantStaff(member) {
+  await deleteDoc(doc(db, 'users', member.id));
+  if (member.staffId) {
+    try {
+      await deleteDoc(doc(db, 'staffLookup', member.staffId));
+    } catch (e) { /* ignore */ }
+  }
+  return true;
 }
 
 // ----------------------------------------------------------------------

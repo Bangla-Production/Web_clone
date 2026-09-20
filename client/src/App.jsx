@@ -17,6 +17,7 @@ import TablesPage from './pages/TablesPage';
 import InventoryPage from './pages/InventoryPage';
 import ReportsPage from './pages/ReportsPage';
 import InvoicesPage from './pages/InvoicesPage';
+import CashierPage from './pages/CashierPage';
 import SettingsPage from './pages/SettingsPage';
 import PublicMenuPage from './pages/PublicMenuPage';
 import ReservationsPage from './pages/ReservationsPage';
@@ -55,7 +56,11 @@ function RootRedirect() {
     return <Navigate to="/kitchen" replace />;
   }
 
-  // All other staff/cashier/waiter go straight to POS Terminal
+  if (role === 'cashier') {
+    return <Navigate to="/cashier" replace />;
+  }
+
+  // Waiters (and any other operational staff) go straight to the POS/Waiter Terminal
   return <Navigate to="/pos" replace />;
 }
 
@@ -99,8 +104,9 @@ export default function App() {
                     <Route path="/reservations" element={<ReservationsPage />} />
                   </Route>
 
-                  {/* Invoices & Billing */}
+                  {/* Invoices, Billing & Cashier Terminal */}
                   <Route element={<ProtectedRoute allowedRoles={cashierAndAdmin} />}>
+                    <Route path="/cashier" element={<CashierPage />} />
                     <Route path="/invoices" element={<InvoicesPage />} />
                   </Route>
 

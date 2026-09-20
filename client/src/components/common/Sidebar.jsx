@@ -92,9 +92,15 @@ export default function Sidebar({ isOpen, setIsOpen }) {
       allowed: adminRoles
     },
     {
+      label: 'Cashier Terminal',
+      path: '/cashier',
+      icon: Receipt,
+      allowed: ['super_admin', 'restaurant_admin', 'cashier', 'staff']
+    },
+    {
       label: 'Invoices & Receipts',
       path: '/invoices',
-      icon: Receipt,
+      icon: ClipboardList,
       allowed: ['super_admin', 'restaurant_admin', 'cashier', 'staff']
     },
     {

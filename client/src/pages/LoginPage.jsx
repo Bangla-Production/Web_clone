@@ -8,7 +8,10 @@ import {
   Mail,
   KeyRound,
   MailWarning,
-  Send
+  Send,
+  Hash,
+  ShieldCheck,
+  Users
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useRestaurant } from '../context/RestaurantContext';
@@ -16,14 +19,16 @@ import { useToast } from '../context/ToastContext';
 import { resendVerification } from '../services/authAccountService';
 
 export default function LoginPage() {
+  const [mode, setMode] = useState('staff'); // 'staff' (Staff ID) or 'admin' (email)
   const [email, setEmail] = useState('');
+  const [staffId, setStaffId] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [pendingEmail, setPendingEmail] = useState('');
   const [resending, setResending] = useState(false);
 
-  const { login } = useAuth();
+  const { login, loginWithStaffId } = useAuth();
   const { restaurant } = useRestaurant();
   const toast = useToast();
   const navigate = useNavigate();
@@ -36,6 +41,8 @@ export default function LoginPage() {
       navigate('/dashboard');
     } else if (role === 'kitchen') {
       navigate('/kitchen');
+    } else if (role === 'cashier') {
+      navigate('/cashier');
     } else {
       navigate('/pos');
     }
@@ -45,13 +52,23 @@ export default function LoginPage() {
     e.preventDefault();
     setErrorMessage('');
     setPendingEmail('');
-    if (!email || !password) {
-      setErrorMessage('Please enter both your email address and password.');
-      return;
-    }
 
-    setLoading(true);
-    const result = await login(email, password);
+    let result;
+    if (mode === 'staff') {
+      if (!staffId || !password) {
+        setErrorMessage('Please enter both your Staff ID and password.');
+        return;
+      }
+      setLoading(true);
+      result = await loginWithStaffId(staffId, password);
+    } else {
+      if (!email || !password) {
+        setErrorMessage('Please enter both your email address and password.');
+        return;
+      }
+      setLoading(true);
+      result = await login(email, password);
+    }
     setLoading(false);
 
     if (result?.success) {
@@ -128,27 +145,75 @@ export default function LoginPage() {
             </div>
           )}
 
+          {/* Staff vs Admin login toggle */}
+          <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-950 border border-slate-800 rounded-xl">
+            <button
+              type="button"
+              onClick={() => { setMode('staff'); setErrorMessage(''); setPendingEmail(''); }}
+              className={`flex items-center justify-center space-x-1.5 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                mode === 'staff' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Staff Login</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMode('admin'); setErrorMessage(''); setPendingEmail(''); }}
+              className={`flex items-center justify-center space-x-1.5 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                mode === 'admin' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Admin / Owner</span>
+            </button>
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-3.5">
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">
-                Email Address
-              </label>
-              <div className="relative">
-                <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    if (errorMessage) setErrorMessage('');
-                    if (pendingEmail) setPendingEmail('');
-                  }}
-                  placeholder="you@example.com"
-                  className="w-full pl-9 pr-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
-                />
+            {mode === 'staff' ? (
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">
+                  Staff ID
+                </label>
+                <div className="relative">
+                  <Hash className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    required
+                    value={staffId}
+                    onChange={(e) => {
+                      setStaffId(e.target.value);
+                      if (errorMessage) setErrorMessage('');
+                    }}
+                    placeholder="e.g. 482913"
+                    className="w-full pl-9 pr-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors font-mono"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">Given to you by your Restaurant Admin — waiter, kitchen and cashier accounts use this.</p>
               </div>
-            </div>
+            ) : (
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">
+                  Email Address
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (errorMessage) setErrorMessage('');
+                      if (pendingEmail) setPendingEmail('');
+                    }}
+                    placeholder="you@example.com"
+                    className="w-full pl-9 pr-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+                  />
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">
@@ -190,7 +255,11 @@ export default function LoginPage() {
           {/* Super Admin Notice */}
           <div className="p-2.5 bg-purple-950/30 border border-purple-800/50 rounded-xl text-[11px] text-purple-300 flex items-center space-x-2">
             <KeyRound className="w-4 h-4 text-purple-400 shrink-0" />
-            <span>Self-registration is disabled. New accounts stay Pending until the email is confirmed — check your Spam / Junk folder for the confirmation mail.</span>
+            <span>
+              {mode === 'staff'
+                ? 'Self-registration is disabled. Ask your Restaurant Admin for your Staff ID and password.'
+                : 'Self-registration is disabled. New admin accounts stay Pending until the email is confirmed — check your Spam / Junk folder for the confirmation mail.'}
+            </span>
           </div>
         </div>
 

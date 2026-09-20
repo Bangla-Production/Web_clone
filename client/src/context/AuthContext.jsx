@@ -13,6 +13,7 @@ import {
   onAuthStateChanged
 } from '../firebase/config';
 import { friendlyAuthError } from '../services/authAccountService';
+import { getStaffLookup } from '../services/firestoreService';
 
 const AuthContext = createContext(null);
 
@@ -214,6 +215,27 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // Waiter / Kitchen / Cashier accounts sign in with just their numeric
+  // Staff ID + password — no email involved. Resolve the ID to the internal
+  // login email first, then reuse the normal email/password flow.
+  const loginWithStaffId = async (staffId, password) => {
+    const cleanId = (staffId || '').trim();
+    if (!cleanId || !password) {
+      const errMsg = 'Please enter both your Staff ID and password.';
+      toast.error(errMsg);
+      return { success: false, error: errMsg };
+    }
+
+    const lookup = await getStaffLookup(cleanId);
+    if (!lookup?.email) {
+      const errMsg = 'No staff account found with that Staff ID.';
+      toast.error(errMsg);
+      return { success: false, error: errMsg };
+    }
+
+    return login(lookup.email, password);
+  };
+
   const logout = async () => {
     try { await signOut(auth); } catch (e) { /* ignore */ }
     applyUser(null);
@@ -237,6 +259,7 @@ export function AuthProvider({ children }) {
         user,
         loading,
         login,
+        loginWithStaffId,
         logout,
         activeRestaurantId,
         selectActiveRestaurant,

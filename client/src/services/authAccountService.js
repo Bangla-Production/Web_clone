@@ -147,6 +147,28 @@ export async function createAuthAccount({ email, password }) {
 }
 
 /**
+ * Creates the Firebase Auth login for a Staff-ID based account (waiter /
+ * kitchen / cashier). Unlike createAuthAccount, this NEVER sends a real
+ * email — the "email" here is an internal synthetic address built from the
+ * staff's numeric ID (e.g. staff482913@spice-haven.restopulse.local) purely
+ * so Firestore security rules can identify the caller. The account is
+ * usable immediately; there is no confirmation step.
+ * Returns { uid }.
+ */
+export async function createStaffAuthAccount({ email, password }) {
+  const auth = getSecondaryAuth();
+  const cleanEmail = (email || '').toLowerCase().trim();
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+    return { uid: cred.user.uid };
+  } catch (err) {
+    throw makeError(err?.code || 'unknown', friendlyAuthError(err));
+  } finally {
+    try { await signOut(auth); } catch (e) { /* ignore */ }
+  }
+}
+
+/**
  * Sends a password-reset email. The person chooses their own new password
  * from the link (always works, no current password needed).
  * Returns { success, error }.

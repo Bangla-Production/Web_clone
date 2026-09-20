@@ -27,6 +27,7 @@ import InvoiceModal from '../components/invoice/InvoiceModal';
 export default function KitchenPage() {
   const [kots, setKots] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState('WHOLE_TABLE'); // 'WHOLE_TABLE' | 'KANBAN'
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [selectedKOTForPrint, setSelectedKOTForPrint] = useState(null);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
@@ -91,10 +92,44 @@ export default function KitchenPage() {
     setIsPrintModalOpen(true);
   };
 
-  // Group KOTs into columns
+  // Group KOTs into columns for Kanban
   const newKots = kots.filter(k => k.status === 'NEW');
   const preparingKots = kots.filter(k => ['CONFIRMED', 'PREPARING'].includes(k.status));
   const readyKots = kots.filter(k => k.status === 'READY');
+
+  // Group KOTs by Table for Whole Table Master View
+  const tableGroupedOrders = useMemo(() => {
+    const tableMap = {};
+
+    kots.forEach(kot => {
+      const key = kot.tableNumber ? `Table ${kot.tableNumber}` : (kot.orderType || 'Takeaway');
+      if (!tableMap[key]) {
+        tableMap[key] = {
+          tableKey: key,
+          tableNumber: kot.tableNumber || null,
+          orderType: kot.orderType || 'DINE_IN',
+          orderNumber: kot.orderNumber,
+          waiterName: kot.waiterName || 'Staff',
+          oldestCreatedAt: kot.createdAt,
+          kots: [],
+          allItems: []
+        };
+      }
+
+      tableMap[key].kots.push(kot);
+
+      (kot.items || []).forEach(item => {
+        tableMap[key].allItems.push({
+          ...item,
+          kotNumber: kot.kotNumber,
+          kotStatus: kot.status,
+          kotId: kot.id
+        });
+      });
+    });
+
+    return Object.values(tableMap);
+  }, [kots]);
 
   const getTimeElapsed = (createdAt) => {
     const time = typeof createdAt === 'string' ? new Date(createdAt).getTime() : Date.now();
@@ -132,8 +167,34 @@ export default function KitchenPage() {
           </div>
         </div>
 
-        {/* Audio Alert Toolbar */}
+        {/* View Mode & Audio Toolbar */}
         <div className="flex items-center space-x-2 self-end sm:self-auto text-xs">
+          {/* View Mode Toggle */}
+          <div className="flex items-center space-x-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+            <button
+              type="button"
+              onClick={() => setViewMode('WHOLE_TABLE')}
+              className={`px-2.5 py-1 rounded-lg font-bold text-xs transition-all ${
+                viewMode === 'WHOLE_TABLE'
+                  ? 'bg-orange-600 text-white shadow'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              🍱 Whole Table View ({tableGroupedOrders.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('KANBAN')}
+              className={`px-2.5 py-1 rounded-lg font-bold text-xs transition-all ${
+                viewMode === 'KANBAN'
+                  ? 'bg-orange-600 text-white shadow'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              📋 KOT Ticket Pipeline
+            </button>
+          </div>
+
           <button
             type="button"
             onClick={toggleMute}
@@ -158,7 +219,185 @@ export default function KitchenPage() {
         </div>
       </div>
 
-      {/* 2. 3-STAGE KANBAN BOARD */}
+      {/* VIEW 1: WHOLE TABLE MASTER VIEW */}
+      {viewMode === 'WHOLE_TABLE' && (
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {tableGroupedOrders.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-64 text-slate-500 text-xs bg-slate-900 border border-slate-800 rounded-2xl p-6">
+              <ChefHat className="w-12 h-12 text-slate-700 mb-3 opacity-50" />
+              <p className="font-bold text-slate-300 text-sm">No active table orders in the kitchen.</p>
+              <p className="text-slate-500 text-xs mt-1">When waiters punch table orders, the whole table breakdown will display here in real time for all cookers.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {tableGroupedOrders.map((tblGroup) => {
+                const hasDelayed = tblGroup.kots.some(k => isKOTDelayed(k.createdAt));
+                const allReady = tblGroup.kots.every(k => k.status === 'READY');
+                const hasNew = tblGroup.kots.some(k => k.status === 'NEW');
+
+                return (
+                  <div
+                    key={tblGroup.tableKey}
+                    className={`p-4 rounded-2xl border bg-slate-900 shadow-xl space-y-3.5 transition-all ${
+                      hasDelayed
+                        ? 'border-rose-600/80 ring-1 ring-rose-600/40'
+                        : allReady
+                        ? 'border-emerald-600/80 bg-emerald-950/20'
+                        : hasNew
+                        ? 'border-amber-600/80 ring-1 ring-amber-600/30'
+                        : 'border-slate-800'
+                    }`}
+                  >
+                    {/* Table Header */}
+                    <div className="flex items-start justify-between pb-3 border-b border-slate-800">
+                      <div className="flex items-center space-x-2.5">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shadow ${
+                          tblGroup.tableNumber ? 'bg-orange-600 text-white' : 'bg-slate-800 text-orange-400'
+                        }`}>
+                          {tblGroup.tableNumber ? `T${tblGroup.tableNumber}` : 'PKG'}
+                        </div>
+                        <div>
+                          <h2 className="font-bold text-base text-white flex items-center space-x-2">
+                            <span>{tblGroup.tableKey}</span>
+                            <span className="text-[10px] bg-slate-950 text-slate-400 px-2 py-0.5 rounded font-mono border border-slate-800">
+                              {tblGroup.orderType}
+                            </span>
+                          </h2>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            Server: <strong className="text-slate-200">{tblGroup.waiterName}</strong> • #{tblGroup.orderNumber}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="text-xs font-bold text-slate-300 flex items-center justify-end space-x-1">
+                          <Clock className="w-3.5 h-3.5 text-amber-400" />
+                          <span>{getTimeElapsed(tblGroup.oldestCreatedAt)}</span>
+                        </span>
+                        {hasDelayed && (
+                          <span className="text-[9px] font-black text-rose-400 bg-rose-950 px-1.5 py-0.5 rounded border border-rose-700 mt-1 inline-block">
+                            ⚠️ DELAYED ({'>'}15m)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* All Items Ordered for this Table */}
+                    <div className="space-y-2">
+                      <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Whole Table Dishes ({tblGroup.allItems.reduce((s, i) => s + (i.quantity || 1), 0)} items total):
+                      </h4>
+                      <div className="space-y-1.5 divide-y divide-slate-800/60 bg-slate-950/70 p-3 rounded-xl border border-slate-800">
+                        {tblGroup.allItems.map((dish, dIdx) => (
+                          <div key={dIdx} className="pt-1.5 first:pt-0 flex items-start justify-between text-xs">
+                            <div className="flex items-start space-x-2">
+                              <span className={`px-1.5 py-0.5 rounded text-[11px] font-extrabold shrink-0 ${
+                                dish.kotStatus === 'READY'
+                                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                                  : dish.kotStatus === 'PREPARING'
+                                  ? 'bg-blue-950 text-blue-300 border border-blue-800'
+                                  : 'bg-amber-950 text-amber-300 border border-amber-800'
+                              }`}>
+                                {dish.quantity}x
+                              </span>
+                              <div>
+                                <span className="font-bold text-slate-100">{dish.name}</span>
+                                {dish.notes && (
+                                  <p className="text-[10px] text-amber-400 font-semibold italic">
+                                    👉 {dish.notes}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+
+                            <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded shrink-0 ${
+                              dish.kotStatus === 'READY'
+                                ? 'bg-emerald-950 text-emerald-300'
+                                : dish.kotStatus === 'PREPARING'
+                                ? 'bg-blue-950 text-blue-300'
+                                : 'bg-amber-950 text-amber-300'
+                            }`}>
+                              {dish.kotStatus}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Table KOT Actions for Cookers */}
+                    <div className="space-y-2 pt-2 border-t border-slate-800">
+                      <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                        KOT Tickets for this Table ({tblGroup.kots.length}):
+                      </h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {tblGroup.kots.map(kot => (
+                          <div key={kot.id} className="p-2 bg-slate-950 border border-slate-800 rounded-lg space-y-1.5 text-xs">
+                            <div className="flex items-center justify-between">
+                              <span className="font-mono text-[10px] text-slate-400 font-bold">{kot.kotNumber}</span>
+                              <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded uppercase ${
+                                kot.status === 'READY'
+                                  ? 'bg-emerald-950 text-emerald-300'
+                                  : kot.status === 'PREPARING'
+                                  ? 'bg-blue-950 text-blue-300'
+                                  : 'bg-amber-950 text-amber-300'
+                              }`}>
+                                {kot.status}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center space-x-1">
+                              <button
+                                type="button"
+                                onClick={() => handlePrintKOT(kot)}
+                                className="p-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800"
+                                title="Print KOT"
+                              >
+                                <Printer className="w-3 h-3" />
+                              </button>
+                              {kot.status === 'NEW' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleStatusChange(kot, 'PREPARING')}
+                                  className="flex-1 py-1 px-2 rounded bg-amber-600 hover:bg-amber-500 text-white font-bold text-[10px] flex items-center justify-center space-x-1"
+                                >
+                                  <Play className="w-2.5 h-2.5 fill-current" />
+                                  <span>Start Cooking</span>
+                                </button>
+                              )}
+                              {['NEW', 'PREPARING', 'CONFIRMED'].includes(kot.status) && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleStatusChange(kot, 'READY')}
+                                  className="flex-1 py-1 px-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] flex items-center justify-center space-x-1"
+                                >
+                                  <CheckCircle className="w-2.5 h-2.5" />
+                                  <span>Mark Ready</span>
+                                </button>
+                              )}
+                              {kot.status === 'READY' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleStatusChange(kot, 'SERVED')}
+                                  className="flex-1 py-1 px-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-semibold"
+                                >
+                                  Served
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* VIEW 2: 3-STAGE KANBAN BOARD */}
+      {viewMode === 'KANBAN' && (
       <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3 overflow-hidden min-h-0">
         {/* COLUMN 1: NEW / INCOMING TICKETS */}
         <div className="bg-slate-900/90 border border-slate-800 rounded-2xl flex flex-col overflow-hidden shadow-lg">
@@ -426,6 +665,7 @@ export default function KitchenPage() {
           </div>
         </div>
       </div>
+      )}
 
       {/* 3. THERMAL KOT PRINT MODAL */}
       <InvoiceModal

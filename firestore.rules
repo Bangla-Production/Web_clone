@@ -29,9 +29,14 @@ service cloud.firestore {
 
     function hasActiveProfile() {
       return isAuthenticated() &&
-        request.auth.token.email_verified == true &&
         exists(/databases/$(database)/documents/users/$(request.auth.token.email)) &&
-        profile().get('status', 'active') == 'active';
+        profile().get('status', 'active') == 'active' &&
+        // Real email/password admins must have clicked their confirmation
+        // link. Staff-ID accounts (waiter/kitchen/cashier) have no real
+        // inbox to confirm, so they're trusted instead by the Firestore-side
+        // authMethod flag, which only a Restaurant Admin can set (see the
+        // users/{userId} create rule) and only for their own restaurant.
+        (request.auth.token.email_verified == true || profile().get('authMethod', '') == 'staffId');
     }
 
     function isRestaurantAdmin(restId) {
@@ -68,13 +73,19 @@ service cloud.firestore {
       );
 
       // Platform owner creates anything (Restaurant Admins).
-      // A Restaurant Admin can only create PENDING staff for their own restaurant.
+      // A Restaurant Admin can only create staff for their own restaurant.
+      // Email-based staff (legacy) start "pending"; Staff-ID based staff
+      // (waiter/kitchen/cashier created via numeric ID + password, no email
+      // to confirm) start "active" immediately.
       allow create: if isSuperAdmin() || (
         hasActiveProfile() &&
         profile().role == 'restaurant_admin' &&
         isStaffRole(request.resource.data.role) &&
         request.resource.data.restaurantId == profile().restaurantId &&
-        request.resource.data.status == 'pending'
+        (
+          request.resource.data.status == 'pending' ||
+          (request.resource.data.status == 'active' && request.resource.data.authMethod == 'staffId')
+        )
       );
 
       allow update: if isSuperAdmin()
@@ -100,6 +111,16 @@ service cloud.firestore {
         isStaffRole(resource.data.role) &&
         resource.data.restaurantId == profile().restaurantId
       );
+    }
+
+    // 1b. Staff Lookup — maps a numeric Staff ID -> internal login email so
+    // the Staff Login screen can resolve an ID to an email BEFORE the person
+    // is authenticated. Contains no password. Publicly readable (like a
+    // phonebook of IDs); only the owning restaurant's admin can write.
+    match /staffLookup/{staffId} {
+      allow read: if true;
+      allow create: if isRestaurantAdmin(request.resource.data.restaurantId);
+      allow update, delete: if isRestaurantAdmin(resource.data.restaurantId);
     }
 
     // 2. Restaurants
