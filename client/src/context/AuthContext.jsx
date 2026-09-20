@@ -126,7 +126,7 @@ async function resolveProfile(fbUser) {
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [activeRestaurantId, setActiveRestaurantId] = useState(
-    localStorage.getItem('restopulse_active_rest_id') || 'spice-haven'
+    localStorage.getItem('restopulse_active_rest_id') || ''
   );
   const [loading, setLoading] = useState(true);
   const toast = useToast();

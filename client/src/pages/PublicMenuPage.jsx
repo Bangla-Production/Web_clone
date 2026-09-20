@@ -1,3 +1,4 @@
+import { getStockQty, isItemSoldOut, isLowStock } from '../utils/stock';
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
@@ -15,8 +16,8 @@ import {
 } from 'lucide-react';
 import {
   getRestaurantById,
-  getCategories,
-  getMenuItems,
+  subscribeToCategories,
+  subscribeToMenuItems,
   createReservation
 } from '../services/firestoreService';
 import { useToast } from '../context/ToastContext';
@@ -24,12 +25,17 @@ import Modal from '../components/common/Modal';
 
 export default function PublicMenuPage() {
   const { restaurantId } = useParams();
-  const activeId = restaurantId || 'spice-haven';
+  // Never fall back to a demo restaurant. A customer link must carry the
+  // restaurant id (/menu/<id>); on a staff device we reuse the last restaurant
+  // that logged in there.
+  const activeId = restaurantId || localStorage.getItem('restopulse_active_rest_id') || '';
 
   const [restaurant, setRestaurant] = useState(null);
   const [categories, setCategories] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const [selectedCat, setSelectedCat] = useState('ALL');
   const [search, setSearch] = useState('');
   const [vegOnly, setVegOnly] = useState(false);
@@ -46,29 +52,65 @@ export default function PublicMenuPage() {
 
   const toast = useToast();
 
+  // Live data: whatever the restaurant admin adds / edits / deletes in
+  // Menu Management shows up here immediately, no reload needed.
   useEffect(() => {
-    async function loadData() {
-      try {
-        setLoading(true);
-        const [restData, catList, itemList] = await Promise.all([
-          getRestaurantById(activeId),
-          getCategories(activeId),
-          getMenuItems(activeId)
-        ]);
+    if (!activeId) {
+      setLoading(false);
+      return undefined;
+    }
 
-        if (restData) setRestaurant(restData);
-        if (catList) setCategories(catList);
-        if (itemList) setMenuItems(itemList);
-      } catch (err) {
-        console.error('Failed to load public menu from Firestore:', err);
-      } finally {
+    let cancelled = false;
+    setLoading(true);
+    setNotFound(false);
+    setLoadError('');
+    setRestaurant(null);
+    setCategories([]);
+    setMenuItems([]);
+    setSelectedCat('ALL');
+
+    getRestaurantById(activeId)
+      .then((data) => {
+        if (cancelled) return;
+        if (data) setRestaurant(data);
+        else setNotFound(true);
+      })
+      .catch((err) => {
+        if (!cancelled) setLoadError(err?.message || 'Could not load restaurant.');
+      });
+
+    const unsubCats = subscribeToCategories(
+      activeId,
+      (list) => { if (!cancelled) setCategories(list); },
+      (err) => { if (!cancelled) setLoadError(err?.message || 'Could not load categories.'); }
+    );
+
+    const unsubItems = subscribeToMenuItems(
+      activeId,
+      (list) => {
+        if (cancelled) return;
+        setMenuItems(list);
+        setLoading(false);
+      },
+      (err) => {
+        if (cancelled) return;
+        setLoadError(err?.message || 'Could not load the menu.');
         setLoading(false);
       }
-    }
-    loadData();
+    );
+
+    return () => {
+      cancelled = true;
+      unsubCats();
+      unsubItems();
+    };
   }, [activeId]);
 
   const currencySymbol = restaurant?.currencySymbol || '₹';
+
+  // Categories that actually have dishes (empty ones are hidden from guests)
+  const visibleCategories = categories.filter((c) => menuItems.some((i) => i.categoryId === c.id));
+  const catOrder = Object.fromEntries(categories.map((c, idx) => [c.id, c.displayOrder ?? idx]));
 
   const handleBookTable = async (e) => {
     e.preventDefault();
@@ -91,16 +133,43 @@ export default function PublicMenuPage() {
     }
   };
 
-  const filteredItems = menuItems.filter((item) => {
-    const matchesCat = selectedCat === 'ALL' || item.categoryId === selectedCat;
-    const matchesSearch =
-      search === '' ||
-      item.name.toLowerCase().includes(search.toLowerCase()) ||
-      (item.description && item.description.toLowerCase().includes(search.toLowerCase()));
-    const matchesVeg = !vegOnly || item.isVeg;
+  const filteredItems = [...menuItems]
+    .sort(
+      (a, b) =>
+        (catOrder[a.categoryId] ?? 999) - (catOrder[b.categoryId] ?? 999) ||
+        (a.name || '').localeCompare(b.name || '')
+    )
+    .filter((item) => {
+      const q = search.toLowerCase();
+      const matchesCat = selectedCat === 'ALL' || item.categoryId === selectedCat;
+      const matchesSearch =
+        q === '' ||
+        (item.name || '').toLowerCase().includes(q) ||
+        (item.description && item.description.toLowerCase().includes(q));
+      const matchesVeg = !vegOnly || item.isVeg;
 
-    return matchesCat && matchesSearch && matchesVeg;
-  });
+      return matchesCat && matchesSearch && matchesVeg;
+    });
+
+  // No restaurant in the link, or it does not exist
+  if (!activeId || notFound) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
+        <div className="max-w-sm text-center space-y-3">
+          <Info className="w-10 h-10 mx-auto text-slate-600" />
+          <h1 className="text-lg font-bold text-white">Menu not available</h1>
+          <p className="text-sm text-slate-400">
+            {!activeId
+              ? 'This menu link is incomplete. Please scan the restaurant\'s QR code or use the link they shared.'
+              : 'We could not find this restaurant. Please check the link and try again.'}
+          </p>
+          <Link to="/login" className="inline-block text-xs text-emerald-400 underline">
+            Staff login
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 pb-16">
@@ -115,7 +184,7 @@ export default function PublicMenuPage() {
             </div>
           )}
           <span className="font-bold text-sm text-white truncate max-w-[180px] sm:max-w-none">
-            {restaurant?.name || 'Spice Haven Bistro'}
+            {restaurant?.name || 'Restaurant Menu'}
           </span>
         </div>
 
@@ -156,7 +225,7 @@ export default function PublicMenuPage() {
           )}
 
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            {restaurant?.name || 'Spice Haven Bistro'}
+            {restaurant?.name || 'Restaurant Menu'}
           </h1>
           {restaurant?.tagline && (
             <p className="text-xs sm:text-sm text-emerald-400 font-medium">{restaurant.tagline}</p>
@@ -217,7 +286,7 @@ export default function PublicMenuPage() {
           >
             All Items
           </button>
-          {categories.map((cat) => (
+          {visibleCategories.map((cat) => (
             <button
               key={cat.id}
               onClick={() => setSelectedCat(cat.id)}
@@ -237,10 +306,19 @@ export default function PublicMenuPage() {
       <main className="max-w-4xl mx-auto px-4 mt-6">
         {loading ? (
           <div className="py-16 text-center text-emerald-400">Loading dishes...</div>
+        ) : loadError ? (
+          <div className="py-16 text-center text-rose-300 space-y-2">
+            <Info className="w-8 h-8 mx-auto text-rose-500" />
+            <p className="text-sm">Could not load the menu. {loadError}</p>
+          </div>
         ) : filteredItems.length === 0 ? (
           <div className="py-16 text-center text-slate-500 space-y-2">
             <Info className="w-8 h-8 mx-auto text-slate-600" />
-            <p className="text-sm">No dishes found matching your search or filters.</p>
+            <p className="text-sm">
+              {menuItems.length === 0
+                ? 'The menu is being prepared. Please check back soon.'
+                : 'No dishes found matching your search or filters.'}
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -258,7 +336,7 @@ export default function PublicMenuPage() {
                       className="w-full h-full object-cover"
                       loading="lazy"
                     />
-                    {!item.isAvailable && (
+                    {isItemSoldOut(item) && (
                       <div className="absolute inset-0 bg-black/75 flex items-center justify-center p-1 text-center">
                         <span className="text-[10px] font-bold text-rose-400">Sold Out</span>
                       </div>
@@ -291,9 +369,14 @@ export default function PublicMenuPage() {
                     <span className="text-base font-extrabold text-emerald-400">
                       {currencySymbol}{item.price?.toFixed(2)}
                     </span>
-                    {!item.isAvailable && (
+                    {isItemSoldOut(item) && (
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-950 text-rose-300 border border-rose-800">
                         Out of Stock
+                      </span>
+                    )}
+                    {!isItemSoldOut(item) && isLowStock(item) && (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800">
+                        Only {getStockQty(item)} left
                       </span>
                     )}
                   </div>

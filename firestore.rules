@@ -51,15 +51,21 @@ service cloud.firestore {
       }
 
       match /orders/{orderId} {
-        allow read, write: if isAuthenticated();
+        allow read, create, update: if isRestaurantStaff(restaurantId);
+        // Only the restaurant admin can delete (used by Settings -> Data Cleanup)
+        allow delete: if isRestaurantAdmin(restaurantId);
       }
 
       match /kots/{kotId} {
-        allow read, write: if isAuthenticated();
+        allow read, create, update: if isRestaurantStaff(restaurantId);
+        // Only the restaurant admin can delete (used by Settings -> Data Cleanup)
+        allow delete: if isRestaurantAdmin(restaurantId);
       }
 
       match /invoices/{invoiceId} {
-        allow read, write: if isAuthenticated();
+        allow read, create, update: if isRestaurantStaff(restaurantId);
+        // Only the restaurant admin can delete (used by Settings -> Data Cleanup)
+        allow delete: if isRestaurantAdmin(restaurantId);
       }
 
       match /inventory/{itemId} {

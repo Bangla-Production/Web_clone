@@ -22,7 +22,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useRestaurant } from '../../context/RestaurantContext';
 
 export default function Sidebar({ isOpen, setIsOpen }) {
-  const { user, logout, isSuperAdmin } = useAuth();
+  const { user, logout, isSuperAdmin, activeRestaurantId } = useAuth();
   const { restaurant } = useRestaurant();
 
   const allRoles = ['super_admin', 'restaurant_admin', 'staff', 'waiter', 'cashier'];
@@ -177,7 +177,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
         {/* Public Menu link button */}
         <div className="p-3 border-t border-slate-800">
           <NavLink
-            to="/menu"
+            to={`/menu/${user?.restaurantId || activeRestaurantId}`}
             target="_blank"
             rel="noreferrer"
             className="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 hover:text-emerald-400 hover:border-emerald-500/40 transition-colors"

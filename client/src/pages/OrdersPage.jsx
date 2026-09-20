@@ -14,7 +14,7 @@ import {
 import {
   getOrders,
   settleAndReleaseTableAtomic,
-  updateOrderStatus
+  cancelOrderAtomic
 } from '../services/firestoreService';
 import { useAuth } from '../context/AuthContext';
 import { useRestaurant } from '../context/RestaurantContext';
@@ -44,7 +44,7 @@ export default function OrdersPage() {
   const [invoiceToView, setInvoiceToView] = useState(null);
   const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
 
-  const { activeRestaurantId } = useAuth();
+  const { activeRestaurantId, user } = useAuth();
   const { currencySymbol, restaurant } = useRestaurant();
   const toast = useToast();
 
@@ -106,15 +106,24 @@ export default function OrdersPage() {
     }
   };
 
-  const handleCancelOrder = async (orderId, tableId) => {
+  const handleCancelOrder = async (orderId) => {
     if (!window.confirm('Cancel this order?')) return;
     try {
-      await updateOrderStatus(activeRestaurantId, orderId, 'CANCELLED', tableId);
+      await cancelOrderAtomic(activeRestaurantId, orderId, {
+        uid: user?.uid,
+        name: user?.name,
+        role: user?.role
+      });
       toast.success('Order cancelled.');
       fetchOrders();
       setIsDetailsOpen(false);
     } catch (err) {
-      toast.error('Failed to cancel order.');
+      console.error('Cancel order failed:', err);
+      const reason = err?.code === 'permission-denied'
+        ? 'Permission denied - check your login and the published Firestore rules.'
+        : (err?.message || '');
+      toast.error(`Failed to cancel order. ${reason}`.trim());
+      fetchOrders();
     }
   };
 
@@ -374,7 +383,7 @@ export default function OrdersPage() {
             <div className="flex justify-between items-center pt-2 border-t border-slate-800">
               {selectedOrder.orderStatus !== 'CANCELLED' && selectedOrder.paymentStatus === 'UNPAID' ? (
                 <button
-                  onClick={() => handleCancelOrder(selectedOrder.id, selectedOrder.tableId)}
+                  onClick={() => handleCancelOrder(selectedOrder.id)}
                   className="px-3 py-1.5 rounded-lg bg-rose-950 text-rose-300 hover:bg-rose-900 border border-rose-800 font-semibold"
                 >
                   Cancel Order

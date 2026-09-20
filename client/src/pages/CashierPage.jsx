@@ -254,14 +254,15 @@ export default function CashierPage() {
       setDiscountType(null);
       setDiscountValue(0);
 
-      // Open printable invoice modal
-      if (result?.invoice) {
+      // Open printable invoice modal (the service returns the invoice itself)
+      const invoice = result?.invoice || result;
+      if (invoice) {
         setSettledInvoice({
-          ...result.invoice,
+          ...invoice,
           order: {
-            orderNumber: result.invoice.orderNumber,
-            table: { tableNumber: result.invoice.tableNumber },
-            items: currentOrder.items || []
+            orderNumber: invoice.orderNumber,
+            table: { tableNumber: invoice.tableNumber },
+            items: invoice.items || currentOrder.items || []
           }
         });
         setIsInvoiceModalOpen(true);

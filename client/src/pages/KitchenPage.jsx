@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   ChefHat,
   Clock,
@@ -35,6 +35,7 @@ export default function KitchenPage() {
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [selectedKOTForPrint, setSelectedKOTForPrint] = useState(null);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [listenError, setListenError] = useState('');
 
   const { activeRestaurantId, user } = useAuth();
   const toast = useToast();
@@ -46,7 +47,9 @@ export default function KitchenPage() {
 
   useEffect(() => {
     setLoading(true);
+    setListenError('');
     const unsubscribeKots = subscribeToKitchenKOTs(targetRestId, (liveKots) => {
+      setListenError('');
       // Check for new KOTs
       if (!isFirstLoadRef.current) {
         const hasBrandNew = liveKots.some(
@@ -63,6 +66,11 @@ export default function KitchenPage() {
       // Update known set
       knownKotIdsRef.current = new Set(liveKots.map(k => k.id));
       setKots(liveKots);
+      setLoading(false);
+    }, (err) => {
+      setListenError(err?.code === 'permission-denied'
+        ? 'Permission denied while loading kitchen tickets. Check this account\'s role, restaurant and email verification.'
+        : (err?.message || 'Could not load kitchen tickets.'));
       setLoading(false);
     });
 
@@ -93,7 +101,10 @@ export default function KitchenPage() {
       await updateKOTStatus(targetRestId, kot.id, newStatus, kot.orderId);
       toast.success(`KOT #${kot.kotNumber} moved to ${newStatus}`);
     } catch (err) {
-      toast.error('Failed to update KOT status.');
+      console.error('KOT status update failed:', err);
+      toast.error(err?.code === 'permission-denied'
+        ? 'Permission denied: this account cannot update kitchen tickets.'
+        : 'Failed to update KOT status.');
     }
   };
 
@@ -263,6 +274,12 @@ export default function KitchenPage() {
           </button>
         </div>
       </div>
+
+      {listenError && (
+        <div className="p-3 rounded-xl border border-rose-700 bg-rose-950/60 text-rose-200 text-xs font-semibold shrink-0">
+          ⚠️ Live kitchen connection problem: {listenError}
+        </div>
+      )}
 
       {/* VIEW 1: WHOLE TABLE MASTER VIEW */}
       {viewMode === 'WHOLE_TABLE' && (

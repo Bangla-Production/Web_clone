@@ -15,6 +15,7 @@ import { getOrders } from '../services/firestoreService';
 import { useAuth } from '../context/AuthContext';
 import { useRestaurant } from '../context/RestaurantContext';
 import { useToast } from '../context/ToastContext';
+import ReportsCleanupTools from '../components/settings/ReportsCleanupTools';
 
 export default function ReportsPage() {
   const [orders, setOrders] = useState([]);
@@ -129,13 +130,16 @@ export default function ReportsPage() {
             Real-time financial analytics, order types, and revenue breakdown ({activeRestaurantId})
           </p>
         </div>
-        <button
-          onClick={fetchSalesReport}
-          className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors self-start"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          <span>Refresh Data</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2 self-start">
+          <button
+            onClick={fetchSalesReport}
+            className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors self-start"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Refresh Data</span>
+          </button>
+          <ReportsCleanupTools restaurantId={activeRestaurantId} onDone={fetchSalesReport} />
+        </div>
       </div>
 
       {/* Date Filter Bar */}

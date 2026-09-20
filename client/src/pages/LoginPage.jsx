@@ -29,6 +29,7 @@ export default function LoginPage() {
   const [resending, setResending] = useState(false);
 
   const { login, loginWithStaffId } = useAuth();
+  const lastRestaurantId = localStorage.getItem('restopulse_active_rest_id') || '';
   const { restaurant } = useRestaurant();
   const toast = useToast();
   const navigate = useNavigate();
@@ -265,12 +266,16 @@ export default function LoginPage() {
 
         {/* Public customer menu link & Seeder */}
         <div className="flex items-center justify-between text-xs text-slate-400 px-2">
-          <Link
-            to="/menu"
-            className="hover:text-emerald-400 underline transition-colors"
-          >
-            Open Public Customer Menu ↗
-          </Link>
+          {lastRestaurantId ? (
+            <Link
+              to={`/menu/${lastRestaurantId}`}
+              className="hover:text-emerald-400 underline transition-colors"
+            >
+              Open Public Customer Menu ↗
+            </Link>
+          ) : (
+            <span />
+          )}
         </div>
       </div>
     </div>

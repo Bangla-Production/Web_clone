@@ -13,7 +13,8 @@ import {
   Key,
   Trash2,
   Lock,
-  Phone
+  Phone,
+  Database
 } from 'lucide-react';
 import {
   getRestaurantById,
@@ -28,6 +29,7 @@ import { useRestaurant } from '../context/RestaurantContext';
 import { useToast } from '../context/ToastContext';
 import Modal from '../components/common/Modal';
 import ImgBBUploader from '../components/common/ImgBBUploader';
+import DataCleanupPanel from '../components/settings/DataCleanupPanel';
 
 export default function SettingsPage() {
   const { activeRestaurantId, user } = useAuth();
@@ -258,7 +260,22 @@ export default function SettingsPage() {
           <Users className="w-4 h-4" />
           <span>Staff Accounts</span>
         </button>
+
+        <button
+          onClick={() => setActiveTab('DATA')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${
+            activeTab === 'DATA'
+              ? 'bg-emerald-600 text-white shadow-md'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+        >
+          <Database className="w-4 h-4" />
+          <span>Data Cleanup</span>
+        </button>
       </div>
+
+      {/* DATA & STORAGE TAB */}
+      {activeTab === 'DATA' && <DataCleanupPanel restaurantId={activeRestaurantId} />}
 
       {/* GENERAL TAB */}
       {activeTab === 'GENERAL' && (

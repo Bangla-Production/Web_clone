@@ -4,6 +4,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  getDocsFromServer,
   setDoc,
   addDoc,
   updateDoc,
@@ -495,7 +496,7 @@ export async function getMenuItems(restaurantId) {
   }
 }
 
-export function subscribeToMenuItems(restaurantId, callback) {
+export function subscribeToMenuItems(restaurantId, callback, onError) {
   if (!restaurantId) return () => {};
   const colRef = collection(db, 'restaurants', restaurantId, 'menuItems');
   return onSnapshot(colRef, (snapshot) => {
@@ -503,6 +504,20 @@ export function subscribeToMenuItems(restaurantId, callback) {
     callback(items);
   }, (error) => {
     console.error('subscribeToMenuItems error:', error);
+    if (onError) onError(error);
+  });
+}
+
+export function subscribeToCategories(restaurantId, callback, onError) {
+  if (!restaurantId) return () => {};
+  const colRef = collection(db, 'restaurants', restaurantId, 'categories');
+  return onSnapshot(colRef, (snapshot) => {
+    const cats = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    cats.sort((a, b) => (a.displayOrder ?? 999) - (b.displayOrder ?? 999));
+    callback(cats);
+  }, (error) => {
+    console.error('subscribeToCategories error:', error);
+    if (onError) onError(error);
   });
 }
 
@@ -553,6 +568,57 @@ export async function toggleMenuItemAvailability(restaurantId, itemId, currentSt
   }
 }
 
+/**
+ * Sets the tracked quantity of a menu item. `qty === null` means unlimited.
+ * A quantity of 0 marks the dish Out of Stock; a quantity above 0 puts it
+ * back In Stock.
+ */
+export async function updateMenuItemStock(restaurantId, itemId, qty) {
+  try {
+    const docRef = doc(db, 'restaurants', restaurantId, 'menuItems', itemId);
+    const payload = { stockQty: qty, updatedAt: serverTimestamp() };
+    if (qty !== null) payload.isAvailable = qty > 0;
+    await updateDoc(docRef, payload);
+    return payload;
+  } catch (error) {
+    console.error('updateMenuItemStock error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Reduces stock for every ordered item that has a tracked quantity.
+ * Best-effort: the order is already saved, so a failure here only logs.
+ */
+export async function deductMenuStock(restaurantId, items) {
+  const wanted = {};
+  (items || []).forEach((i) => {
+    const id = i.menuItemId || i.id;
+    if (!id) return;
+    wanted[id] = (wanted[id] || 0) + (parseInt(i.quantity, 10) || 1);
+  });
+  const ids = Object.keys(wanted);
+  if (ids.length === 0) return;
+
+  try {
+    await runTransaction(db, async (transaction) => {
+      const refs = ids.map((id) => doc(db, 'restaurants', restaurantId, 'menuItems', id));
+      const snaps = await Promise.all(refs.map((r) => transaction.get(r)));
+      snaps.forEach((snap, idx) => {
+        if (!snap.exists()) return;
+        const current = snap.data().stockQty;
+        if (typeof current !== 'number') return; // unlimited
+        const next = Math.max(0, current - wanted[ids[idx]]);
+        const update = { stockQty: next, updatedAt: serverTimestamp() };
+        if (next === 0) update.isAvailable = false;
+        transaction.update(refs[idx], update);
+      });
+    });
+  } catch (error) {
+    console.warn('deductMenuStock failed (the order was still saved):', error);
+  }
+}
+
 export async function deleteMenuItem(restaurantId, itemId) {
   try {
     const docRef = doc(db, 'restaurants', restaurantId, 'menuItems', itemId);
@@ -568,12 +634,25 @@ export async function deleteMenuItem(restaurantId, itemId) {
 // 5. TABLES (Real-Time Synchronisation & Concurrency)
 // ----------------------------------------------------------------------
 
+// A table only counts as OCCUPIED / BILL_REQUESTED when it points at a real
+// order. Older versions "claimed" a table the moment a waiter tapped it, which
+// left empty placeholder claims (e.g. #PENDING-8305, 0 items) stuck on the
+// floor. Such leftovers are shown as Available everywhere.
+function normalizeTableDoc(d) {
+  const data = d.data();
+  const inUse = data.status === 'OCCUPIED' || data.status === 'BILL_REQUESTED';
+  if (inUse && !data.activeOrder?.orderId) {
+    return { id: d.id, ...data, status: 'AVAILABLE', activeOrder: null };
+  }
+  return { id: d.id, ...data };
+}
+
 export async function getTables(restaurantId) {
   try {
     const colRef = collection(db, 'restaurants', restaurantId, 'tables');
     const q = query(colRef, orderBy('tableNumber', 'asc'));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    return snapshot.docs.map(normalizeTableDoc);
   } catch (error) {
     console.error('getTables error:', error);
     return [];
@@ -589,7 +668,7 @@ export function subscribeToTables(restaurantId, callback) {
   const colRef = collection(db, 'restaurants', restaurantId, 'tables');
   const q = query(colRef, orderBy('tableNumber', 'asc'));
   return onSnapshot(q, (snapshot) => {
-    const tables = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    const tables = snapshot.docs.map(normalizeTableDoc);
     callback(tables);
   }, (error) => {
     console.error('subscribeToTables error:', error);
@@ -715,28 +794,27 @@ export async function getOrders(restaurantId) {
 /**
  * Real-time listener for active (unpaid) orders in the restaurant.
  */
-/**
- * Real-time listener for active (unpaid) orders in the restaurant.
- */
-export function subscribeToActiveOrders(restaurantId, callback) {
+export function subscribeToActiveOrders(restaurantId, callback, onError) {
   if (!restaurantId) return () => {};
   const colRef = collection(db, 'restaurants', restaurantId, 'orders');
+  // No orderBy(): `where(==)` + `orderBy(other field)` needs a composite index
+  // and fails silently when it is missing. Sorted on the client instead.
+  const q = query(colRef, where('paymentStatus', '==', 'UNPAID'));
 
-  return onSnapshot(colRef, (snapshot) => {
-    const orders = snapshot.docs
-      .map(d => {
-        const data = d.data();
-        return {
-          id: d.id,
-          ...data,
-          createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : (data.createdAt || new Date().toISOString())
-        };
-      })
-      .filter(o => o.paymentStatus === 'UNPAID' || (o.orderStatus && !['PAID', 'CLOSED', 'CANCELLED'].includes(o.orderStatus)))
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  return onSnapshot(q, (snapshot) => {
+    const orders = snapshot.docs.map(d => {
+      const data = d.data();
+      return {
+        id: d.id,
+        ...data,
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : new Date().toISOString()
+      };
+    });
+    orders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     callback(orders);
   }, (error) => {
     console.error('subscribeToActiveOrders error:', error);
+    if (onError) onError(error);
   });
 }
 
@@ -779,6 +857,69 @@ export async function updateOrderStatus(restaurantId, orderId, orderStatus, tabl
 
 export const settleOrderPayment = settleAndReleaseTableAtomic;
 
+/**
+ * Cancels an unpaid order in ONE atomic step:
+ *  - order -> CANCELLED
+ *  - its still-open kitchen tickets -> CANCELLED (so the kitchen screen clears)
+ *  - the table is freed, but only if it still points at THIS order, and a
+ *    missing table document no longer makes the whole cancel fail.
+ */
+export async function cancelOrderAtomic(restaurantId, orderId, userContext) {
+  const orderRef = doc(db, 'restaurants', restaurantId, 'orders', orderId);
+
+  // Queries are not allowed inside transactions, so find the kitchen tickets first.
+  const kotSnap = await getDocs(
+    query(collection(db, 'restaurants', restaurantId, 'kots'), where('orderId', '==', orderId))
+  );
+  const openKotRefs = kotSnap.docs
+    .filter((d) => !['SERVED', 'CANCELLED'].includes(d.data().status))
+    .map((d) => d.ref);
+
+  const result = await runTransaction(db, async (transaction) => {
+    const orderSnap = await transaction.get(orderRef);
+    if (!orderSnap.exists()) throw new Error('This order no longer exists.');
+    const order = orderSnap.data();
+    if (order.paymentStatus === 'PAID') throw new Error('A paid order cannot be cancelled.');
+    if (order.orderStatus === 'CANCELLED') return { orderNumber: order.orderNumber, already: true };
+
+    // All reads first, then all writes.
+    let tableRef = null;
+    let tableSnap = null;
+    if (order.tableId) {
+      tableRef = doc(db, 'restaurants', restaurantId, 'tables', order.tableId);
+      tableSnap = await transaction.get(tableRef);
+    }
+
+    transaction.update(orderRef, {
+      orderStatus: 'CANCELLED',
+      cancelledAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+    openKotRefs.forEach((ref) =>
+      transaction.update(ref, { status: 'CANCELLED', updatedAt: serverTimestamp() })
+    );
+    if (tableSnap && tableSnap.exists()) {
+      const active = tableSnap.data().activeOrder;
+      if (!active || active.orderId === orderId) {
+        transaction.update(tableRef, { status: 'AVAILABLE', activeOrder: null, updatedAt: serverTimestamp() });
+      }
+    }
+    return { orderNumber: order.orderNumber, already: false };
+  });
+
+  if (!result.already) {
+    await createAuditLog(restaurantId, {
+      userId: userContext?.uid,
+      userName: userContext?.name,
+      role: userContext?.role,
+      action: 'ORDER_CANCELLED',
+      entityId: orderId,
+      details: `Cancelled order #${result.orderNumber}.`
+    }).catch(console.error);
+  }
+  return result;
+}
+
 // ----------------------------------------------------------------------
 // 7. KOT (KITCHEN ORDER TICKETS) & RUNNING KOT WORKFLOW
 // ----------------------------------------------------------------------
@@ -786,25 +927,31 @@ export const settleOrderPayment = settleAndReleaseTableAtomic;
 /**
  * Real-time listener for active KOT tickets on the Kitchen Display System (KDS).
  */
-export function subscribeToKitchenKOTs(restaurantId, callback) {
+export function subscribeToKitchenKOTs(restaurantId, callback, onError) {
   if (!restaurantId) return () => {};
   const colRef = collection(db, 'restaurants', restaurantId, 'kots');
+  // NOTE: deliberately no orderBy() here. `where(in)` + `orderBy(other field)`
+  // needs a composite index; when that index is missing the listener dies
+  // silently and the kitchen board stops updating. We sort on the client.
+  const q = query(
+    colRef,
+    where('status', 'in', ['NEW', 'CONFIRMED', 'PREPARING', 'READY'])
+  );
 
-  return onSnapshot(colRef, (snapshot) => {
-    const kots = snapshot.docs
-      .map(d => {
-        const data = d.data();
-        return {
-          id: d.id,
-          ...data,
-          createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : (data.createdAt || new Date().toISOString())
-        };
-      })
-      .filter(k => ['NEW', 'CONFIRMED', 'PREPARING', 'READY'].includes(k.status))
-      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  return onSnapshot(q, (snapshot) => {
+    const kots = snapshot.docs.map(d => {
+      const data = d.data();
+      return {
+        id: d.id,
+        ...data,
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : new Date().toISOString()
+      };
+    });
+    kots.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
     callback(kots);
   }, (error) => {
     console.error('subscribeToKitchenKOTs error:', error);
+    if (onError) onError(error);
   });
 }
 
@@ -883,28 +1030,48 @@ export async function createOrderWithKOT(restaurantId, orderData, kotItems, wait
     updatedAt: serverTimestamp()
   };
 
-  const batch = writeBatch(db);
-  batch.set(orderRef, orderPayload);
-  batch.set(kotRef, kotPayload);
+  await runTransaction(db, async (transaction) => {
+    // Guard against two waiters opening the same table at the same time.
+    if (tableRef) {
+      const tableSnap = await transaction.get(tableRef);
+      if (!tableSnap.exists()) {
+        throw new Error('This table no longer exists.');
+      }
+      const existingOrderId = tableSnap.data().activeOrder?.orderId;
+      if (existingOrderId) {
+        const existingRef = doc(db, 'restaurants', restaurantId, 'orders', existingOrderId);
+        const existingSnap = await transaction.get(existingRef);
+        if (existingSnap.exists()) {
+          const ex = existingSnap.data();
+          const finished = ex.paymentStatus === 'PAID' || ['CLOSED', 'CANCELLED'].includes(ex.orderStatus);
+          if (!finished) {
+            throw new Error(`Table ${orderData.tableNumber || ''} already has an open order (#${ex.orderNumber}). Open that order to add items.`);
+          }
+        }
+      }
+    }
 
-  if (tableRef) {
-    batch.update(tableRef, {
-      status: 'OCCUPIED',
-      activeOrder: {
-        orderId: orderRef.id,
-        orderNumber,
-        tableNumber: orderData.tableNumber,
-        totalAmount: orderPayload.totalAmount,
-        itemCount: kotItems.reduce((sum, i) => sum + (parseInt(i.quantity, 10) || 1), 0),
-        waiterName: waiterData?.name || 'Staff',
-        status: 'CONFIRMED',
-        createdAt: new Date().toISOString()
-      },
-      updatedAt: serverTimestamp()
-    });
-  }
+    transaction.set(orderRef, orderPayload);
+    transaction.set(kotRef, kotPayload);
 
-  await batch.commit();
+    if (tableRef) {
+      transaction.update(tableRef, {
+        status: 'OCCUPIED',
+        activeOrder: {
+          orderId: orderRef.id,
+          orderNumber,
+          tableNumber: orderData.tableNumber,
+          totalAmount: orderPayload.totalAmount,
+          itemCount: kotItems.reduce((sum, i) => sum + (parseInt(i.quantity, 10) || 1), 0),
+          waiterName: waiterData?.name || 'Staff',
+          status: 'CONFIRMED',
+          createdAt: new Date().toISOString()
+        },
+        updatedAt: serverTimestamp()
+      });
+    }
+  });
+  await deductMenuStock(restaurantId, kotItems);
 
   // Create audit log
   await createAuditLog(restaurantId, {
@@ -929,7 +1096,7 @@ export async function createOrderWithKOT(restaurantId, orderData, kotItems, wait
 export async function addRunningKOTToOrder(restaurantId, orderId, newItems, waiterData, runningNotes = '') {
   const orderRef = doc(db, 'restaurants', restaurantId, 'orders', orderId);
 
-  return await runTransaction(db, async (transaction) => {
+  const runningResult = await runTransaction(db, async (transaction) => {
     const orderSnap = await transaction.get(orderRef);
     if (!orderSnap.exists()) {
       throw new Error(`Order ${orderId} not found.`);
@@ -1044,6 +1211,9 @@ export async function addRunningKOTToOrder(restaurantId, orderId, newItems, wait
       }
     };
   });
+
+  await deductMenuStock(restaurantId, newItems);
+  return runningResult;
 }
 
 /**
@@ -1208,7 +1378,7 @@ export async function settleAndReleaseTableAtomic(restaurantId, orderId, payment
       role: userContext?.role,
       action: 'PAYMENT_COMPLETED',
       entityId: orderId,
-      details: `Settled ${paymentData.paymentMethod} ₹${paymentData.totalAmount} for #${order.orderNumber}. Table ${paymentData.tableNumber || 'N/A'} released.`
+      details: `Settled ${paymentData.paymentMethod} ₹${paymentData.totalAmount} for #${result.orderNumber}. Table ${paymentData.tableNumber || 'N/A'} released.`
     }).catch(console.error);
 
     return result;
@@ -1255,6 +1425,163 @@ export async function getAuditLogs(restaurantId) {
   } catch (error) {
     console.error('getAuditLogs error:', error);
     return [];
+  }
+}
+
+// ----------------------------------------------------------------------
+// 9b. DATA RETENTION (manual cleanup of old, finished records)
+// ----------------------------------------------------------------------
+
+// Max documents handled per collection per run. Keeps one click far inside the
+// free-tier daily quotas (50k reads / 20k deletes) - just run it again for more.
+export const CLEANUP_CAP_PER_COLLECTION = 5000;
+
+// Only FINISHED records are ever deleted. Open / unpaid orders and live
+// kitchen tickets are never touched, whatever their age.
+const isFinishedOrder = (d) => d.paymentStatus === 'PAID' || ['CLOSED', 'CANCELLED'].includes(d.orderStatus);
+const isFinishedKot = (d) => ['SERVED', 'CANCELLED'].includes(d.status);
+
+// Best-effort creation date of a document (Timestamp, Date, ISO string or number).
+const docDate = (data) => {
+  const c = data.createdAt;
+  if (c && typeof c.toDate === 'function') return c.toDate();
+  if (c instanceof Date) return c;
+  const v = c ?? data.issuedAt;
+  const d = v ? new Date(v) : null;
+  return d && !Number.isNaN(d.getTime()) ? d : null;
+};
+
+/**
+ * Reads the OLDEST documents of one collection straight from the Firebase
+ * SERVER (never a local cache), using the same orderBy('createdAt') read that
+ * the Orders / Reports pages already use. The date filter is applied here, so
+ * it does not depend on a server-side range query.
+ * cutoff = null means "everything".
+ */
+async function readOldDocs(restaurantId, kind, cutoff) {
+  const colRef = collection(db, 'restaurants', restaurantId, kind);
+  const snap = await getDocsFromServer(
+    query(colRef, orderBy('createdAt', 'asc'), limit(CLEANUP_CAP_PER_COLLECTION))
+  );
+  const docs = snap.docs.filter((d) => {
+    if (!cutoff) return true;
+    const when = docDate(d.data());
+    return !!when && when < cutoff;
+  });
+  const lastWhen = snap.docs.length ? docDate(snap.docs[snap.docs.length - 1].data()) : null;
+  const capped = snap.size >= CLEANUP_CAP_PER_COLLECTION && (!cutoff || (lastWhen && lastWhen < cutoff));
+  return { docs, capped };
+}
+
+/**
+ * Finds orders / kitchen tickets / invoices created BEFORE `cutoff` (a Date),
+ * or ALL of them when cutoff is null. Nothing is deleted here.
+ *
+ *  - orders / kots / invoices : what a cleanup would delete (finished only)
+ *  - allOrders / allKots      : everything found, used for the Excel backup
+ */
+export async function previewOldRecords(restaurantId, cutoff = null) {
+  const result = { cutoff, capped: false, orders: [], kots: [], invoices: [], allOrders: [], allKots: [] };
+
+  const [orderRes, kotRes, invoiceRes] = await Promise.all([
+    readOldDocs(restaurantId, 'orders', cutoff),
+    readOldDocs(restaurantId, 'kots', cutoff),
+    readOldDocs(restaurantId, 'invoices', cutoff)
+  ]);
+  result.capped = orderRes.capped || kotRes.capped || invoiceRes.capped;
+
+  const toRecord = (d) => ({ ref: d.ref, id: d.id, data: d.data() });
+
+  result.allOrders = orderRes.docs.map(toRecord);
+  result.allKots = kotRes.docs.map(toRecord);
+  result.orders = result.allOrders.filter((o) => isFinishedOrder(o.data));
+
+  // A kitchen ticket goes if it is finished itself, or if its order is being
+  // removed (so a ticket stuck on READY can't linger forever).
+  const removedOrderIds = new Set(result.orders.map((o) => o.id));
+  result.kots = result.allKots.filter((k) => isFinishedKot(k.data) || removedOrderIds.has(k.data.orderId));
+
+  result.invoices = invoiceRes.docs.map(toRecord);
+  return result;
+}
+
+/**
+ * Deletes exactly the records found by previewOldRecords(), then re-reads the
+ * Firebase server to PROVE they are gone (so nothing is left only in a cache).
+ * onProgress(deletedSoFar, total) is called after every batch.
+ * Returns { deleted, remaining }.
+ */
+export async function deleteOldRecords(restaurantId, preview, userContext, onProgress) {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    throw new Error('You are offline. Connect to the internet, then try again.');
+  }
+
+  const groups = { orders: preview.orders, kots: preview.kots, invoices: preview.invoices };
+  const refs = [...preview.orders, ...preview.kots, ...preview.invoices].map((r) => r.ref);
+  const BATCH_SIZE = 400;
+  let deleted = 0;
+
+  for (let i = 0; i < refs.length; i += BATCH_SIZE) {
+    const chunk = refs.slice(i, i + BATCH_SIZE);
+    const batch = writeBatch(db);
+    chunk.forEach((ref) => batch.delete(ref));
+    await batch.commit(); // resolves only after the Firebase server accepted it
+    deleted += chunk.length;
+    if (onProgress) onProgress(deleted, refs.length);
+  }
+
+  // Verify against the server.
+  let remaining = 0;
+  for (const [kind, records] of Object.entries(groups)) {
+    if (records.length === 0) continue;
+    const ids = new Set(records.map((r) => r.id));
+    const { docs } = await readOldDocs(restaurantId, kind, preview.cutoff);
+    remaining += docs.filter((d) => ids.has(d.id)).length;
+  }
+  if (remaining > 0) {
+    throw new Error(`${remaining} records are still on the server. Scan again and retry.`);
+  }
+
+  const upTo = preview.cutoff ? new Date(preview.cutoff.getTime() - 1) : new Date();
+  await createAuditLog(restaurantId, {
+    userId: userContext?.uid,
+    userName: userContext?.name,
+    role: userContext?.role,
+    action: 'DATA_CLEANUP',
+    entityId: restaurantId,
+    details: `Deleted ${preview.orders.length} orders, ${preview.kots.length} kitchen tickets, ${preview.invoices.length} invoices up to ${upTo.toLocaleDateString('en-CA')} (Excel backup downloaded first).`
+  });
+  await saveCleanupMeta(restaurantId, ['lastCleanupAt']);
+
+  return { deleted, remaining: 0 };
+}
+
+// "Last backup / last cleanup" dates, used for the every-7-days reminder.
+const cleanupMetaRef = (restaurantId) => doc(db, 'restaurants', restaurantId, 'settings', 'dataCleanup');
+
+export async function getCleanupMeta(restaurantId) {
+  try {
+    const snap = await getDoc(cleanupMetaRef(restaurantId));
+    if (!snap.exists()) return {};
+    const d = snap.data();
+    return {
+      lastBackupAt: d.lastBackupAt?.toDate ? d.lastBackupAt.toDate() : null,
+      lastCleanupAt: d.lastCleanupAt?.toDate ? d.lastCleanupAt.toDate() : null
+    };
+  } catch (error) {
+    console.error('getCleanupMeta error:', error);
+    return {};
+  }
+}
+
+/** keys: any of 'lastBackupAt' | 'lastCleanupAt' - each is stamped with the server time. */
+export async function saveCleanupMeta(restaurantId, keys) {
+  try {
+    const patch = {};
+    keys.forEach((k) => { patch[k] = serverTimestamp(); });
+    await setDoc(cleanupMetaRef(restaurantId), patch, { merge: true });
+  } catch (error) {
+    console.error('saveCleanupMeta error:', error);
   }
 }
 

@@ -9,24 +9,14 @@ export function RestaurantProvider({ children }) {
   const { activeRestaurantId } = useAuth();
   const toast = useToast();
 
+  // Neutral placeholder until the real restaurant document loads (no demo branding).
   const [restaurant, setRestaurant] = useState({
-    id: 'spice-haven',
-    name: 'Spice Haven Bistro',
-    tagline: 'Authentic Flavors & Gourmet Dining',
-    logoUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=200&auto=format&fit=crop&q=80',
-    bannerUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1200&auto=format&fit=crop&q=80',
-    address: '104 Royal Heritage Road, Sector 5, Salt Lake, Kolkata, WB 700091',
-    phone: '+91 98765 43210',
-    email: 'contact@spicehaven.com',
-    gstin: '19AABCS1429B1Z8',
+    id: activeRestaurantId || '',
+    name: '',
     currency: 'INR',
     currencySymbol: '₹',
-    primaryColor: '#0f766e',
-    secondaryColor: '#ea580c',
     taxRate: 5.0,
-    taxName: 'GST (5%)',
-    invoiceHeader: 'Tax Invoice / Cash Memo',
-    invoiceFooter: 'FSSAI Lic: 12822019000123 • Thank you for dining with us!'
+    taxName: 'GST'
   });
   const [loading, setLoading] = useState(true);
 

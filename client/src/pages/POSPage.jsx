@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { getStockQty, isItemSoldOut, isLowStock } from '../utils/stock';
 import {
   Search,
   Plus,
@@ -25,7 +26,6 @@ import {
   getMenuItems,
   subscribeToTables,
   subscribeToActiveOrders,
-  claimTableAtomic,
   createOrderWithKOT,
   addRunningKOTToOrder,
   requestBillForTable,
@@ -129,6 +129,10 @@ export default function POSPage() {
 
     const unsubOrders = subscribeToActiveOrders(activeRestaurantId, (liveOrders) => {
       setActiveOrders(liveOrders);
+    }, (err) => {
+      toast.error(err?.code === 'permission-denied'
+        ? 'Permission denied while loading live orders.'
+        : `Could not load live orders: ${err?.message || 'unknown error'}`);
     });
 
     return () => {
@@ -154,9 +158,18 @@ export default function POSPage() {
 
   // Add Item to Cart
   const addToCart = (item) => {
-    if (!item.isAvailable) {
+    if (isItemSoldOut(item)) {
       toast.warning(`${item.name} is currently out of stock!`);
       return;
+    }
+
+    const stockLimit = getStockQty(item);
+    if (stockLimit !== null) {
+      const inCart = cart.find((i) => (i.menuItemId || i.id) === item.id)?.quantity || 0;
+      if (inCart + 1 > stockLimit) {
+        toast.warning(`Only ${stockLimit} ${item.name} left in stock.`);
+        return;
+      }
     }
 
     setCart((prev) => {
@@ -183,6 +196,15 @@ export default function POSPage() {
   };
 
   const updateQuantity = (itemId, delta) => {
+    if (delta > 0) {
+      const menuItem = menuItems.find((m) => m.id === itemId);
+      const stockLimit = getStockQty(menuItem);
+      const inCart = cart.find((i) => (i.menuItemId || i.id) === itemId)?.quantity || 0;
+      if (stockLimit !== null && inCart + delta > stockLimit) {
+        toast.warning(`Only ${stockLimit} ${menuItem?.name || 'item'} left in stock.`);
+        return;
+      }
+    }
     setCart((prev) =>
       prev
         .map((i) => {
@@ -303,22 +325,11 @@ export default function POSPage() {
   }, [menuItems, selectedCategory, searchQuery, vegFilter]);
 
   // Table selection handler
-  const handleSelectTable = async (table) => {
+  // Selecting a table only selects it. The table becomes OCCUPIED when the
+  // first order is actually sent to the kitchen (see createOrderWithKOT).
+  const handleSelectTable = (table) => {
     setSelectedTableId(table.id);
     setOrderType('DINE_IN');
-
-    // If available, attempt atomic claim
-    if (table.status === 'AVAILABLE') {
-      try {
-        await claimTableAtomic(activeRestaurantId, table.id, {
-          uid: user?.uid,
-          name: user?.name,
-          role: user?.role
-        });
-      } catch (err) {
-        console.warn('Table already claimed by another waiter');
-      }
-    }
   };
 
   // 1. Send Order to Kitchen (New Order or Running KOT)
@@ -392,7 +403,11 @@ export default function POSPage() {
       }
     } catch (err) {
       console.error('Send to kitchen error:', err);
-      toast.error('Failed to send order to kitchen. Please retry.');
+      toast.error(
+        err?.message?.includes('already has an open order')
+          ? err.message
+          : 'Failed to send order to kitchen. Please retry.'
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -658,9 +673,9 @@ export default function POSPage() {
                   <button
                     key={item.id}
                     onClick={() => addToCart(item)}
-                    disabled={!item.isAvailable}
+                    disabled={isItemSoldOut(item)}
                     className={`group relative p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all duration-150 active:scale-95 ${
-                      !item.isAvailable
+                      isItemSoldOut(item)
                         ? 'bg-slate-950/50 border-slate-900 opacity-50 cursor-not-allowed'
                         : 'bg-slate-950 border-slate-800 hover:border-emerald-500 hover:shadow-lg hover:shadow-emerald-950/40'
                     }`}
@@ -693,6 +708,11 @@ export default function POSPage() {
                     <div className="mt-2.5 pt-1.5 border-t border-slate-800/80 flex items-center justify-between">
                       <span className="text-xs font-black text-emerald-400">
                         {currencySymbol}{item.price?.toFixed(2)}
+                        {isItemSoldOut(item) ? (
+                          <span className="ml-1.5 text-[9px] font-bold text-rose-400">SOLD OUT</span>
+                        ) : isLowStock(item) ? (
+                          <span className="ml-1.5 text-[9px] font-bold text-amber-400">{getStockQty(item)} left</span>
+                        ) : null}
                       </span>
                       <span className="p-1 rounded-md bg-slate-900 group-hover:bg-emerald-600 group-hover:text-white text-slate-400 transition-colors">
                         <Plus className="w-3.5 h-3.5" />
