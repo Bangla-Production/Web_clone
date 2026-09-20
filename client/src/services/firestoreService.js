@@ -17,6 +17,7 @@ import {
   runTransaction,
   writeBatch
 } from '../firebase/config';
+import { createAuthAccount, resendVerification, checkVerified } from './authAccountService';
 
 // ----------------------------------------------------------------------
 // 1. RESTAURANTS (Multi-Tenant Platform)
@@ -131,192 +132,136 @@ export async function getStaffByRestaurant(restaurantId) {
   }
 }
 
-const LOCAL_USERS_KEY = 'restopulse_provisioned_users_cache';
-
-function getLocalProvisionedUsers() {
-  try {
-    const raw = localStorage.getItem(LOCAL_USERS_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch (e) {
-    return [];
-  }
-}
-
-function saveLocalProvisionedUsers(list) {
-  try {
-    localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(list));
-  } catch (e) {
-    console.warn('Failed to save to local cache:', e);
-  }
-}
-
 export async function getAllUsers() {
-  let firestoreList = [];
-  try {
-    const colRef = collection(db, 'users');
-    const snapshot = await getDocs(colRef);
-    firestoreList = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-  } catch (error) {
-    console.warn('getAllUsers Firestore fetch warning (falling back to local cache):', error);
-  }
-
-  const localList = getLocalProvisionedUsers();
-  // Merge unique by email or id
-  const map = new Map();
-  localList.forEach(u => map.set(u.id || u.email, u));
-  firestoreList.forEach(u => map.set(u.id || u.email, u));
-
-  const merged = Array.from(map.values());
-  saveLocalProvisionedUsers(merged);
-  return merged;
-}
-
-export async function createProvisionedUser(userData) {
-  const cleanEmail = (userData.email || '').toLowerCase().trim();
-  const rolePrefix = userData.role || 'user';
-  const docId = `${rolePrefix}-${cleanEmail.replace(/[^a-z0-9]/g, '_')}`;
-
-  const payload = {
-    id: docId,
-    name: userData.name?.trim() || 'Staff Member',
-    email: cleanEmail,
-    username: userData.username?.trim() || cleanEmail,
-    password: userData.password || 'Staff123$',
-    restaurantId: userData.restaurantId || 'spice-haven',
-    restaurantName: userData.restaurantName || 'Spice Haven Bistro',
-    role: userData.role || 'restaurant_admin',
-    status: userData.status || 'active',
-    createdBy: 'Super Admin',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  };
-
-  // Always update LocalStorage cache first so registration never fails
-  const localList = getLocalProvisionedUsers().filter(u => u.id !== docId && u.email !== cleanEmail);
-  localList.push(payload);
-  saveLocalProvisionedUsers(localList);
-
-  // Then try saving to Firestore
-  try {
-    const docRef = doc(db, 'users', docId);
-    await setDoc(docRef, {
-      ...payload,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
-  } catch (error) {
-    console.warn('createProvisionedUser Firestore warning (saved locally):', error);
-  }
-
-  return payload;
-}
-
-export async function updateProvisionedUser(userId, updateData) {
-  const localList = getLocalProvisionedUsers();
-  const index = localList.findIndex(u => u.id === userId);
-  if (index !== -1) {
-    localList[index] = { ...localList[index], ...updateData, updatedAt: new Date().toISOString() };
-    saveLocalProvisionedUsers(localList);
-  }
-
-  try {
-    const docRef = doc(db, 'users', userId);
-    await updateDoc(docRef, {
-      ...updateData,
-      updatedAt: serverTimestamp()
-    });
-  } catch (error) {
-    console.warn('updateProvisionedUser Firestore warning (updated locally):', error);
-  }
-  return { id: userId, ...updateData };
-}
-
-export async function deleteProvisionedUser(userId) {
-  const localList = getLocalProvisionedUsers().filter(u => u.id !== userId);
-  saveLocalProvisionedUsers(localList);
-
-  try {
-    const docRef = doc(db, 'users', userId);
-    await deleteDoc(docRef);
-  } catch (error) {
-    console.warn('deleteProvisionedUser Firestore warning (deleted locally):', error);
-  }
-  return true;
-}
-
-export async function getAllRestaurantAdmins() {
-  const all = await getAllUsers();
-  return all.filter(u => u.role === 'restaurant_admin');
-}
-
-export async function createRestaurantAdmin(adminData) {
-  return createProvisionedUser({
-    ...adminData,
-    role: 'restaurant_admin'
-  });
-}
-
-export async function updateRestaurantAdmin(userId, updateData) {
-  return updateProvisionedUser(userId, updateData);
-}
-
-export async function deleteRestaurantAdmin(userId) {
-  return deleteProvisionedUser(userId);
+  const snapshot = await getDocs(collection(db, 'users'));
+  return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
 /**
- * Validates credentials for a user against Firestore users collection or local provisioned store.
+ * Creates a real Firebase Auth login + the matching users/{email} profile.
+ * (Profiles are keyed by the lower-case email, so an account can be deleted and
+ * the same email can be added again later.)
+ * The profile starts as "pending" and becomes "active" once the email is confirmed.
+ * Passwords are NOT stored anywhere in Firestore.
+ *
+ * Used by Super Admin (Restaurant Admins) and Restaurant Admin (staff).
+ * Returns { account, emailResult }.
  */
-export async function authenticateUserFromFirestore(identifier, password) {
-  const cleanId = (identifier || '').toLowerCase().trim();
+export async function createAccountWithEmail(userData, createdByLabel) {
+  const cleanEmail = (userData.email || '').toLowerCase().trim();
 
-  // First check local cache
-  const localList = getLocalProvisionedUsers();
-  const localMatch = localList.find(
-    u => (u.email?.toLowerCase() === cleanId || u.username?.toLowerCase() === cleanId)
-  );
+  // Throws if the login cannot be created (weak password, email in use, ...).
+  const auth = await createAuthAccount({ email: cleanEmail, password: userData.password });
 
-  let userData = localMatch;
+  const profile = {
+    name: userData.name?.trim() || 'Staff Member',
+    email: cleanEmail,
+    username: cleanEmail,
+    role: userData.role || 'restaurant_admin',
+    restaurantId: userData.restaurantId || '',
+    restaurantName: userData.restaurantName || '',
+    status: 'pending',
+    emailVerified: false,
+    createdBy: createdByLabel || userData.createdBy || 'Admin',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  };
 
-  // Also query Firestore if not in local cache or to sync
-  if (!userData) {
+  try {
+    await setDoc(doc(db, 'users', cleanEmail), profile);
+  } catch (err) {
+    if (err?.code === 'permission-denied') {
+      throw new Error('This email is already used by another account.');
+    }
+    throw err;
+  }
+
+  const account = { id: cleanEmail, ...profile, status: 'pending' };
+
+  if (auth.alreadyVerified) {
     try {
-      const colRef = collection(db, 'users');
-      const qEmail = query(colRef, where('email', '==', cleanId));
-      let snapshot = await getDocs(qEmail);
-
-      if (snapshot.empty) {
-        const qUsername = query(colRef, where('username', '==', cleanId));
-        snapshot = await getDocs(qUsername);
-      }
-
-      if (!snapshot.empty) {
-        const userDoc = snapshot.docs[0];
-        userData = { id: userDoc.id, ...userDoc.data() };
-      }
-    } catch (error) {
-      console.warn('authenticateUserFromFirestore error:', error);
+      await updateDoc(doc(db, 'users', cleanEmail), { status: 'active', emailVerified: true, updatedAt: serverTimestamp() });
+      account.status = 'active';
+    } catch (e) {
+      console.warn('Could not activate already-verified account:', e);
     }
   }
 
-  if (!userData) {
-    return null;
-  }
-
-  // Verify status
-  if (userData.status === 'suspended' || userData.status === 'inactive') {
-    return { error: 'Your account has been suspended by the Super Admin.' };
-  }
-
-  // Verify password provisioned by Super Admin
-  if (userData.password && userData.password !== password) {
-    return { error: 'Incorrect password.' };
-  }
-
   return {
-    id: userData.id || userData.email,
-    ...userData
+    account,
+    emailResult: {
+      success: auth.alreadyVerified || auth.emailSent,
+      alreadyVerified: auth.alreadyVerified,
+      passwordReset: !!auth.passwordReset,
+      error: auth.emailError
+    }
   };
+}
+
+export async function updateProvisionedUser(userId, updateData) {
+  await updateDoc(doc(db, 'users', userId), {
+    ...updateData,
+    updatedAt: serverTimestamp()
+  });
+  return { id: userId, ...updateData };
+}
+
+/**
+ * Deletes the profile. (The Firebase Auth login itself cannot be deleted from the
+ * browser without the user's password — but without a profile it can no longer
+ * open the app.)
+ */
+export async function deleteProvisionedUser(userId) {
+  await deleteDoc(doc(db, 'users', userId));
+  return true;
+}
+
+/**
+ * Re-sends the confirmation email. Passwords are not stored, so the caller
+ * must supply the account's password.
+ */
+export async function resendAccountVerification(account, password) {
+  const result = await resendVerification(account.email, password);
+  if (result.alreadyVerified) {
+    try { await updateProvisionedUser(account.id, { status: 'active', emailVerified: true }); } catch (e) { /* ignore */ }
+  }
+  return result;
+}
+
+/**
+ * Checks with Firebase whether the account's email was confirmed and activates the
+ * profile if so. Requires the account's password. Returns { verified, error }.
+ */
+export async function syncAccountVerification(account, password) {
+  const { verified, error } = await checkVerified(account.email, password);
+  if (verified && account.status === 'pending') {
+    try {
+      await updateProvisionedUser(account.id, { status: 'active', emailVerified: true });
+    } catch (e) {
+      console.warn('Could not persist activation:', e);
+    }
+  }
+  return { verified, error };
+}
+
+/**
+ * Restaurant Admin provisions login credentials for their own staff
+ * (kitchen / waiter / cashier). Same process as Super Admin -> Restaurant Admin:
+ * the account stays "pending" until the staff member confirms their email.
+ * Returns { account, emailResult }.
+ */
+export async function createRestaurantStaff(restaurantId, restaurantName, staffData) {
+  const allowedRoles = ['waiter', 'kitchen', 'cashier'];
+  const role = allowedRoles.includes(staffData.role) ? staffData.role : 'waiter';
+  return createAccountWithEmail(
+    {
+      ...staffData,
+      role,
+      restaurantId,
+      restaurantName
+    },
+    staffData.createdBy || 'Restaurant Admin'
+  );
 }
 
 // ----------------------------------------------------------------------

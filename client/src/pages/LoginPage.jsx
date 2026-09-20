@@ -2,30 +2,26 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   Utensils,
-  Shield,
-  User,
-  ChefHat,
   LogIn,
   AlertCircle,
-  Database,
-  CheckCircle2,
-  CreditCard,
   Lock,
   Mail,
-  ShieldAlert,
-  KeyRound
+  KeyRound,
+  MailWarning,
+  Send
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useRestaurant } from '../context/RestaurantContext';
 import { useToast } from '../context/ToastContext';
-import { seedFirestoreDatabase } from '../firebase/seedFirestore';
+import { resendVerification } from '../services/authAccountService';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [seeding, setSeeding] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [pendingEmail, setPendingEmail] = useState('');
+  const [resending, setResending] = useState(false);
 
   const { login } = useAuth();
   const { restaurant } = useRestaurant();
@@ -48,6 +44,7 @@ export default function LoginPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMessage('');
+    setPendingEmail('');
     if (!email || !password) {
       setErrorMessage('Please enter both your email address and password.');
       return;
@@ -61,33 +58,21 @@ export default function LoginPage() {
       handleNavigationByUser(result.user);
     } else {
       setErrorMessage(result?.error || 'Login Failed. Please verify your credentials.');
+      if (result?.pending) setPendingEmail(result.pendingEmail || '');
     }
   };
 
-  const handleQuickLogin = async (demoEmail, demoPass) => {
-    setEmail(demoEmail);
-    setPassword(demoPass);
-    setErrorMessage('');
-    setLoading(true);
-    const result = await login(demoEmail, demoPass);
-    setLoading(false);
-
-    if (result?.success) {
-      handleNavigationByUser(result.user);
-    } else {
-      setErrorMessage(result?.error || 'Login Failed.');
-    }
-  };
-
-  const handleSeed = async () => {
+  const handleResendVerification = async () => {
     try {
-      setSeeding(true);
-      await seedFirestoreDatabase();
-      toast.success('Firebase Firestore successfully initialized with demo data!');
-    } catch (err) {
-      toast.info('Firestore seeded / verified!');
+      setResending(true);
+      const res = await resendVerification(pendingEmail, password);
+      if (res.success) {
+        toast.success(`Confirmation email sent to ${pendingEmail}. Check Spam / Junk too.`);
+      } else {
+        toast.error(res.error || 'Could not resend the confirmation email.');
+      }
     } finally {
-      setSeeding(false);
+      setResending(false);
     }
   };
 
@@ -110,7 +95,7 @@ export default function LoginPage() {
         {/* Login Card */}
         <div className="bg-slate-900/90 border border-slate-800 backdrop-blur-xl rounded-2xl p-6 shadow-2xl space-y-4">
           {/* Visual Error Message Alert Banner */}
-          {errorMessage && (
+          {errorMessage && !pendingEmail && (
             <div className="p-3.5 rounded-xl bg-rose-950/80 border border-rose-600 text-rose-200 text-xs flex items-start space-x-2.5 animate-shake">
               <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
               <div className="flex-1">
@@ -120,22 +105,46 @@ export default function LoginPage() {
             </div>
           )}
 
+          {/* Pending email confirmation banner */}
+          {pendingEmail && (
+            <div className="p-3.5 rounded-xl bg-amber-950/70 border border-amber-600 text-amber-100 text-xs flex items-start space-x-2.5">
+              <MailWarning className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <div className="flex-1 space-y-2">
+                <p className="font-bold text-amber-300">Account Pending — Email Not Confirmed</p>
+                <p className="text-[11px] text-amber-100/90">{errorMessage}</p>
+                <p className="text-[11px] font-semibold text-amber-200">
+                  📥 The email can land in your Spam / Junk folder. Please check there and click the confirmation link.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleResendVerification}
+                  disabled={resending}
+                  className="inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-semibold text-[11px] disabled:opacity-50"
+                >
+                  <Send className="w-3 h-3" />
+                  <span>{resending ? 'Sending...' : 'Resend confirmation email'}</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-3.5">
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">
-                Username / Email Address
+                Email Address
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
                 <input
-                  type="text"
+                  type="email"
                   required
                   value={email}
                   onChange={(e) => {
                     setEmail(e.target.value);
                     if (errorMessage) setErrorMessage('');
+                    if (pendingEmail) setPendingEmail('');
                   }}
-                  placeholder="e.g. altcafe2026@gmail.com or superadmin@restopulse.com"
+                  placeholder="you@example.com"
                   className="w-full pl-9 pr-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
                 />
               </div>
@@ -154,6 +163,7 @@ export default function LoginPage() {
                   onChange={(e) => {
                     setPassword(e.target.value);
                     if (errorMessage) setErrorMessage('');
+                    if (pendingEmail) setPendingEmail('');
                   }}
                   placeholder="••••••••"
                   className="w-full pl-9 pr-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
@@ -180,77 +190,7 @@ export default function LoginPage() {
           {/* Super Admin Notice */}
           <div className="p-2.5 bg-purple-950/30 border border-purple-800/50 rounded-xl text-[11px] text-purple-300 flex items-center space-x-2">
             <KeyRound className="w-4 h-4 text-purple-400 shrink-0" />
-            <span>Only the Super Admin can register credentials. Self-registration is disabled.</span>
-          </div>
-
-          {/* 1-Click Role Switchers */}
-          <div className="pt-2 border-t border-slate-800 space-y-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 text-center">
-              1-Click Portal Logins
-            </p>
-
-            {/* Super Admin Portal button */}
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('altcafe2026@gmail.com', 'Alt1234$')}
-              className="w-full p-2 rounded-xl bg-purple-950/50 hover:bg-purple-900/60 border border-purple-700/80 text-left transition-all flex items-center justify-between"
-            >
-              <div className="flex items-center space-x-2">
-                <ShieldAlert className="w-4 h-4 text-purple-400 shrink-0" />
-                <div>
-                  <p className="text-xs font-bold text-purple-200">👑 Super Admin Portal</p>
-                  <p className="text-[10px] text-slate-400">altcafe2026@gmail.com (Full Provisioning & Emails)</p>
-                </div>
-              </div>
-              <span className="text-[10px] bg-purple-900 px-1.5 py-0.5 rounded text-purple-200 font-mono">
-                Platform Root
-              </span>
-            </button>
-
-            {/* Grid of Staff Demo Roles */}
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('waiter@restopulse.com', 'password123')}
-                className="p-2 rounded-xl bg-blue-950/40 hover:bg-blue-900/50 border border-blue-800/60 text-left transition-all"
-              >
-                <div className="flex items-center space-x-2">
-                  <User className="w-4 h-4 text-blue-400 shrink-0" />
-                  <div>
-                    <p className="text-xs font-bold text-blue-200">🛎️ Waiter (Rahul)</p>
-                    <p className="text-[10px] text-slate-400">Order taking & KOT</p>
-                  </div>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('kitchen@restopulse.com', 'password123')}
-                className="p-2 rounded-xl bg-orange-950/40 hover:bg-orange-900/50 border border-orange-800/60 text-left transition-all"
-              >
-                <div className="flex items-center space-x-2">
-                  <ChefHat className="w-4 h-4 text-orange-400 shrink-0" />
-                  <div>
-                    <p className="text-xs font-bold text-orange-200">👨‍🍳 Kitchen KDS</p>
-                    <p className="text-[10px] text-slate-400">Live chime & tickets</p>
-                  </div>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('cashier@restopulse.com', 'password123')}
-                className="col-span-2 p-2 rounded-xl bg-teal-950/40 hover:bg-teal-900/50 border border-teal-800/60 text-left transition-all"
-              >
-                <div className="flex items-center space-x-2">
-                  <CreditCard className="w-4 h-4 text-teal-400 shrink-0" />
-                  <div>
-                    <p className="text-xs font-bold text-teal-200">💳 Cashier (Anita)</p>
-                    <p className="text-[10px] text-slate-400">Billing & receipts</p>
-                  </div>
-                </div>
-              </button>
-            </div>
+            <span>Self-registration is disabled. New accounts stay Pending until the email is confirmed — check your Spam / Junk folder for the confirmation mail.</span>
           </div>
         </div>
 
@@ -262,14 +202,6 @@ export default function LoginPage() {
           >
             Open Public Customer Menu ↗
           </Link>
-          <button
-            onClick={handleSeed}
-            disabled={seeding}
-            className="hover:text-purple-400 transition-colors flex items-center space-x-1"
-          >
-            <Database className="w-3.5 h-3.5" />
-            <span>{seeding ? 'Seeding...' : 'Seed Firestore Demo'}</span>
-          </button>
         </div>
       </div>
     </div>

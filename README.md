@@ -49,11 +49,12 @@ npm run dev
 ### 3. Initialize Demo Cloud Data
 1. Open [http://localhost:5173/login](http://localhost:5173/login) in your browser.
 2. Click **"Seed Firestore Demo"** in the bottom right of the login screen to initialize sample restaurants (*Spice Haven Bistro* and *Grand Royal Kitchen*), categories, menu items, tables, inventory, and staff.
-3. Use the **1-Click Role Switcher** buttons to test:
-   - 👑 **Super Admin** (`superadmin@restopulse.com`) ➔ Full platform management
-   - 🏢 **Restaurant Admin** (`owner@restopulse.com`) ➔ Spice Haven administration
-   - 🛎️ **POS Staff** (`staff@restopulse.com`) ➔ POS order entry & billing
-   - 👨‍🍳 **Kitchen KDS** (`kitchen@restopulse.com`) ➔ Kitchen display terminal
+3. **One-time Firebase setup (required):**
+   - Authentication → Sign-in method → enable **Email/Password**.
+   - Authentication → Users → **Add user**: `altcafe2026@gmail.com` + a strong password of your choice. This is the Super Admin login.
+   - Firestore Database → Rules → paste the contents of `firestore.rules` → **Publish**.
+   - Rename `client/env` to `client/.env` and restart `npm run dev`.
+4. Log in as Super Admin and add restaurants. Every account is a real Firebase login and stays **Pending** until the recipient confirms their email (the mail may land in **Spam / Junk**). Passwords are never stored in Firestore.
 
 ---
 

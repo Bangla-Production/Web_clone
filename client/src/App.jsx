@@ -79,13 +79,14 @@ export default function App() {
               {/* Root Redirect */}
               <Route path="/" element={<RootRedirect />} />
 
-              {/* Protected Staff, Restaurant Admin & Super Admin Area */}
-              <Route element={<ProtectedRoute allowedRoles={allRoles} />}>
+              {/* Super Admin: platform management only (standalone page, no restaurant screens) */}
+              <Route element={<ProtectedRoute allowedRoles={['super_admin']} />}>
+                <Route path="/super-admin" element={<SuperAdminPage />} />
+              </Route>
+
+              {/* Protected Staff & Restaurant Admin Area (Super Admin is redirected away) */}
+              <Route element={<ProtectedRoute allowedRoles={allRoles} blockSuperAdmin />}>
                 <Route element={<AppLayout />}>
-                  {/* Super Admin Platform Management */}
-                  <Route element={<ProtectedRoute allowedRoles={['super_admin']} />}>
-                    <Route path="/super-admin" element={<SuperAdminPage />} />
-                  </Route>
 
                   {/* Kitchen Display (All authorized roles) */}
                   <Route path="/kitchen" element={<KitchenPage />} />

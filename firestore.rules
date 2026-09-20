@@ -2,54 +2,114 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
+    // ------------------------------------------------------------------
+    // Every RestoPulse login is a real Firebase Authentication user, and each
+    // has a profile document at users/{email} (lower-case email) holding role,
+    // restaurantId and status. Keyed by email so an account can be deleted and
+    // the same email can be added again later.
+    // ------------------------------------------------------------------
+
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-
+    // The platform owner (create this login in Firebase Console -> Authentication).
+    // Checked FIRST so it works even before a profile document exists.
     function isSuperAdmin() {
       return isAuthenticated() && (
-        getUserData().role == 'super_admin' || 
-        request.auth.token.email == 'superadmin@restopulse.com'
+        request.auth.token.email == 'altcafe2026@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'super_admin')
       );
     }
 
+    function profile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.token.email)).data;
+    }
+
+    function hasActiveProfile() {
+      return isAuthenticated() &&
+        request.auth.token.email_verified == true &&
+        exists(/databases/$(database)/documents/users/$(request.auth.token.email)) &&
+        profile().get('status', 'active') == 'active';
+    }
+
     function isRestaurantAdmin(restId) {
-      return isAuthenticated() && (
-        getUserData().role in ['restaurant_admin', 'super_admin'] && 
-        (getUserData().restaurantId == restId || isSuperAdmin())
+      return isSuperAdmin() || (
+        hasActiveProfile() &&
+        profile().role == 'restaurant_admin' &&
+        profile().restaurantId == restId
       );
     }
 
     function isRestaurantStaff(restId) {
-      return isAuthenticated() && (
-        (getUserData().role in ['restaurant_admin', 'staff', 'waiter', 'cashier', 'kitchen', 'super_admin']) && 
-        (getUserData().restaurantId == restId || isSuperAdmin())
+      return isSuperAdmin() || (
+        hasActiveProfile() &&
+        profile().role in ['restaurant_admin', 'staff', 'waiter', 'cashier', 'kitchen'] &&
+        profile().restaurantId == restId
       );
     }
 
-    // 1. Users collection
-    match /users/{userId} {
-      allow read: if isSuperAdmin() || (isAuthenticated() && request.auth.uid == userId);
-      allow create: if isSuperAdmin() || isAuthenticated();
-      allow update, delete: if isSuperAdmin() || (isAuthenticated() && request.auth.uid == userId);
+    // Staff roles a Restaurant Admin is allowed to manage
+    function isStaffRole(role) {
+      return role in ['waiter', 'kitchen', 'cashier', 'staff'];
     }
 
-    // 2. Restaurants collection
+    // 1. Users (profiles)
+    match /users/{userId} {
+      // Own profile, everything for the platform owner, and a Restaurant Admin
+      // can read the profiles of their own restaurant.
+      allow read: if isAuthenticated() && (
+        request.auth.token.email == userId ||
+        isSuperAdmin() ||
+        (hasActiveProfile() &&
+         profile().role == 'restaurant_admin' &&
+         resource.data.restaurantId == profile().restaurantId)
+      );
+
+      // Platform owner creates anything (Restaurant Admins).
+      // A Restaurant Admin can only create PENDING staff for their own restaurant.
+      allow create: if isSuperAdmin() || (
+        hasActiveProfile() &&
+        profile().role == 'restaurant_admin' &&
+        isStaffRole(request.resource.data.role) &&
+        request.resource.data.restaurantId == profile().restaurantId &&
+        request.resource.data.status == 'pending'
+      );
+
+      allow update: if isSuperAdmin()
+        // A user may only flip their OWN profile from pending -> active,
+        // and only after Firebase confirms their email. Nothing else.
+        || (isAuthenticated() &&
+            request.auth.token.email == userId &&
+            resource.data.status == 'pending' &&
+            request.resource.data.status == 'active' &&
+            request.auth.token.email_verified == true &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'emailVerified', 'updatedAt']))
+        // A Restaurant Admin manages their own staff (never their role / restaurant).
+        || (hasActiveProfile() &&
+            profile().role == 'restaurant_admin' &&
+            isStaffRole(resource.data.role) &&
+            resource.data.restaurantId == profile().restaurantId &&
+            request.resource.data.role == resource.data.role &&
+            request.resource.data.restaurantId == resource.data.restaurantId);
+
+      allow delete: if isSuperAdmin() || (
+        hasActiveProfile() &&
+        profile().role == 'restaurant_admin' &&
+        isStaffRole(resource.data.role) &&
+        resource.data.restaurantId == profile().restaurantId
+      );
+    }
+
+    // 2. Restaurants
     match /restaurants/{restaurantId} {
-      // Public read for customer digital menu and restaurant branding
+      // Public read for the customer digital menu and branding
       allow read: if true;
-      
+
       allow create, delete: if isSuperAdmin();
-      allow update: if isSuperAdmin() || isRestaurantAdmin(restaurantId);
+      allow update: if isRestaurantAdmin(restaurantId);
 
-      // Subcollections under restaurants
-
-      // Categories & Menu Items: Public read (for QR digital menu), staff/admin write
       match /categories/{categoryId} {
         allow read: if true;
         allow write: if isRestaurantStaff(restaurantId);
@@ -60,64 +120,48 @@ service cloud.firestore {
         allow write: if isRestaurantStaff(restaurantId);
       }
 
-      // Tables: Real-time status sync for staff/waiters/cashiers/admins
       match /tables/{tableId} {
-        allow read: if isRestaurantStaff(restaurantId);
-        allow write: if isRestaurantStaff(restaurantId);
+        allow read, write: if isRestaurantStaff(restaurantId);
       }
 
-      // Orders: Full lifecycle for orders
       match /orders/{orderId} {
-        allow read: if isRestaurantStaff(restaurantId);
-        allow write: if isRestaurantStaff(restaurantId);
+        allow read, write: if isRestaurantStaff(restaurantId);
       }
 
-      // Kitchen Order Tickets (KOTs): Real-time KDS tickets & printing
       match /kots/{kotId} {
-        allow read: if isRestaurantStaff(restaurantId);
-        allow write: if isRestaurantStaff(restaurantId);
+        allow read, write: if isRestaurantStaff(restaurantId);
       }
 
-      // Invoices: Thermal receipt and financial billing records
       match /invoices/{invoiceId} {
-        allow read: if isRestaurantStaff(restaurantId);
-        allow write: if isRestaurantStaff(restaurantId);
+        allow read, write: if isRestaurantStaff(restaurantId);
       }
 
-      // Inventory & Stock Adjustments
       match /inventory/{itemId} {
-        allow read: if isRestaurantStaff(restaurantId);
-        allow write: if isRestaurantStaff(restaurantId);
+        allow read, write: if isRestaurantStaff(restaurantId);
 
         match /transactions/{txnId} {
-          allow read: if isRestaurantStaff(restaurantId);
-          allow write: if isRestaurantStaff(restaurantId);
+          allow read, write: if isRestaurantStaff(restaurantId);
         }
       }
 
-      // Reservations: Guest table booking
       match /reservations/{resId} {
         allow read: if isRestaurantStaff(restaurantId);
-        allow create: if true; // Allows guests to book table online from public menu
+        allow create: if true; // guests can book from the public menu
         allow update, delete: if isRestaurantStaff(restaurantId);
       }
 
-      // Audit Logs: System action logs
       match /auditLogs/{logId} {
         allow read: if isRestaurantStaff(restaurantId);
         allow create: if isRestaurantStaff(restaurantId);
       }
 
-      // Printer & Station Settings
       match /settings/{settingId} {
         allow read: if isRestaurantStaff(restaurantId);
         allow write: if isRestaurantAdmin(restaurantId);
       }
 
-      // Customers
       match /customers/{custId} {
-        allow read: if isRestaurantStaff(restaurantId);
-        allow write: if isRestaurantStaff(restaurantId);
+        allow read, write: if isRestaurantStaff(restaurantId);
       }
     }
   }

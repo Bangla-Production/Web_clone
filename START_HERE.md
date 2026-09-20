@@ -12,11 +12,11 @@ npm run dev
 
 ## প্রথমবার চালু করার সময়
 1. লগইন পেজের নিচে ডানদিকে **"Seed Firestore Demo"** বাটনে ক্লিক করো — এতে sample restaurant, category, menu item, table তৈরি হবে।
-2. তারপর যেকোনো **1-Click Role Switcher** বাটনে ক্লিক করে লগইন করো:
-   - 👑 Super Admin → `/super-admin`
-   - 🏢 Restaurant Admin → `/dashboard`
-   - 🛎️ POS Staff → `/pos`
-   - 👨‍🍳 Kitchen KDS → `/kitchen`
+2. **একবারের সেটআপ (জরুরি):**
+   - Firebase Console → Authentication → Sign-in method → **Email/Password** Enable করো।
+   - Authentication → Users → **Add user**: `altcafe2026@gmail.com` + তোমার নিজের শক্ত পাসওয়ার্ড। এটাই Super Admin লগইন।
+   - `client/env` ফাইলের নাম বদলে `client/.env` করো, তারপর `npm run dev` রিস্টার্ট করো।
+3. Super Admin দিয়ে লগইন করে Restaurant যোগ করো। প্রতিটা অ্যাকাউন্ট আসল Firebase লগইন, ইমেইল কনফার্ম না হওয়া পর্যন্ত **Pending** থাকে (মেইল Spam / Junk এ যেতে পারে)। পাসওয়ার্ড Firestore-এ সেভ হয় না।
 
 ## ⚠️ জরুরি — Firestore Rules বসাও
 [Firebase Console](https://console.firebase.google.com/) → তোমার প্রজেক্ট → Firestore Database → **Rules** ট্যাব → root এ থাকা `firestore.rules` ফাইলের পুরো কনটেন্ট পেস্ট করে **Publish** করো। এটা না করলে ৩০ দিন পর ডাটাবেজ ব্লক হয়ে যাবে (test mode রুলস মেয়াদ শেষ হয়)।

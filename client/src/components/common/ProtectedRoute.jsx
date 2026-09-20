@@ -2,7 +2,7 @@ import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
-export default function ProtectedRoute({ allowedRoles }) {
+export default function ProtectedRoute({ allowedRoles, blockSuperAdmin = false }) {
   const { user, loading, isAuthenticated } = useAuth();
 
   if (loading) {
@@ -18,6 +18,15 @@ export default function ProtectedRoute({ allowedRoles }) {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Super Admin only manages the platform (/super-admin) — never restaurant screens.
+  if (blockSuperAdmin) {
+    const r = (user?.role || '').toLowerCase();
+    const e = (user?.email || '').toLowerCase().trim();
+    if (r === 'super_admin' || e === 'altcafe2026@gmail.com') {
+      return <Navigate to="/super-admin" replace />;
+    }
   }
 
   if (allowedRoles) {

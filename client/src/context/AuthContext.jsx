@@ -1,189 +1,228 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { useToast } from './ToastContext';
-import { authenticateUserFromFirestore } from '../services/firestoreService';
+import {
+  auth,
+  db,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  serverTimestamp,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged
+} from '../firebase/config';
+import { friendlyAuthError } from '../services/authAccountService';
 
 const AuthContext = createContext(null);
 
+// The platform owner. Create this login once in Firebase Console →
+// Authentication → Users → Add user. Firestore rules use the same email.
+export const SUPER_ADMIN_EMAIL = 'altcafe2026@gmail.com';
+
+const USER_CACHE_KEY = 'restopulse_firebase_user';
+
+/**
+ * Turns a signed-in Firebase user into an app user (profile from Firestore) or
+ * a rejection reason. Never leaves a half-logged-in session behind: the caller
+ * signs out on rejection.
+ */
+async function resolveProfile(fbUser) {
+  const email = (fbUser.email || '').toLowerCase();
+
+  // ---- Platform owner ----
+  if (email === SUPER_ADMIN_EMAIL) {
+    const ref = doc(db, 'users', email);
+    try {
+      const snap = await getDoc(ref);
+      if (!snap.exists()) {
+        await setDoc(ref, {
+          name: 'Super Admin',
+          email,
+          username: email,
+          role: 'super_admin',
+          status: 'active',
+          restaurantId: '',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      }
+    } catch (e) {
+      console.warn('Super admin profile sync:', e);
+    }
+    return {
+      ok: true,
+      user: { uid: fbUser.uid, email, username: email, name: 'Super Admin', role: 'super_admin', restaurantId: '' }
+    };
+  }
+
+  // ---- Everyone else needs a profile created by an admin ----
+  const ref = doc(db, 'users', email);
+  let snap;
+  try {
+    snap = await getDoc(ref);
+  } catch (e) {
+    return { ok: false, error: `Could not load your account: ${e.message}` };
+  }
+  if (!snap.exists()) {
+    return { ok: false, error: 'This account has been removed or was never provisioned. Please contact your administrator.' };
+  }
+  const profile = snap.data();
+
+  if (profile.status === 'suspended' || profile.status === 'inactive') {
+    return { ok: false, error: 'Your account has been suspended.' };
+  }
+
+  // Email confirmation gate
+  if (profile.status === 'pending') {
+    // Refresh the token so email_verified is up to date, then activate.
+    try {
+      await fbUser.reload();
+      await fbUser.getIdToken(true);
+    } catch (e) { /* ignore */ }
+
+    if (!auth.currentUser?.emailVerified) {
+      return {
+        ok: false,
+        pending: true,
+        email,
+        error:
+          'Your email is not confirmed yet, so this account is still Pending. Open the confirmation email we sent you and click the link (check your Spam / Junk folder too), then log in again.'
+      };
+    }
+    try {
+      await updateDoc(ref, { status: 'active', emailVerified: true, updatedAt: serverTimestamp() });
+      profile.status = 'active';
+    } catch (e) {
+      return { ok: false, error: `Could not activate your account: ${e.message}` };
+    }
+  }
+
+  // A suspended restaurant blocks its admin and all of its staff.
+  if (profile.restaurantId) {
+    try {
+      const rest = await getDoc(doc(db, 'restaurants', profile.restaurantId));
+      if (rest.exists() && rest.data().status === 'suspended') {
+        return { ok: false, error: 'This restaurant has been suspended by the platform owner.' };
+      }
+    } catch (e) { /* non-blocking */ }
+  }
+
+  return {
+    ok: true,
+    user: {
+      uid: fbUser.uid,
+      email: profile.email || email,
+      username: profile.username || email,
+      name: profile.name || 'Staff Member',
+      role: profile.role || 'waiter',
+      restaurantId: profile.restaurantId || '',
+      restaurantName: profile.restaurantName || ''
+    }
+  };
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [activeRestaurantId, setActiveRestaurantId] = useState('spice-haven');
+  const [activeRestaurantId, setActiveRestaurantId] = useState(
+    localStorage.getItem('restopulse_active_rest_id') || 'spice-haven'
+  );
   const [loading, setLoading] = useState(true);
   const toast = useToast();
+  const loginInFlight = useRef(false);
 
-  useEffect(() => {
-    const savedUser = localStorage.getItem('restopulse_firebase_user');
-    const savedRestId = localStorage.getItem('restopulse_active_rest_id');
-
-    if (savedRestId) {
-      setActiveRestaurantId(savedRestId);
-    }
-
-    if (savedUser) {
-      try {
-        const parsed = JSON.parse(savedUser);
-        setUser(parsed);
-        if (parsed.restaurantId) {
-          setActiveRestaurantId(parsed.restaurantId);
-        }
-      } catch (e) {
-        logout();
+  const applyUser = (userObj) => {
+    setUser(userObj);
+    if (userObj) {
+      localStorage.setItem(USER_CACHE_KEY, JSON.stringify(userObj));
+      if (userObj.restaurantId) {
+        localStorage.setItem('restopulse_active_rest_id', userObj.restaurantId);
+        setActiveRestaurantId(userObj.restaurantId);
       }
+    } else {
+      localStorage.removeItem(USER_CACHE_KEY);
     }
-    setLoading(false);
+  };
+
+  // Restore the session on page load (Firebase keeps the login).
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (fbUser) => {
+      if (loginInFlight.current) return; // login() is handling this itself
+      if (!fbUser) {
+        applyUser(null);
+        setLoading(false);
+        return;
+      }
+      const result = await resolveProfile(fbUser);
+      if (result.ok) {
+        applyUser(result.user);
+      } else {
+        await signOut(auth);
+        applyUser(null);
+      }
+      setLoading(false);
+    });
+    return () => unsub();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const login = async (identifier, password) => {
     if (!identifier || !password) {
-      const errMsg = 'Please provide both username/email and password.';
+      const errMsg = 'Please provide both email and password.';
       toast.error(errMsg);
       return { success: false, error: errMsg };
     }
 
-    const cleanId = identifier.toLowerCase().trim();
-
-    // 1. MASTER SUPER ADMIN AUTHENTICATION (Master Platform Owner)
-    if (cleanId === 'altcafe2026@gmail.com' || cleanId === 'altcafe' || cleanId === 'altcafe2026') {
-      if (password !== 'Alt1234$') {
-        const errMsg = 'Incorrect password for Super Admin account. Access Denied.';
-        toast.error(errMsg);
-        return { success: false, error: errMsg };
-      }
-
-      const superUser = {
-        uid: 'superadmin-master-id',
-        email: 'altcafe2026@gmail.com',
-        username: 'altcafe2026',
-        name: 'Super Admin (AltCafe Owner)',
-        role: 'super_admin',
-        restaurantId: 'spice-haven'
-      };
-
-      localStorage.setItem('restopulse_firebase_user', JSON.stringify(superUser));
-      localStorage.setItem('restopulse_active_rest_id', 'spice-haven');
-      setUser(superUser);
-      setActiveRestaurantId('spice-haven');
-      toast.success('Super Admin Authenticated. Welcome to Platform Management.');
-      return { success: true, user: superUser, role: 'super_admin' };
-    }
-
-    // 2. CHECK SUPER-ADMIN PROVISIONED USERS (Restaurant Admins, Waiters, Kitchen, Cashiers)
+    const email = identifier.toLowerCase().trim();
+    loginInFlight.current = true;
     try {
-      const firestoreUser = await authenticateUserFromFirestore(cleanId, password);
-      if (firestoreUser) {
-        if (firestoreUser.error) {
-          toast.error(firestoreUser.error);
-          return { success: false, error: firestoreUser.error };
-        }
+      let cred;
+      try {
+        cred = await signInWithEmailAndPassword(auth, email, password);
+      } catch (err) {
+        const errMsg = friendlyAuthError(err);
+        toast.error(errMsg);
+        return { success: false, error: errMsg };
+      }
 
-        const userObj = {
-          uid: firestoreUser.id,
-          email: firestoreUser.email,
-          username: firestoreUser.username || firestoreUser.email,
-          name: firestoreUser.name || 'Staff Member',
-          role: firestoreUser.role || 'waiter',
-          restaurantId: firestoreUser.restaurantId || 'spice-haven',
-          restaurantName: firestoreUser.restaurantName
+      const result = await resolveProfile(cred.user);
+      if (!result.ok) {
+        await signOut(auth);
+        applyUser(null);
+        if (result.pending) {
+          toast.warning('Email not confirmed yet — account is still pending.');
+        } else {
+          toast.error(result.error);
+        }
+        return {
+          success: false,
+          error: result.error,
+          pending: !!result.pending,
+          pendingEmail: result.email
         };
-
-        localStorage.setItem('restopulse_firebase_user', JSON.stringify(userObj));
-        if (userObj.restaurantId) {
-          localStorage.setItem('restopulse_active_rest_id', userObj.restaurantId);
-          setActiveRestaurantId(userObj.restaurantId);
-        }
-        setUser(userObj);
-        toast.success(`Welcome, ${userObj.name}! Authenticated as ${userObj.role}.`);
-        return { success: true, user: userObj, role: userObj.role };
-      }
-    } catch (err) {
-      console.warn('Firestore user lookup error:', err);
-    }
-
-    // 3. BUILT-IN DEMO STAFF FALLBACKS (FOR CONVENIENT TESTING)
-    // Waiter / Captain
-    if (cleanId === 'waiter@restopulse.com' || cleanId === 'waiter') {
-      if (password !== 'password123' && password !== 'Alt1234$') {
-        const errMsg = 'Incorrect password for Waiter account.';
-        toast.error(errMsg);
-        return { success: false, error: errMsg };
       }
 
-      const waiterUser = {
-        uid: 'waiter-spice-haven-id',
-        email: 'waiter@restopulse.com',
-        name: 'Rahul Sen (Waiter)',
-        role: 'waiter',
-        restaurantId: 'spice-haven'
-      };
-      localStorage.setItem('restopulse_firebase_user', JSON.stringify(waiterUser));
-      localStorage.setItem('restopulse_active_rest_id', 'spice-haven');
-      setUser(waiterUser);
-      setActiveRestaurantId('spice-haven');
-      toast.success('Logged in as Waiter.');
-      return { success: true, user: waiterUser, role: 'waiter' };
+      applyUser(result.user);
+      toast.success(
+        result.user.role === 'super_admin'
+          ? 'Super Admin authenticated. Welcome to Platform Management.'
+          : `Welcome, ${result.user.name}! Authenticated as ${result.user.role}.`
+      );
+      return { success: true, user: result.user, role: result.user.role };
+    } finally {
+      loginInFlight.current = false;
     }
-
-    // Cashier
-    if (cleanId === 'cashier@restopulse.com' || cleanId === 'cashier') {
-      if (password !== 'password123' && password !== 'Alt1234$') {
-        const errMsg = 'Incorrect password for Cashier account.';
-        toast.error(errMsg);
-        return { success: false, error: errMsg };
-      }
-
-      const cashierUser = {
-        uid: 'cashier-spice-haven-id',
-        email: 'cashier@restopulse.com',
-        name: 'Anita Roy (Cashier)',
-        role: 'cashier',
-        restaurantId: 'spice-haven'
-      };
-      localStorage.setItem('restopulse_firebase_user', JSON.stringify(cashierUser));
-      localStorage.setItem('restopulse_active_rest_id', 'spice-haven');
-      setUser(cashierUser);
-      setActiveRestaurantId('spice-haven');
-      toast.success('Logged in as Cashier.');
-      return { success: true, user: cashierUser, role: 'cashier' };
-    }
-
-    // Kitchen KDS
-    if (cleanId === 'kitchen@restopulse.com' || cleanId === 'kitchen') {
-      if (password !== 'password123' && password !== 'Alt1234$') {
-        const errMsg = 'Incorrect password for Kitchen account.';
-        toast.error(errMsg);
-        return { success: false, error: errMsg };
-      }
-
-      const kitchenUser = {
-        uid: 'kitchen-spice-haven-id',
-        email: 'kitchen@restopulse.com',
-        name: 'Chef Anand (Kitchen KDS)',
-        role: 'kitchen',
-        restaurantId: 'spice-haven'
-      };
-      localStorage.setItem('restopulse_firebase_user', JSON.stringify(kitchenUser));
-      localStorage.setItem('restopulse_active_rest_id', 'spice-haven');
-      setUser(kitchenUser);
-      setActiveRestaurantId('spice-haven');
-      toast.success('Kitchen Terminal Active.');
-      return { success: true, user: kitchenUser, role: 'kitchen' };
-    }
-
-    // STRICT DENIAL FOR ANY UNPROVISIONED OR INVALID CREDENTIALS
-    const failMsg = 'Authentication Failed: Invalid username/email or password. Accounts must be registered and provisioned by the Super Admin.';
-    toast.error(failMsg);
-    return { success: false, error: failMsg };
   };
 
-  const logout = () => {
-    localStorage.removeItem('restopulse_firebase_user');
-    setUser(null);
+  const logout = async () => {
+    try { await signOut(auth); } catch (e) { /* ignore */ }
+    applyUser(null);
     toast.info('Signed out.');
   };
 
   const selectActiveRestaurant = (restId) => {
     setActiveRestaurantId(restId);
     localStorage.setItem('restopulse_active_rest_id', restId);
-    toast.info(`Switched active restaurant view to: ${restId}`);
   };
 
   const isSuperAdmin = user?.role === 'super_admin';
