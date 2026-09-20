@@ -18,6 +18,29 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.token.email)).data;
     }
 
+    function hasActiveProfile() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.token.email)) &&
+        profile().get('status', 'active') == 'active' &&
+        (request.auth.token.email_verified == true || profile().get('authMethod', '') == 'staffId');
+    }
+
+    function isRestaurantAdmin(restId) {
+      return isSuperAdmin() || (
+        hasActiveProfile() &&
+        profile().role == 'restaurant_admin' &&
+        profile().restaurantId == restId
+      );
+    }
+
+    function isRestaurantStaff(restId) {
+      return isSuperAdmin() || (
+        hasActiveProfile() &&
+        profile().role in ['restaurant_admin', 'staff', 'waiter', 'cashier', 'kitchen'] &&
+        profile().restaurantId == restId
+      );
+    }
+
     // 1. Users (profiles)
     match /users/{userId} {
       allow read: if isAuthenticated();
