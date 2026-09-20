@@ -122,78 +122,87 @@ export default function InventoryPage() {
   return (
     <div className="space-y-6">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="pos-surface-glass p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-white tracking-tight">Stock & Raw Material Inventory</h1>
-          <p className="text-xs text-slate-400">
-            Manual stock tracking, threshold warnings, and replenishment log
-          </p>
+          <div className="flex items-center space-x-2.5">
+            <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-center text-amber-500 dark:text-amber-400">
+              <Boxes className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight font-display">
+                Stock & Raw Material Inventory
+              </h1>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
+                Manual stock tracking, threshold warnings, and replenishment log
+              </p>
+            </div>
+          </div>
         </div>
         <div className="flex items-center space-x-3">
           <button
             onClick={fetchStock}
-            className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
+            className="pos-btn-touch flex items-center space-x-1.5 px-3.5 py-2.5 rounded-xl bg-pos-dark hover:bg-pos-surface text-slate-700 dark:text-slate-200 text-xs font-bold border border-pos-border shadow-sm transition-colors"
           >
-            <RefreshCw className="w-3.5 h-3.5" />
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-emerald-500 dark:text-emerald-400' : ''}`} />
             <span>Refresh</span>
           </button>
           <button
             onClick={() => setIsAddOpen(true)}
-            className="flex items-center space-x-1.5 px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md shadow-emerald-900/30 transition-colors"
+            className="pos-btn-touch flex items-center space-x-1.5 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-extrabold shadow-pos-glow transition-colors"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-4 h-4 stroke-[2.5]" />
             <span>Add Stock Item</span>
           </button>
         </div>
       </div>
 
       {/* Filter Row & Low Stock Toggle */}
-      <div className="p-3.5 bg-slate-900 border border-slate-800 rounded-xl flex flex-wrap items-center justify-between gap-3 shadow-md">
+      <div className="pos-surface-glass p-4 rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-md">
         <div className="relative flex-1 min-w-[220px]">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             placeholder="Search ingredient or material name..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+            className="w-full pl-10 pr-3 py-2 bg-pos-dark border border-pos-border rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-medium"
           />
         </div>
 
         <button
           onClick={() => setLowStockFilter(!lowStockFilter)}
-          className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+          className={`pos-btn-touch flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold border transition-all ${
             lowStockFilter
-              ? 'bg-amber-950 text-amber-200 border-amber-600'
-              : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+              ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/40 shadow-sm'
+              : 'bg-pos-dark text-slate-600 dark:text-slate-400 border-pos-border hover:text-slate-900 dark:hover:text-white'
           }`}
         >
-          <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+          <AlertTriangle className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />
           <span>Low Stock Warning Only ({lowStockCount})</span>
         </button>
       </div>
 
       {/* Stock Items Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
+      <div className="pos-card-glass rounded-2xl overflow-hidden shadow-xl p-5 space-y-4">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-950/70 text-slate-400 border-b border-slate-800">
+            <thead className="bg-pos-dark text-slate-600 dark:text-slate-400 border-b border-pos-border">
               <tr>
-                <th className="py-3 px-4 font-semibold">Material / Ingredient</th>
-                <th className="py-3 px-4 font-semibold">Current Quantity</th>
-                <th className="py-3 px-4 font-semibold">Min Threshold</th>
-                <th className="py-3 px-4 font-semibold">Stock Status</th>
-                <th className="py-3 px-4 font-semibold text-right">Actions</th>
+                <th className="py-3.5 px-4 font-bold uppercase tracking-wider text-[10px]">Material / Ingredient</th>
+                <th className="py-3.5 px-4 font-bold uppercase tracking-wider text-[10px]">Current Quantity</th>
+                <th className="py-3.5 px-4 font-bold uppercase tracking-wider text-[10px]">Min Threshold</th>
+                <th className="py-3.5 px-4 font-bold uppercase tracking-wider text-[10px]">Stock Status</th>
+                <th className="py-3.5 px-4 font-bold uppercase tracking-wider text-[10px] text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60">
+            <tbody className="divide-y divide-pos-border">
               {loading ? (
                 <tr>
-                  <td colSpan="5" className="py-12 text-center text-slate-400">Loading stock from Firestore...</td>
+                  <td colSpan="5" className="py-12 text-center text-slate-400 font-semibold">Loading stock from Firestore...</td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="py-12 text-center text-slate-500">
+                  <td colSpan="5" className="py-12 text-center text-slate-500 font-semibold">
                     No stock items found. Click "Add Stock Item" to create one.
                   </td>
                 </tr>
@@ -201,30 +210,30 @@ export default function InventoryPage() {
                 filtered.map((item) => (
                   <tr
                     key={item.id}
-                    className={`hover:bg-slate-800/40 transition-colors ${
-                      item.isLowStock ? 'bg-amber-950/10' : ''
+                    className={`hover:bg-pos-surface/60 transition-colors ${
+                      item.isLowStock ? 'bg-amber-500/10' : ''
                     }`}
                   >
-                    <td className="py-3.5 px-4 font-semibold text-slate-100">
+                    <td className="py-3.5 px-4 font-extrabold text-slate-900 dark:text-slate-100">
                       <div>{item.name}</div>
-                      {item.notes && <div className="text-[10px] text-slate-500">{item.notes}</div>}
+                      {item.notes && <div className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">{item.notes}</div>}
                     </td>
                     <td className="py-3.5 px-4">
-                      <span className={`text-sm font-bold ${item.isLowStock ? 'text-amber-400' : 'text-emerald-400'}`}>
+                      <span className={`text-sm font-black font-num ${item.isLowStock ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
                         {item.quantity} {item.unit}
                       </span>
                     </td>
-                    <td className="py-3.5 px-4 text-slate-400">
+                    <td className="py-3.5 px-4 text-slate-600 dark:text-slate-400 font-medium">
                       {item.minThreshold} {item.unit}
                     </td>
                     <td className="py-3.5 px-4">
                       {item.isLowStock ? (
-                        <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-700/60 animate-pulse">
+                        <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 animate-pulse">
                           <AlertTriangle className="w-3 h-3" />
                           <span>LOW STOCK</span>
                         </span>
                       ) : (
-                        <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-700/60">
+                        <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
                           <CheckCircle2 className="w-3 h-3" />
                           <span>Adequate</span>
                         </span>
@@ -238,9 +247,9 @@ export default function InventoryPage() {
                           setAdjustQty('');
                           setAdjustReason('');
                         }}
-                        className="px-2.5 py-1 rounded-lg bg-emerald-950 text-emerald-300 hover:bg-emerald-900 border border-emerald-800 font-semibold inline-flex items-center space-x-1"
+                        className="px-3 py-1.5 rounded-xl bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25 border border-emerald-500/30 font-bold inline-flex items-center space-x-1"
                       >
-                        <Plus className="w-3 h-3" />
+                        <Plus className="w-3 h-3 stroke-[2.5]" />
                         <span>Add Stock</span>
                       </button>
 
@@ -251,9 +260,9 @@ export default function InventoryPage() {
                           setAdjustQty('');
                           setAdjustReason('');
                         }}
-                        className="px-2.5 py-1 rounded-lg bg-rose-950 text-rose-300 hover:bg-rose-900 border border-rose-800 font-semibold inline-flex items-center space-x-1"
+                        className="px-3 py-1.5 rounded-xl bg-rose-500/15 text-rose-700 dark:text-rose-300 hover:bg-rose-500/25 border border-rose-500/30 font-bold inline-flex items-center space-x-1"
                       >
-                        <Minus className="w-3 h-3" />
+                        <Minus className="w-3 h-3 stroke-[2.5]" />
                         <span>Deduct</span>
                       </button>
                     </td>
@@ -270,70 +279,70 @@ export default function InventoryPage() {
         <Modal isOpen={isAddOpen} onClose={() => setIsAddOpen(false)} title="New Inventory Stock Item">
           <form onSubmit={handleCreateStock} className="space-y-3.5 text-xs">
             <div>
-              <label className="block font-semibold text-slate-300 mb-1">Item / Ingredient Name *</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Item / Ingredient Name *</label>
               <input
                 type="text"
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Basmati Rice, Butter, Dairy Milk"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-pos-dark border border-pos-border rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-emerald-500"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block font-semibold text-slate-300 mb-1">Measurement Unit *</label>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Measurement Unit *</label>
                 <select
                   value={unit}
                   onChange={(e) => setUnit(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3 py-2 bg-pos-dark border border-pos-border rounded-xl text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 font-medium"
                 >
-                  <option value="kg">kg (Kilograms)</option>
-                  <option value="L">L (Liters)</option>
-                  <option value="pcs">pcs (Pieces)</option>
-                  <option value="gm">gm (Grams)</option>
-                  <option value="pkt">pkt (Packets)</option>
-                  <option value="box">box (Boxes)</option>
+                  <option value="kg" className="bg-pos-card text-slate-900 dark:text-white">kg (Kilograms)</option>
+                  <option value="L" className="bg-pos-card text-slate-900 dark:text-white">L (Liters)</option>
+                  <option value="pcs" className="bg-pos-card text-slate-900 dark:text-white">pcs (Pieces)</option>
+                  <option value="gm" className="bg-pos-card text-slate-900 dark:text-white">gm (Grams)</option>
+                  <option value="pkt" className="bg-pos-card text-slate-900 dark:text-white">pkt (Packets)</option>
+                  <option value="box" className="bg-pos-card text-slate-900 dark:text-white">box (Boxes)</option>
                 </select>
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-300 mb-1">Opening Quantity</label>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Opening Quantity</label>
                 <input
                   type="number"
                   step="0.01"
                   value={quantity}
                   onChange={(e) => setQuantity(e.target.value)}
                   placeholder="0.00"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3 py-2 bg-pos-dark border border-pos-border rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-num"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-300 mb-1">Min Threshold Alert</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Min Threshold Alert</label>
               <input
                 type="number"
                 step="0.01"
                 value={minThreshold}
                 onChange={(e) => setMinThreshold(e.target.value)}
                 placeholder="5"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-pos-dark border border-pos-border rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-num"
               />
             </div>
 
-            <div className="flex justify-end space-x-2 pt-2">
+            <div className="flex justify-end space-x-2 pt-2 border-t border-pos-border">
               <button
                 type="button"
                 onClick={() => setIsAddOpen(false)}
-                className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 font-semibold hover:bg-slate-700"
+                className="px-4 py-2 rounded-xl bg-pos-dark text-slate-700 dark:text-slate-300 font-bold hover:bg-pos-surface border border-pos-border"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
+                className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold shadow-pos-glow"
               >
                 Create Item
               </button>
@@ -351,23 +360,23 @@ export default function InventoryPage() {
           maxWidth="max-w-md"
         >
           <form onSubmit={handleAdjustStock} className="space-y-4 text-xs">
-            <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 flex justify-between items-center">
-              <span className="text-slate-400">Current Stock Level:</span>
-              <span className="font-bold text-white text-sm">
+            <div className="p-3.5 rounded-xl bg-pos-dark border border-pos-border flex justify-between items-center">
+              <span className="text-slate-500 dark:text-slate-400 font-medium">Current Stock Level:</span>
+              <span className="font-extrabold text-slate-900 dark:text-white text-sm font-num">
                 {adjustItem.quantity} {adjustItem.unit}
               </span>
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-300 mb-2">Adjustment Operation:</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-2">Adjustment Operation:</label>
               <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => setAdjustType('IN')}
-                  className={`py-2 rounded-lg font-bold border transition-all ${
+                  className={`py-2 rounded-xl font-extrabold border transition-all ${
                     adjustType === 'IN'
-                      ? 'bg-emerald-600 border-emerald-500 text-white'
-                      : 'bg-slate-950 border-slate-800 text-slate-400'
+                      ? 'bg-emerald-500 border-emerald-500 text-slate-950 shadow-pos-glow'
+                      : 'bg-pos-dark border-pos-border text-slate-600 dark:text-slate-400'
                   }`}
                 >
                   + Add Stock
@@ -375,10 +384,10 @@ export default function InventoryPage() {
                 <button
                   type="button"
                   onClick={() => setAdjustType('OUT')}
-                  className={`py-2 rounded-lg font-bold border transition-all ${
+                  className={`py-2 rounded-xl font-extrabold border transition-all ${
                     adjustType === 'OUT'
-                      ? 'bg-rose-600 border-rose-500 text-white'
-                      : 'bg-slate-950 border-slate-800 text-slate-400'
+                      ? 'bg-rose-500 border-rose-500 text-white shadow-md'
+                      : 'bg-pos-dark border-pos-border text-slate-600 dark:text-slate-400'
                   }`}
                 >
                   - Deduct Stock
@@ -386,10 +395,10 @@ export default function InventoryPage() {
                 <button
                   type="button"
                   onClick={() => setAdjustType('ADJUSTMENT')}
-                  className={`py-2 rounded-lg font-bold border transition-all ${
+                  className={`py-2 rounded-xl font-extrabold border transition-all ${
                     adjustType === 'ADJUSTMENT'
-                      ? 'bg-blue-600 border-blue-500 text-white'
-                      : 'bg-slate-950 border-slate-800 text-slate-400'
+                      ? 'bg-sky-500 border-sky-500 text-white shadow-md'
+                      : 'bg-pos-dark border-pos-border text-slate-600 dark:text-slate-400'
                   }`}
                 >
                   = Set Exact
@@ -398,7 +407,7 @@ export default function InventoryPage() {
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-300 mb-1">
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
                 Quantity ({adjustItem.unit}) *
               </label>
               <input
@@ -409,33 +418,33 @@ export default function InventoryPage() {
                 value={adjustQty}
                 onChange={(e) => setAdjustQty(e.target.value)}
                 placeholder="e.g. 5.0"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-pos-dark border border-pos-border rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-num"
               />
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-300 mb-1">Reason / Note</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Reason / Note</label>
               <input
                 type="text"
                 value={adjustReason}
                 onChange={(e) => setAdjustReason(e.target.value)}
                 placeholder="e.g. Morning vendor shipment"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-pos-dark border border-pos-border rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-emerald-500"
               />
             </div>
 
-            <div className="flex justify-end space-x-2 pt-2">
+            <div className="flex justify-end space-x-2 pt-2 border-t border-pos-border">
               <button
                 type="button"
                 onClick={() => setAdjustItem(null)}
-                className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 font-semibold hover:bg-slate-700"
+                className="px-4 py-2 rounded-xl bg-pos-dark text-slate-700 dark:text-slate-300 font-bold hover:bg-pos-surface border border-pos-border"
               >
                 Cancel
               </button>
               <button
                 disabled={isAdjusting}
                 type="submit"
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
+                className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold shadow-pos-glow"
               >
                 {isAdjusting ? 'Updating...' : 'Save Stock Update'}
               </button>

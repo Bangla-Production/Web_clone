@@ -40,10 +40,10 @@ export default function ImgBBUploader({ value, onChange, label = "Upload Image (
 
   return (
     <div className="space-y-1.5 text-xs">
-      <label className="block font-semibold text-slate-300">{label}</label>
+      <label className="block font-bold text-slate-700 dark:text-slate-300">{label}</label>
 
       {value ? (
-        <div className="relative group w-full h-32 rounded-xl overflow-hidden bg-slate-950 border border-slate-700">
+        <div className="relative group w-full h-32 rounded-xl overflow-hidden bg-pos-dark border border-pos-border">
           <img
             src={value}
             alt="Uploaded preview"
@@ -54,14 +54,14 @@ export default function ImgBBUploader({ value, onChange, label = "Upload Image (
               href={value}
               target="_blank"
               rel="noreferrer"
-              className="px-2.5 py-1 rounded bg-slate-800 text-slate-200 text-[11px] font-semibold hover:bg-slate-700"
+              className="px-2.5 py-1 rounded-lg bg-pos-surface text-slate-200 text-[11px] font-bold hover:bg-slate-700"
             >
               View Full
             </a>
             <button
               type="button"
               onClick={handleRemove}
-              className="px-2.5 py-1 rounded bg-rose-600 text-white text-[11px] font-semibold hover:bg-rose-500 flex items-center space-x-1"
+              className="px-2.5 py-1 rounded-lg bg-rose-600 text-white text-[11px] font-bold hover:bg-rose-500 flex items-center space-x-1 shadow"
             >
               <X className="w-3 h-3" />
               <span>Remove</span>
@@ -71,20 +71,20 @@ export default function ImgBBUploader({ value, onChange, label = "Upload Image (
       ) : (
         <label className={`flex flex-col items-center justify-center w-full h-28 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
           uploading
-            ? 'bg-slate-950/70 border-emerald-500/50'
-            : 'bg-slate-950 hover:bg-slate-900 border-slate-700 hover:border-emerald-500'
+            ? 'bg-pos-dark/70 border-emerald-500/50'
+            : 'bg-pos-dark hover:bg-pos-surface border-pos-border hover:border-emerald-500'
         }`}>
           <div className="flex flex-col items-center justify-center pt-2 pb-2 text-center px-4">
             {uploading ? (
-              <div className="flex flex-col items-center space-y-1 text-emerald-400">
+              <div className="flex flex-col items-center space-y-1 text-emerald-500 dark:text-emerald-400">
                 <Loader2 className="w-6 h-6 animate-spin" />
-                <span className="text-[11px] font-semibold">Uploading to ImgBB Cloud...</span>
+                <span className="text-[11px] font-bold">Uploading to ImgBB Cloud...</span>
               </div>
             ) : (
               <>
                 <UploadCloud className="w-6 h-6 text-slate-400 mb-1" />
-                <p className="text-xs text-slate-300 font-medium">
-                  <span className="text-emerald-400 font-bold">Click to upload</span> or drag and drop
+                <p className="text-xs text-slate-700 dark:text-slate-300 font-semibold">
+                  <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">Click to upload</span> or drag and drop
                 </p>
                 <p className="text-[10px] text-slate-500">JPG, PNG, WebP up to 10MB (Free ImgBB Hosting)</p>
               </>
@@ -107,7 +107,7 @@ export default function ImgBBUploader({ value, onChange, label = "Upload Image (
           value={value || ''}
           onChange={(e) => onChange(e.target.value)}
           placeholder="Or paste direct image URL (https://...)"
-          className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500"
+          className="w-full px-3 py-1.5 bg-pos-dark border border-pos-border rounded-lg text-xs text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-emerald-500"
         />
       </div>
 

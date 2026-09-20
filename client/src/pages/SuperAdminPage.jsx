@@ -438,24 +438,24 @@ export default function SuperAdminPage() {
   };
 
   return (
-    <div className="relative min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-8 space-y-6 overflow-hidden">
+    <div className="relative min-h-screen bg-pos-dark text-slate-900 dark:text-slate-100 p-4 sm:p-8 space-y-6 overflow-hidden transition-colors duration-200">
       <div className="absolute -top-40 -left-40 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none"></div>
       <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-emerald-600/10 rounded-full blur-3xl pointer-events-none"></div>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-800">
+      <div className="pos-surface-glass p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-pos-border">
         <div className="flex items-center space-x-3">
-          <div className="p-3 rounded-2xl bg-purple-950/80 border border-purple-700/60 text-purple-400 shadow-xl shadow-purple-950">
+          <div className="p-3 rounded-2xl bg-purple-500/15 border border-purple-500/30 text-purple-600 dark:text-purple-400 shadow-xl shadow-purple-950/20">
             <ShieldAlert className="w-7 h-7" />
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <h1 className="text-2xl font-extrabold text-white tracking-tight">Super Admin Platform Portal</h1>
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-900/80 text-purple-300 border border-purple-700">
+              <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight font-display">Super Admin Platform Portal</h1>
+              <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30">
                 PLATFORM ROOT
               </span>
             </div>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Logged in as <strong className="text-purple-300">{user?.email}</strong> • Register restaurants, set admin logins & track monthly income
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
+              Logged in as <strong className="text-purple-600 dark:text-purple-300 font-bold">{user?.email}</strong> • Register restaurants, set admin logins & track monthly income
             </p>
           </div>
         </div>
@@ -463,21 +463,21 @@ export default function SuperAdminPage() {
         <div className="flex items-center space-x-2.5">
           <button
             onClick={fetchData}
-            className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-semibold border border-slate-700 transition-colors"
+            className="pos-btn-touch flex items-center space-x-1.5 px-3.5 py-2.5 rounded-xl bg-pos-dark hover:bg-pos-surface text-slate-700 dark:text-slate-200 text-xs font-bold border border-pos-border shadow-sm transition-colors"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-purple-500' : ''}`} />
             <span>Refresh</span>
           </button>
           <button
             onClick={openAddModal}
-            className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-lg shadow-purple-900/40 transition-all"
+            className="pos-btn-touch flex items-center space-x-1.5 px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-extrabold shadow-lg shadow-purple-900/30 transition-all"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-4 h-4 stroke-[2.5]" />
             <span>Add Restaurant</span>
           </button>
           <button
             onClick={logout}
-            className="p-2 rounded-xl bg-slate-900 hover:bg-rose-950 text-slate-400 hover:text-rose-300 border border-slate-800 transition-colors"
+            className="pos-btn-touch p-2.5 rounded-xl bg-pos-dark hover:bg-rose-500/15 text-slate-600 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-300 border border-pos-border transition-colors shadow-sm"
             title="Sign Out"
           >
             <LogOut className="w-4 h-4" />
@@ -487,74 +487,74 @@ export default function SuperAdminPage() {
 
       {/* Metrics */}
       <div className="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-semibold uppercase tracking-wider">Registered Restaurants</span>
-            <Building className="w-5 h-5 text-purple-400" />
+        <div className="p-5 rounded-2xl pos-card-glass shadow-lg">
+          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+            <span className="text-xs font-bold uppercase tracking-wider">Registered Restaurants</span>
+            <Building className="w-5 h-5 text-purple-500 dark:text-purple-400" />
           </div>
-          <h3 className="text-3xl font-extrabold text-white mt-2">{totalRegistered}</h3>
-          <p className="text-[11px] text-purple-400 mt-1">Total on the platform</p>
+          <h3 className="text-3xl font-black text-slate-900 dark:text-white mt-2 font-num">{totalRegistered}</h3>
+          <p className="text-[11px] text-purple-600 dark:text-purple-400 mt-1 font-semibold">Total on the platform</p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-semibold uppercase tracking-wider">Active Restaurants</span>
-            <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+        <div className="p-5 rounded-2xl pos-card-glass shadow-lg">
+          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+            <span className="text-xs font-bold uppercase tracking-wider">Active Restaurants</span>
+            <CheckCircle2 className="w-5 h-5 text-emerald-500 dark:text-emerald-400" />
           </div>
-          <h3 className="text-3xl font-extrabold text-white mt-2">{activeRows.length}</h3>
-          <p className="text-[11px] text-emerald-400 mt-1">Email confirmed & running</p>
+          <h3 className="text-3xl font-black text-slate-900 dark:text-white mt-2 font-num">{activeRows.length}</h3>
+          <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1 font-semibold">Email confirmed & running</p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-semibold uppercase tracking-wider">Pending Confirmation</span>
-            <Clock className="w-5 h-5 text-amber-400" />
+        <div className="p-5 rounded-2xl pos-card-glass shadow-lg">
+          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+            <span className="text-xs font-bold uppercase tracking-wider">Pending Confirmation</span>
+            <Clock className="w-5 h-5 text-amber-500 dark:text-amber-400" />
           </div>
-          <h3 className="text-3xl font-extrabold text-white mt-2">{pendingCount}</h3>
-          <p className="text-[11px] text-amber-400 mt-1">Waiting for admin's email confirm</p>
+          <h3 className="text-3xl font-black text-slate-900 dark:text-white mt-2 font-num">{pendingCount}</h3>
+          <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1 font-semibold">Waiting for admin's email confirm</p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-semibold uppercase tracking-wider">Monthly Income</span>
-            <IndianRupee className="w-5 h-5 text-sky-400" />
+        <div className="p-5 rounded-2xl pos-card-glass shadow-lg">
+          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+            <span className="text-xs font-bold uppercase tracking-wider">Monthly Income</span>
+            <IndianRupee className="w-5 h-5 text-sky-500 dark:text-sky-400" />
           </div>
-          <h3 className="text-3xl font-extrabold text-white mt-2">{formatINR(monthlyIncome)}</h3>
-          <p className="text-[11px] text-sky-400 mt-1">Monthly fee of active restaurants</p>
+          <h3 className="text-3xl font-black text-slate-900 dark:text-white mt-2 font-num">{formatINR(monthlyIncome)}</h3>
+          <p className="text-[11px] text-sky-600 dark:text-sky-400 mt-1 font-semibold">Monthly fee of active restaurants</p>
         </div>
       </div>
 
       {/* Section tab */}
-      <div className="relative flex items-center space-x-2 border-b border-slate-800 pb-2">
-        <span className="px-4 py-2 rounded-xl text-xs font-bold bg-purple-600 text-white shadow-lg shadow-purple-900/40 flex items-center space-x-2">
+      <div className="pos-surface-glass p-2 rounded-2xl flex items-center space-x-2 shadow-md">
+        <span className="px-4 py-2 rounded-xl text-xs font-extrabold bg-purple-600 text-white shadow-lg shadow-purple-900/40 flex items-center space-x-2">
           <Building className="w-3.5 h-3.5" />
           <span>Restaurant Directory ({totalRegistered})</span>
         </span>
       </div>
 
       {/* Restaurants table */}
-      <div className="relative bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+      <div className="relative pos-card-glass rounded-2xl p-6 shadow-xl space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h3 className="font-bold text-base text-white">Registered Restaurants & Admin Logins</h3>
-            <p className="text-xs text-slate-400">
+            <h3 className="font-extrabold text-base text-slate-900 dark:text-white font-display">Registered Restaurants & Admin Logins</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Set the hotel name, admin email and password. The restaurant stays Pending until the admin confirms their email and logs in.
             </p>
           </div>
           <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search hotel or email..."
-              className="pl-9 pr-4 py-2 bg-slate-950 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 w-full sm:w-64"
+              className="pl-9 pr-4 py-2 bg-pos-dark border border-pos-border rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-purple-500 w-full sm:w-64 font-medium"
             />
           </div>
         </div>
 
-        <div className="p-3 bg-amber-950/40 border border-amber-700/70 rounded-xl text-[11px] text-amber-200 flex items-start space-x-2">
-          <MailWarning className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+        <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-[11px] text-amber-800 dark:text-amber-200 flex items-start space-x-2">
+          <MailWarning className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
           <span>
             <strong>Heads up:</strong> confirmation emails often land in the <strong>Spam / Junk</strong> folder. {SPAM_NOTICE} Restaurants stay <strong>Pending</strong> and their admin cannot log in until confirmed.
           </span>
@@ -562,47 +562,47 @@ export default function SuperAdminPage() {
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="text-slate-400 border-b border-slate-800">
+            <thead className="bg-pos-dark text-slate-600 dark:text-slate-400 border-b border-pos-border">
               <tr>
-                <th className="py-3 px-4 font-bold">Hotel / Restaurant</th>
-                <th className="py-3 px-4 font-bold">Admin Email</th>
-                <th className="py-3 px-4 font-bold">Monthly Fee</th>
-                <th className="py-3 px-4 font-bold">Status</th>
-                <th className="py-3 px-4 font-bold text-right">Actions</th>
+                <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">Hotel / Restaurant</th>
+                <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">Admin Email</th>
+                <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">Monthly Fee</th>
+                <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">Status</th>
+                <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px] text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800">
+            <tbody className="divide-y divide-pos-border">
               {loading && rows.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="py-8 text-center text-slate-500">Loading...</td>
+                  <td colSpan="5" className="py-8 text-center text-slate-400 font-semibold">Loading...</td>
                 </tr>
               ) : filteredRows.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="py-8 text-center text-slate-500">
+                  <td colSpan="5" className="py-8 text-center text-slate-500 font-semibold">
                     No restaurants yet. Click "Add Restaurant" to register one.
                   </td>
                 </tr>
               ) : (
                 filteredRows.map((row) => {
                   return (
-                    <tr key={row.rest.id} className="hover:bg-slate-800/40 transition-colors">
-                      <td className="py-3.5 px-4 font-bold text-white">{row.rest.name}</td>
-                      <td className="py-3.5 px-4 font-mono text-emerald-400">{row.admin?.email || '—'}</td>
-                      <td className="py-3.5 px-4 text-slate-300 font-semibold">{formatINR(row.rest.monthlyFee)}</td>
+                    <tr key={row.rest.id} className="hover:bg-pos-surface/60 transition-colors">
+                      <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-white">{row.rest.name}</td>
+                      <td className="py-3.5 px-4 font-mono font-bold text-emerald-600 dark:text-emerald-400">{row.admin?.email || '—'}</td>
+                      <td className="py-3.5 px-4 text-slate-700 dark:text-slate-300 font-bold font-num">{formatINR(row.rest.monthlyFee)}</td>
                       <td className="py-3.5 px-4">{statusBadge(row)}</td>
                       <td className="py-3.5 px-4 text-right space-x-1.5 whitespace-nowrap">
                         {row.status === 'pending' && row.admin && (
                           <>
                             <button
                               onClick={() => handleCheckVerification(row)}
-                              className="p-1.5 rounded-lg bg-slate-950 hover:bg-emerald-950 text-slate-400 hover:text-emerald-300 border border-slate-800 transition-colors"
+                              className="p-1.5 rounded-xl bg-pos-dark hover:bg-emerald-500/15 text-slate-600 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-300 border border-pos-border transition-colors shadow-sm"
                               title="Check if email is confirmed"
                             >
                               <RefreshCw className="w-3.5 h-3.5" />
                             </button>
                             <button
                               onClick={() => handleResend(row)}
-                              className="p-1.5 rounded-lg bg-slate-950 hover:bg-sky-950 text-slate-400 hover:text-sky-300 border border-slate-800 transition-colors"
+                              className="p-1.5 rounded-xl bg-pos-dark hover:bg-sky-500/15 text-slate-600 dark:text-slate-400 hover:text-sky-600 dark:hover:text-sky-300 border border-pos-border transition-colors shadow-sm"
                               title="Resend confirmation email"
                             >
                               <Mail className="w-3.5 h-3.5" />
@@ -612,7 +612,7 @@ export default function SuperAdminPage() {
                         {row.status !== 'pending' && (
                           <button
                             onClick={() => handleToggleStatus(row)}
-                            className="p-1.5 rounded-lg bg-slate-950 hover:bg-amber-950 text-slate-400 hover:text-amber-300 border border-slate-800 transition-colors"
+                            className="p-1.5 rounded-xl bg-pos-dark hover:bg-amber-500/15 text-slate-600 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-300 border border-pos-border transition-colors shadow-sm"
                             title={row.status === 'active' ? 'Suspend' : 'Activate'}
                           >
                             <Power className="w-3.5 h-3.5" />
@@ -621,7 +621,7 @@ export default function SuperAdminPage() {
                         {row.admin && (
                           <button
                             onClick={() => openPasswordModal(row)}
-                            className="p-1.5 rounded-lg bg-slate-950 hover:bg-sky-950 text-slate-400 hover:text-sky-300 border border-slate-800 transition-colors"
+                            className="p-1.5 rounded-xl bg-pos-dark hover:bg-sky-500/15 text-slate-600 dark:text-slate-400 hover:text-sky-600 dark:hover:text-sky-300 border border-pos-border transition-colors shadow-sm"
                             title="Change admin password"
                           >
                             <Key className="w-3.5 h-3.5" />
@@ -629,14 +629,14 @@ export default function SuperAdminPage() {
                         )}
                         <button
                           onClick={() => openEditModal(row)}
-                          className="p-1.5 rounded-lg bg-slate-950 hover:bg-purple-950 text-slate-400 hover:text-purple-300 border border-slate-800 transition-colors"
+                          className="p-1.5 rounded-xl bg-pos-dark hover:bg-purple-500/15 text-slate-600 dark:text-slate-400 hover:text-purple-600 dark:hover:text-purple-300 border border-pos-border transition-colors shadow-sm"
                           title="Edit name / fee"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => handleDelete(row)}
-                          className="p-1.5 rounded-lg bg-slate-950 hover:bg-rose-950 text-slate-400 hover:text-rose-400 border border-slate-800 transition-colors"
+                          className="p-1.5 rounded-xl bg-pos-dark hover:bg-rose-500/15 text-slate-600 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 border border-pos-border transition-colors shadow-sm"
                           title="Delete"
                         >
                           <Trash2 className="w-3.5 h-3.5" />

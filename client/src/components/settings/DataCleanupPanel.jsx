@@ -109,18 +109,18 @@ export default function DataCleanupPanel({ restaurantId }) {
     <div className="space-y-5">
       <CleanupDisclaimer restaurantId={restaurantId} refreshKey={metaKey} />
 
-      <div className="space-y-5 bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl text-xs">
-        <h3 className="font-bold text-sm text-slate-200 pb-2 border-b border-slate-800 flex items-center space-x-2">
-          <Database className="w-4 h-4 text-emerald-400" />
+      <div className="space-y-5 bg-white dark:bg-pos-card border border-slate-200 dark:border-pos-border rounded-xl p-6 shadow-sm dark:shadow-xl text-xs">
+        <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200 pb-2 border-b border-slate-200 dark:border-pos-border flex items-center space-x-2">
+          <Database className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
           <span>Data Cleanup</span>
         </h3>
 
-        <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-400 space-y-1.5 leading-relaxed">
+        <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-pos-border text-slate-600 dark:text-slate-400 space-y-1.5 leading-relaxed">
           <p>
-            Old records are <strong className="text-slate-200">never deleted automatically</strong>. Pick a date,
+            Old records are <strong className="text-slate-900 dark:text-slate-200">never deleted automatically</strong>. Pick a date,
             download the Excel backup, then delete everything up to that date to keep the database light.
           </p>
-          <p className="flex items-start space-x-1.5 text-emerald-300">
+          <p className="flex items-start space-x-1.5 text-emerald-700 dark:text-emerald-300 font-medium">
             <ShieldCheck className="w-3.5 h-3.5 mt-0.5 shrink-0" />
             <span>
               Only finished data is removed: paid/closed/cancelled orders, their kitchen tickets and invoices. Menu,
@@ -131,9 +131,9 @@ export default function DataCleanupPanel({ restaurantId }) {
 
         <div className="flex flex-wrap items-end gap-3">
           <div>
-            <label className="block font-semibold text-slate-300 mb-1">Delete all data up to (and including)</label>
+            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Delete all data up to (and including)</label>
             <div className="relative">
-              <CalendarDays className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <CalendarDays className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="date"
                 value={upTo}
@@ -142,8 +142,7 @@ export default function DataCleanupPanel({ restaurantId }) {
                   setUpTo(e.target.value);
                   resetResult();
                 }}
-                className="pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-emerald-500"
-                style={{ colorScheme: 'dark' }}
+                className="pl-9 pr-3 py-2 bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
               />
             </div>
           </div>
@@ -151,7 +150,7 @@ export default function DataCleanupPanel({ restaurantId }) {
             type="button"
             onClick={handleScan}
             disabled={scanning || deleting || !dateValid}
-            className="flex items-center space-x-1.5 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold border border-slate-700 disabled:opacity-50"
+            className="flex items-center space-x-1.5 px-4 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 font-semibold border border-slate-300 dark:border-slate-700 disabled:opacity-50 transition-colors"
           >
             <Search className="w-3.5 h-3.5" />
             <span>{scanning ? 'Scanning...' : 'Scan records'}</span>
@@ -166,21 +165,21 @@ export default function DataCleanupPanel({ restaurantId }) {
                 ['Kitchen tickets', preview.kots.length],
                 ['Invoices', preview.invoices.length]
               ].map(([label, count]) => (
-                <div key={label} className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-center">
-                  <p className="text-lg font-extrabold text-white">{count}</p>
-                  <p className="text-[10px] text-slate-400 uppercase tracking-wider">{label}</p>
+                <div key={label} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-center">
+                  <p className="text-lg font-extrabold text-slate-900 dark:text-white">{count}</p>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider">{label}</p>
                 </div>
               ))}
             </div>
 
             {preview.capped && (
-              <p className="text-amber-300">
+              <p className="text-amber-600 dark:text-amber-300 font-semibold">
                 Showing the first {CLEANUP_CAP_PER_COLLECTION} per type. Delete these, then scan again for the rest.
               </p>
             )}
 
             {total === 0 ? (
-              <p className="text-slate-400">Nothing finished up to {upTo}. Nothing to clean up.</p>
+              <p className="text-slate-500 dark:text-slate-400">Nothing finished up to {upTo}. Nothing to clean up.</p>
             ) : (
               <div className="flex flex-wrap items-center gap-3">
                 <button

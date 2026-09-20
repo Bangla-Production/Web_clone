@@ -123,19 +123,28 @@ export default function ReportsPage() {
   return (
     <div className="space-y-6">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="pos-surface-glass p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-white tracking-tight">Sales & Revenue Reports</h1>
-          <p className="text-xs text-slate-400">
-            Real-time financial analytics, order types, and revenue breakdown ({activeRestaurantId})
-          </p>
+          <div className="flex items-center space-x-2.5">
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-400">
+              <BarChart3 className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-xl font-extrabold text-white tracking-tight font-display">
+                Sales & Revenue Analytics
+              </h1>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Financial reports, settlement audits, and revenue performance ({activeRestaurantId})
+              </p>
+            </div>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2 self-start">
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
           <button
             onClick={fetchSalesReport}
-            className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors self-start"
+            className="pos-btn-touch flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-pos-dark hover:bg-pos-surface text-slate-200 text-xs font-bold border border-pos-border transition-colors"
           >
-            <RefreshCw className="w-3.5 h-3.5" />
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-emerald-400' : ''}`} />
             <span>Refresh Data</span>
           </button>
           <ReportsCleanupTools restaurantId={activeRestaurantId} onDone={fetchSalesReport} />
@@ -143,36 +152,36 @@ export default function ReportsPage() {
       </div>
 
       {/* Date Filter Bar */}
-      <div className="p-3.5 bg-slate-900 border border-slate-800 rounded-xl flex flex-wrap items-center justify-between gap-3 shadow-md">
-        <div className="flex items-center space-x-2 bg-slate-950 p-1 rounded-lg border border-slate-800">
+      <div className="pos-surface-glass p-4 rounded-2xl flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center space-x-1.5 bg-pos-dark p-1.5 rounded-xl border border-pos-border">
           <button
             onClick={() => setDateRange('TODAY')}
-            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-              dateRange === 'TODAY' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              dateRange === 'TODAY' ? 'bg-emerald-500 text-slate-950 shadow-sm font-extrabold' : 'text-slate-400 hover:text-white'
             }`}
           >
             Today
           </button>
           <button
             onClick={() => setDateRange('7_DAYS')}
-            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-              dateRange === '7_DAYS' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              dateRange === '7_DAYS' ? 'bg-emerald-500 text-slate-950 shadow-sm font-extrabold' : 'text-slate-400 hover:text-white'
             }`}
           >
             Last 7 Days
           </button>
           <button
             onClick={() => setDateRange('30_DAYS')}
-            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-              dateRange === '30_DAYS' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              dateRange === '30_DAYS' ? 'bg-emerald-500 text-slate-950 shadow-sm font-extrabold' : 'text-slate-400 hover:text-white'
             }`}
           >
             Last 30 Days
           </button>
           <button
             onClick={() => setDateRange('CUSTOM')}
-            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-              dateRange === 'CUSTOM' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white'
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              dateRange === 'CUSTOM' ? 'bg-emerald-500 text-slate-950 shadow-sm font-extrabold' : 'text-slate-400 hover:text-white'
             }`}
           >
             Custom Range
@@ -185,14 +194,14 @@ export default function ReportsPage() {
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-white focus:outline-none focus:border-emerald-500"
+              className="px-3 py-1.5 bg-pos-dark border border-pos-border rounded-xl text-white focus:outline-none focus:border-emerald-500"
             />
-            <span className="text-slate-500">to</span>
+            <span className="text-slate-500 font-bold">to</span>
             <input
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-white focus:outline-none focus:border-emerald-500"
+              className="px-3 py-1.5 bg-pos-dark border border-pos-border rounded-xl text-white focus:outline-none focus:border-emerald-500"
             />
           </div>
         )}
@@ -200,46 +209,54 @@ export default function ReportsPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 shadow-lg">
+        <div className="p-5 rounded-2xl pos-card-glass shadow-lg">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-400">Total Net Sales</span>
-            <DollarSign className="w-5 h-5 text-emerald-400" />
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Net Sales</span>
+            <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 dark:text-emerald-400">
+              <DollarSign className="w-5 h-5" />
+            </div>
           </div>
-          <h3 className="text-2xl font-bold text-white mt-2">
+          <h3 className="text-2xl font-black text-slate-900 dark:text-white mt-2 font-num">
             {currencySymbol}{totalSales.toFixed(2)}
           </h3>
-          <p className="text-[11px] text-slate-400 mt-1">{paidOrders.length} Paid Orders</p>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-medium">{paidOrders.length} Paid Settlements</p>
         </div>
 
-        <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 shadow-lg">
+        <div className="p-5 rounded-2xl pos-card-glass shadow-lg">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-400">Total Order Tickets</span>
-            <ShoppingBag className="w-5 h-5 text-blue-400" />
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Order Tickets</span>
+            <div className="p-2 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-500 dark:text-blue-400">
+              <ShoppingBag className="w-5 h-5" />
+            </div>
           </div>
-          <h3 className="text-2xl font-bold text-white mt-2">{filteredOrders.length}</h3>
-          <p className="text-[11px] text-slate-400 mt-1">{unpaidOrders.length} Unpaid / Open</p>
+          <h3 className="text-2xl font-black text-slate-900 dark:text-white mt-2 font-num">{filteredOrders.length}</h3>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-medium">{unpaidOrders.length} Unpaid / Open</p>
         </div>
 
-        <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 shadow-lg">
+        <div className="p-5 rounded-2xl pos-card-glass shadow-lg">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-400">Avg Order Value (AOV)</span>
-            <TrendingUp className="w-5 h-5 text-purple-400" />
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Avg Order Value (AOV)</span>
+            <div className="p-2 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-500 dark:text-purple-400">
+              <TrendingUp className="w-5 h-5" />
+            </div>
           </div>
-          <h3 className="text-2xl font-bold text-white mt-2">
+          <h3 className="text-2xl font-black text-slate-900 dark:text-white mt-2 font-num">
             {currencySymbol}{avgOrderValue.toFixed(2)}
           </h3>
-          <p className="text-[11px] text-slate-400 mt-1">Per completed bill</p>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-medium">Per completed bill</p>
         </div>
 
-        <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 shadow-lg">
+        <div className="p-5 rounded-2xl pos-card-glass shadow-lg">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-400">Total {taxName} Collected</span>
-            <Receipt className="w-5 h-5 text-amber-400" />
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total {taxName} Tax</span>
+            <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 dark:text-amber-400">
+              <Receipt className="w-5 h-5" />
+            </div>
           </div>
-          <h3 className="text-2xl font-bold text-white mt-2">
+          <h3 className="text-2xl font-black text-slate-900 dark:text-white mt-2 font-num">
             {currencySymbol}{totalTax.toFixed(2)}
           </h3>
-          <p className="text-[11px] text-slate-400 mt-1">
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-medium">
             Discounts: {currencySymbol}{totalDiscounts.toFixed(2)}
           </p>
         </div>
@@ -248,41 +265,41 @@ export default function ReportsPage() {
       {/* Grid: Day-by-day table + Breakdown Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Daily Breakdown Table (2 Cols) */}
-        <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-xl">
-          <h3 className="font-bold text-sm text-slate-200 pb-3 border-b border-slate-800">
+        <div className="lg:col-span-2 pos-card-glass rounded-2xl p-5 shadow-xl">
+          <h3 className="font-extrabold text-sm text-slate-900 dark:text-slate-200 pb-3 border-b border-pos-border font-display">
             Day-by-Day Sales Breakdown
           </h3>
 
           <div className="overflow-x-auto mt-3">
             <table className="w-full text-left text-xs">
-              <thead className="text-slate-400 border-b border-slate-800">
+              <thead className="text-slate-500 dark:text-slate-400 border-b border-pos-border">
                 <tr>
-                  <th className="pb-2.5 font-semibold">Date</th>
-                  <th className="pb-2.5 font-semibold">Orders</th>
-                  <th className="pb-2.5 font-semibold">Paid</th>
-                  <th className="pb-2.5 font-semibold">Discounts</th>
-                  <th className="pb-2.5 font-semibold">Tax</th>
-                  <th className="pb-2.5 font-semibold text-right">Revenue</th>
+                  <th className="pb-2.5 font-bold uppercase tracking-wider text-[10px]">Date</th>
+                  <th className="pb-2.5 font-bold uppercase tracking-wider text-[10px]">Orders</th>
+                  <th className="pb-2.5 font-bold uppercase tracking-wider text-[10px]">Paid</th>
+                  <th className="pb-2.5 font-bold uppercase tracking-wider text-[10px]">Discounts</th>
+                  <th className="pb-2.5 font-bold uppercase tracking-wider text-[10px]">Tax</th>
+                  <th className="pb-2.5 font-bold uppercase tracking-wider text-[10px] text-right">Revenue</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody className="divide-y divide-pos-border">
                 {dailyBreakdown.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="py-8 text-center text-slate-500">
+                    <td colSpan="6" className="py-8 text-center text-slate-500 font-semibold">
                       No sales recorded in this period.
                     </td>
                   </tr>
                 ) : (
                   dailyBreakdown.map((row) => (
-                    <tr key={row.date} className="hover:bg-slate-800/30 transition-colors">
-                      <td className="py-3 font-semibold text-slate-200">{row.date}</td>
-                      <td className="py-3 text-slate-400">{row.ordersCount}</td>
-                      <td className="py-3 text-slate-300">{row.paidCount}</td>
-                      <td className="py-3 text-slate-400">
+                    <tr key={row.date} className="hover:bg-pos-surface/60 transition-colors">
+                      <td className="py-3 font-bold text-slate-800 dark:text-slate-200">{row.date}</td>
+                      <td className="py-3 text-slate-600 dark:text-slate-400 font-num">{row.ordersCount}</td>
+                      <td className="py-3 text-slate-700 dark:text-slate-300 font-bold font-num">{row.paidCount}</td>
+                      <td className="py-3 text-slate-600 dark:text-slate-400 font-num">
                         {currencySymbol}{row.discounts.toFixed(2)}
                       </td>
-                      <td className="py-3 text-slate-400">{currencySymbol}{row.tax.toFixed(2)}</td>
-                      <td className="py-3 font-bold text-emerald-400 text-right">
+                      <td className="py-3 text-slate-600 dark:text-slate-400 font-num">{currencySymbol}{row.tax.toFixed(2)}</td>
+                      <td className="py-3 font-black text-emerald-600 dark:text-emerald-400 text-right font-num">
                         {currencySymbol}{row.totalSales.toFixed(2)}
                       </td>
                     </tr>
@@ -295,45 +312,43 @@ export default function ReportsPage() {
 
         {/* Channels & Payment Breakdown (1 Col) */}
         <div className="space-y-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl">
-            <h4 className="font-bold text-xs text-slate-300 uppercase tracking-wider mb-3">
+          <div className="pos-card-glass rounded-2xl p-4 shadow-xl">
+            <h4 className="font-extrabold text-xs text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-3">
               Order Type Distribution
             </h4>
             <div className="space-y-2.5 text-xs">
-              <div className="flex justify-between items-center p-2 rounded-lg bg-slate-950 border border-slate-800">
-                <span className="text-slate-300">🍽️ Dine-In</span>
-                <span className="font-bold text-white">
-                  {dineInOrders.length} orders (
-                  {currencySymbol}{dineInOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0).toFixed(2)})
+              <div className="flex justify-between items-center p-2.5 rounded-xl bg-pos-dark border border-pos-border">
+                <span className="text-slate-700 dark:text-slate-300 font-semibold">🍽️ Dine-In</span>
+                <span className="font-extrabold text-slate-900 dark:text-white font-num">
+                  {dineInOrders.length} orders ({currencySymbol}{dineInOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0).toFixed(2)})
                 </span>
               </div>
-              <div className="flex justify-between items-center p-2 rounded-lg bg-slate-950 border border-slate-800">
-                <span className="text-slate-300">🛍️ Takeaway</span>
-                <span className="font-bold text-white">
-                  {takeawayOrders.length} orders (
-                  {currencySymbol}{takeawayOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0).toFixed(2)})
+              <div className="flex justify-between items-center p-2.5 rounded-xl bg-pos-dark border border-pos-border">
+                <span className="text-slate-700 dark:text-slate-300 font-semibold">🛍️ Takeaway</span>
+                <span className="font-extrabold text-slate-900 dark:text-white font-num">
+                  {takeawayOrders.length} orders ({currencySymbol}{takeawayOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0).toFixed(2)})
                 </span>
               </div>
             </div>
           </div>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl">
-            <h4 className="font-bold text-xs text-slate-300 uppercase tracking-wider mb-3">
+          <div className="pos-card-glass rounded-2xl p-4 shadow-xl">
+            <h4 className="font-extrabold text-xs text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-3">
               Payment Method Collection
             </h4>
             <div className="space-y-2 text-xs">
               {paymentBreakdown.map((p) => (
                 <div
                   key={p.method}
-                  className="flex justify-between items-center p-2 rounded-lg bg-slate-950 border border-slate-800"
+                  className="flex justify-between items-center p-2.5 rounded-xl bg-pos-dark border border-pos-border"
                 >
-                  <span className="text-slate-300">
+                  <span className="text-slate-700 dark:text-slate-300 font-semibold">
                     {p.method === 'CASH' && '💵 '}
                     {p.method === 'CARD' && '💳 '}
                     {p.method === 'UPI' && '📱 '}
                     {p.method}
                   </span>
-                  <span className="font-bold text-emerald-400">
+                  <span className="font-black text-emerald-600 dark:text-emerald-400 font-num">
                     {currencySymbol}{p.amount.toFixed(2)}
                   </span>
                 </div>
@@ -344,34 +359,34 @@ export default function ReportsPage() {
       </div>
 
       {/* Top Selling Items Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-xl">
-        <h3 className="font-bold text-sm text-slate-200 pb-3 border-b border-slate-800">
+      <div className="pos-card-glass rounded-2xl p-5 shadow-xl">
+        <h3 className="font-extrabold text-sm text-slate-900 dark:text-slate-200 pb-3 border-b border-pos-border font-display">
           Top Selling Dishes (Firestore Real-time)
         </h3>
         <div className="overflow-x-auto mt-3">
           <table className="w-full text-left text-xs">
-            <thead className="text-slate-400 border-b border-slate-800">
+            <thead className="text-slate-500 dark:text-slate-400 border-b border-pos-border">
               <tr>
-                <th className="pb-2.5 font-semibold">Rank</th>
-                <th className="pb-2.5 font-semibold">Item Name</th>
-                <th className="pb-2.5 font-semibold">Quantity Sold</th>
-                <th className="pb-2.5 font-semibold text-right">Total Revenue</th>
+                <th className="pb-2.5 font-bold uppercase tracking-wider text-[10px]">Rank</th>
+                <th className="pb-2.5 font-bold uppercase tracking-wider text-[10px]">Item Name</th>
+                <th className="pb-2.5 font-bold uppercase tracking-wider text-[10px]">Quantity Sold</th>
+                <th className="pb-2.5 font-bold uppercase tracking-wider text-[10px] text-right">Total Revenue</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60">
+            <tbody className="divide-y divide-pos-border">
               {topItems.length === 0 ? (
                 <tr>
-                  <td colSpan="4" className="py-6 text-center text-slate-500">
+                  <td colSpan="4" className="py-6 text-center text-slate-500 font-semibold">
                     No item sales data available for this range.
                   </td>
                 </tr>
               ) : (
                 topItems.map((item, index) => (
-                  <tr key={index} className="hover:bg-slate-800/30">
-                    <td className="py-2.5 font-bold text-slate-400">#{index + 1}</td>
-                    <td className="py-2.5 font-semibold text-slate-100">{item.name}</td>
-                    <td className="py-2.5 text-slate-300">{item.quantity} units</td>
-                    <td className="py-2.5 font-bold text-emerald-400 text-right">
+                  <tr key={index} className="hover:bg-pos-surface/60 transition-colors">
+                    <td className="py-2.5 font-extrabold text-amber-500 font-num">#{index + 1}</td>
+                    <td className="py-2.5 font-bold text-slate-900 dark:text-slate-100">{item.name}</td>
+                    <td className="py-2.5 text-slate-700 dark:text-slate-300 font-num">{item.quantity} units</td>
+                    <td className="py-2.5 font-black text-emerald-600 dark:text-emerald-400 text-right font-num">
                       {currencySymbol}{item.revenue.toFixed(2)}
                     </td>
                   </tr>

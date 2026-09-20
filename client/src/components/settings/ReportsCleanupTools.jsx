@@ -161,7 +161,7 @@ export default function ReportsCleanupTools({ restaurantId, onDone }) {
           <CleanupDisclaimer restaurantId={restaurantId} refreshKey={metaKey} />
 
           {!preview ? (
-            <p className="text-slate-400">Scanning Firebase...</p>
+            <p className="text-slate-500 dark:text-slate-400">Scanning Firebase...</p>
           ) : (
             <>
               <div className="grid grid-cols-4 gap-2">
@@ -171,26 +171,26 @@ export default function ReportsCleanupTools({ restaurantId, onDone }) {
                   ['Kitchen tickets', preview.kots.length],
                   ['Invoices', preview.invoices.length]
                 ].map(([label, count]) => (
-                  <div key={label} className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-center">
-                    <p className="text-lg font-extrabold text-white">{count}</p>
-                    <p className="text-[10px] text-slate-400 uppercase tracking-wider leading-tight">{label}</p>
+                  <div key={label} className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-center">
+                    <p className="text-lg font-extrabold text-slate-900 dark:text-white">{count}</p>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider leading-tight">{label}</p>
                   </div>
                 ))}
               </div>
 
-              <p className="text-slate-400 leading-relaxed">
+              <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
                 Open / unpaid orders, menu, tables, staff and inventory are never touched. Reports will only
                 show data that is still in Firebase, so keep the Excel file for older figures.
               </p>
 
               {preview.capped && (
-                <p className="text-amber-300">
+                <p className="text-amber-600 dark:text-amber-300 font-semibold">
                   Showing the first {CLEANUP_CAP_PER_COLLECTION} per type. Delete these, then run Cleanup again for the rest.
                 </p>
               )}
 
               {total === 0 ? (
-                <p className="text-slate-300">
+                <p className="text-slate-700 dark:text-slate-300">
                   No completed or cancelled data to clean up. Found in Firebase: {preview.allOrders.length} orders
                   ({preview.allOrders.length - preview.orders.length} still open), {preview.allKots.length} kitchen
                   tickets, {preview.invoices.length} invoices.

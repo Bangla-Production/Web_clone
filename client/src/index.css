@@ -3,8 +3,83 @@
 @tailwind utilities;
 
 @layer base {
+  :root,
+  .light,
+  [data-theme='light'] {
+    --color-pos-dark: #f8fafc;
+    --color-pos-surface: #ffffff;
+    --color-pos-card: #ffffff;
+    --color-pos-card-hover: #f1f5f9;
+    --color-pos-border: #e2e8f0;
+    --color-pos-text: #0f172a;
+    --color-pos-text-muted: #64748b;
+    --color-pos-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.03), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  }
+
+  .dark,
+  [data-theme='dark'] {
+    --color-pos-dark: #080c16;
+    --color-pos-surface: #0f172a;
+    --color-pos-card: #151f33;
+    --color-pos-card-hover: #1c2944;
+    --color-pos-border: #233352;
+    --color-pos-text: #f8fafc;
+    --color-pos-text-muted: #94a3b8;
+    --color-pos-shadow: 0 10px 30px -4px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.07);
+  }
+
   body {
-    @apply bg-slate-950 text-slate-100 antialiased font-sans;
+    @apply bg-pos-dark text-slate-800 dark:text-slate-100 antialiased font-sans selection:bg-amber-500 selection:text-slate-950 transition-colors duration-200;
+  }
+}
+
+@layer utilities {
+  /* POS Glassmorphism card effects */
+  .pos-card-glass {
+    @apply bg-pos-card backdrop-blur-md border border-pos-border shadow-pos-card transition-colors duration-200;
+  }
+  
+  .pos-surface-glass {
+    @apply bg-pos-surface backdrop-blur-lg border border-pos-border shadow-pos-card transition-colors duration-200;
+  }
+
+  /* Tactile button active states */
+  .pos-btn-touch {
+    @apply transition-all duration-150 active:scale-[0.96] active:brightness-95 select-none;
+  }
+
+  /* Tabular numeric font helper for monetary values */
+  .font-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Petpooja Signature Buttons */
+  .petpooja-btn-kot {
+    @apply pos-btn-touch bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 text-slate-950 font-black shadow-pos-amber hover:brightness-105 active:scale-[0.96];
+  }
+
+  .petpooja-btn-pay {
+    @apply pos-btn-touch bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-400 text-slate-950 font-black shadow-pos-glow hover:brightness-105 active:scale-[0.96];
+  }
+
+  .petpooja-btn-blue {
+    @apply pos-btn-touch bg-gradient-to-r from-sky-500 via-blue-500 to-indigo-600 text-white font-black shadow-pos-sky hover:brightness-105 active:scale-[0.96];
+  }
+
+  /* Food Veg/Non-Veg Badges */
+  .badge-veg {
+    @apply w-4 h-4 border-2 border-emerald-500 rounded flex items-center justify-center bg-emerald-500/10 shrink-0;
+  }
+  .badge-veg-dot {
+    @apply w-2 h-2 rounded-full bg-emerald-500;
+  }
+
+  .badge-nonveg {
+    @apply w-4 h-4 border-2 border-rose-500 rounded flex items-center justify-center bg-rose-500/10 shrink-0;
+  }
+  .badge-nonveg-dot {
+    @apply w-2 h-2 rounded-full bg-rose-500;
   }
 }
 
@@ -43,21 +118,30 @@
   }
 }
 
-/* Smooth scrollbar */
+/* Smooth sleek POS scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.6);
+  background: transparent;
 }
 
-::-webkit-scrollbar-thumb {
-  background: rgba(100, 116, 139, 0.4);
-  border-radius: 3px;
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(51, 65, 85, 0.6);
+  border-radius: 4px;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.6);
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(245, 158, 11, 0.6);
+}
+
+.light ::-webkit-scrollbar-thumb {
+  background: rgba(203, 213, 225, 0.8);
+  border-radius: 4px;
+}
+
+.light ::-webkit-scrollbar-thumb:hover {
+  background: rgba(245, 158, 11, 0.6);
 }

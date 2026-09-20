@@ -41,7 +41,7 @@ export default function TablesPage() {
   useEffect(() => {
     setLoading(true);
     const unsubscribe = subscribeToTables(activeRestaurantId, (liveTables) => {
-      setTables(liveTables);
+      setTables(liveTables || []);
       setLoading(false);
     });
 
@@ -113,39 +113,66 @@ export default function TablesPage() {
   const billReqCount = tables.filter((t) => t.status === 'BILL_REQUESTED').length;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5 transition-colors duration-200">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-slate-900/90 border border-slate-800 rounded-2xl shadow-md">
+      <div className="pos-surface-glass p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-pos-border">
         <div>
-          <h1 className="text-xl font-bold text-white tracking-tight flex items-center space-x-2">
-            <Grid2X2 className="w-5 h-5 text-emerald-400" />
-            <span>Table & Floor Management</span>
-          </h1>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Real-time multi-waiter floor sync • {availableCount} Free • {occupiedCount} Occupied • {billReqCount} Bill Requested
-          </p>
+          <div className="flex items-center space-x-2.5">
+            <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-600 dark:text-amber-400">
+              <Grid2X2 className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-xl font-black text-slate-900 dark:text-white tracking-tight font-display">
+                Table & Floor Management
+              </h1>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Petpooja multi-section floor layout • Real-time synchronization with waiter tablets and kitchen
+              </p>
+            </div>
+          </div>
         </div>
-        <div className="flex items-center space-x-3">
+
+        {/* Counter chips & Action */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex items-center space-x-2 bg-pos-dark px-3 py-1.5 rounded-xl border border-pos-border text-xs">
+            <span className="flex items-center space-x-1.5 text-emerald-600 dark:text-emerald-400 font-bold">
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              <span>{availableCount} Vacant</span>
+            </span>
+            <span className="text-slate-300 dark:text-slate-700">|</span>
+            <span className="flex items-center space-x-1.5 text-amber-600 dark:text-amber-400 font-bold">
+              <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+              <span>{occupiedCount} Occupied</span>
+            </span>
+            <span className="text-slate-300 dark:text-slate-700">|</span>
+            <span className="flex items-center space-x-1.5 text-purple-600 dark:text-purple-400 font-bold">
+              <span className="w-2 h-2 rounded-full bg-purple-500 animate-ping"></span>
+              <span>{billReqCount} Bill Req</span>
+            </span>
+          </div>
+
           <button
             onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md shadow-emerald-900/30 transition-colors"
+            className="petpooja-btn-kot flex items-center space-x-2 px-4 py-2.5 rounded-xl text-slate-950 text-xs font-black transition-all"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-4 h-4 stroke-[2.5]" />
             <span>Add New Table</span>
           </button>
         </div>
       </div>
 
       {/* Tables Visual Floor Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {loading ? (
-          <div className="col-span-full py-16 text-center text-slate-400">
-            <div className="w-8 h-8 border-3 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin mx-auto mb-2"></div>
-            Connecting to real-time floor status...
+          <div className="col-span-full py-20 text-center text-slate-400">
+            <div className="w-10 h-10 border-3 border-amber-500/20 border-t-amber-400 rounded-full animate-spin mx-auto mb-3"></div>
+            <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">Connecting to real-time floor status...</p>
           </div>
         ) : tables.length === 0 ? (
-          <div className="col-span-full py-16 text-center text-slate-500 text-xs">
-            No dining tables created yet. Click "Add New Table" to start.
+          <div className="col-span-full py-20 text-center text-slate-400 text-sm pos-card-glass rounded-2xl border border-pos-border">
+            <Grid2X2 className="w-10 h-10 mx-auto mb-2 opacity-50" />
+            <p className="font-semibold text-slate-700 dark:text-slate-300">No dining tables configured yet.</p>
+            <p className="text-xs text-slate-500 mt-1">Click "+ Add New Table" to create your dining floor layout.</p>
           </div>
         ) : (
           tables.map((table) => {
@@ -154,73 +181,80 @@ export default function TablesPage() {
             const isOcc = table.status === 'OCCUPIED';
             const activeOrder = table.activeOrder;
 
-            let cardStyle = 'bg-slate-900/90 border-slate-800 hover:border-emerald-500/50';
-            if (isBillReq) cardStyle = 'bg-purple-950/30 border-purple-600 shadow-lg shadow-purple-950/30 ring-1 ring-purple-500';
-            else if (isOcc) cardStyle = 'bg-amber-950/20 border-amber-700/60 shadow-lg shadow-amber-950/20';
+            let cardStyle = 'pos-card-glass hover:border-amber-400/50';
+            if (isBillReq) {
+              cardStyle = 'bg-purple-50 dark:bg-purple-950/30 border-purple-400 dark:border-purple-500/60 shadow-pos-purple ring-1 ring-purple-500/40';
+            } else if (isOcc) {
+              cardStyle = 'bg-amber-50 dark:bg-amber-950/25 border-amber-400 dark:border-amber-500/40 shadow-sm';
+            }
 
             return (
               <div
                 key={table.id}
-                className={`p-4 rounded-2xl border flex flex-col justify-between transition-all duration-200 ${cardStyle}`}
+                className={`p-4.5 rounded-2xl border flex flex-col justify-between transition-all duration-200 ${cardStyle}`}
               >
                 <div>
                   <div className="flex items-start justify-between">
                     <div>
-                      <h3 className="font-extrabold text-lg text-white">Table {table.tableNumber}</h3>
-                      <div className="flex items-center space-x-1 text-xs text-slate-400 mt-0.5">
-                        <Users className="w-3.5 h-3.5" />
-                        <span>Capacity: {table.capacity} guests</span>
+                      <div className="flex items-center space-x-2">
+                        <h3 className="font-display font-black text-xl text-slate-900 dark:text-white">
+                          Table {table.tableNumber}
+                        </h3>
+                      </div>
+                      <div className="flex items-center space-x-1.5 text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        <Users className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Seats {table.capacity} guests</span>
                       </div>
                     </div>
                     <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                      className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
                         isAvailable
-                          ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-800'
+                          ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
                           : isBillReq
-                          ? 'bg-purple-900/80 text-purple-200 border border-purple-500 animate-pulse'
-                          : 'bg-amber-950/80 text-amber-300 border border-amber-700'
+                          ? 'bg-purple-500/20 text-purple-800 dark:text-purple-300 border border-purple-500/50 animate-pulse'
+                          : 'bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30'
                       }`}
                     >
-                      {isAvailable ? 'Available' : isBillReq ? 'Bill Requested' : 'Occupied'}
+                      {isAvailable ? 'Vacant' : isBillReq ? 'Bill Req' : 'Occupied'}
                     </span>
                   </div>
 
                   {/* Active Order Details */}
                   {!isAvailable && activeOrder && (
-                    <div className="mt-3 p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs space-y-1">
-                      <div className="flex justify-between items-center text-slate-300">
-                        <span>Order: <strong>#{activeOrder.orderNumber}</strong></span>
-                        <span className="font-extrabold text-amber-400 text-sm">
+                    <div className="mt-3.5 p-3 rounded-xl bg-pos-dark border border-pos-border text-xs space-y-1.5 shadow-inner">
+                      <div className="flex justify-between items-center text-slate-600 dark:text-slate-300">
+                        <span className="text-slate-500 dark:text-slate-400">Order: <strong className="text-slate-900 dark:text-white">#{activeOrder.orderNumber}</strong></span>
+                        <span className="font-num font-black text-amber-600 dark:text-amber-400 text-sm">
                           {currencySymbol}{activeOrder.totalAmount?.toFixed(2) || '0.00'}
                         </span>
                       </div>
-                      <div className="flex justify-between text-[11px] text-slate-400 pt-0.5">
-                        <span>Server: {activeOrder.waiterName || 'Staff'}</span>
-                        <span>Items: {activeOrder.itemCount || 0}</span>
+                      <div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-1 border-t border-pos-border/40">
+                        <span>Server: <strong className="text-slate-800 dark:text-slate-200">{activeOrder.waiterName || 'Staff'}</strong></span>
+                        <span>{activeOrder.itemCount || 0} items</span>
                       </div>
                     </div>
                   )}
                 </div>
 
                 {/* Card Actions */}
-                <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between gap-1.5">
+                <div className="mt-4 pt-3 border-t border-pos-border flex items-center justify-between gap-2">
                   {isAvailable ? (
                     <button
                       type="button"
                       onClick={() => navigate('/pos')}
-                      className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow flex items-center justify-center space-x-1.5 transition-all"
+                      className="petpooja-btn-kot flex-1 py-2.5 px-3 rounded-xl text-slate-950 font-black text-xs flex items-center justify-center space-x-1.5 transition-all"
                     >
-                      <Utensils className="w-3.5 h-3.5" />
-                      <span>Take Order (POS)</span>
+                      <Utensils className="w-3.5 h-3.5 stroke-[2.5]" />
+                      <span>Take Order</span>
                     </button>
                   ) : (
                     <>
                       <button
                         type="button"
                         onClick={() => navigate('/pos')}
-                        className="flex-1 py-1.5 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs border border-slate-700 flex items-center justify-center space-x-1"
+                        className="pos-btn-touch flex-1 py-2 px-3 rounded-xl bg-pos-surface hover:bg-pos-card-hover text-slate-800 dark:text-white font-bold text-xs border border-pos-border flex items-center justify-center space-x-1.5 shadow-sm"
                       >
-                        <Eye className="w-3.5 h-3.5" />
+                        <Eye className="w-3.5 h-3.5 text-slate-400" />
                         <span>View / Add</span>
                       </button>
 
@@ -228,10 +262,10 @@ export default function TablesPage() {
                         <button
                           type="button"
                           onClick={() => handleRequestBill(table)}
-                          className="py-1.5 px-2.5 rounded-xl bg-purple-900/60 hover:bg-purple-800/80 text-purple-200 font-semibold text-xs border border-purple-700 flex items-center space-x-1"
+                          className="pos-btn-touch py-2 px-3 rounded-xl bg-purple-100 dark:bg-purple-950/60 hover:bg-purple-200 dark:hover:bg-purple-900/80 text-purple-800 dark:text-purple-200 font-bold text-xs border border-purple-300 dark:border-purple-700/60 flex items-center space-x-1.5 shadow-sm"
                           title="Request Bill"
                         >
-                          <FileText className="w-3.5 h-3.5" />
+                          <FileText className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
                           <span>Bill</span>
                         </button>
                       )}
@@ -241,10 +275,10 @@ export default function TablesPage() {
                   <button
                     type="button"
                     onClick={() => handleDeleteTable(table.id)}
-                    className="p-2 rounded-xl text-slate-500 hover:text-rose-400 hover:bg-rose-950/30 transition-colors"
+                    className="p-2 rounded-xl text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
                     title="Delete Table"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -257,7 +291,7 @@ export default function TablesPage() {
       <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Add Dining Table">
         <form onSubmit={handleAddTable} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
               Table Number / Label
             </label>
             <input
@@ -266,12 +300,12 @@ export default function TablesPage() {
               value={tableNumber}
               onChange={(e) => setTableNumber(e.target.value)}
               placeholder="e.g. 1, 2, Patio-A, T-10"
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+              className="w-full px-3.5 py-2.5 bg-pos-dark border border-pos-border rounded-xl text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
               Seating Capacity
             </label>
             <input
@@ -281,21 +315,21 @@ export default function TablesPage() {
               required
               value={capacity}
               onChange={(e) => setCapacity(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+              className="w-full px-3.5 py-2.5 bg-pos-dark border border-pos-border rounded-xl text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-num"
             />
           </div>
 
-          <div className="flex justify-end space-x-3 pt-3 border-t border-slate-800">
+          <div className="flex justify-end space-x-3 pt-3 border-t border-pos-border">
             <button
               type="button"
               onClick={() => setIsAddModalOpen(false)}
-              className="px-4 py-2 rounded-lg text-xs font-medium text-slate-300 hover:bg-slate-800"
+              className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-pos-card-hover"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-900/30"
+              className="pos-btn-touch px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs shadow-pos-glow"
             >
               Create Table
             </button>

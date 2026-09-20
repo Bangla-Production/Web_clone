@@ -216,21 +216,32 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6 max-w-4xl">
-      <div>
-        <h1 className="text-xl font-bold text-white tracking-tight">Restaurant Settings</h1>
-        <p className="text-xs text-slate-400">
-          Branding, ImgBB logo assets, tax configuration, and staff management
-        </p>
+      <div className="pos-surface-glass p-5 rounded-2xl flex items-center justify-between">
+        <div>
+          <div className="flex items-center space-x-2.5">
+            <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-center text-amber-500 dark:text-amber-400">
+              <Settings className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight font-display">
+                Restaurant Settings
+              </h1>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
+                Branding, ImgBB logo assets, tax configuration, and staff management
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center space-x-2 border-b border-slate-800 pb-2">
+      <div className="pos-surface-glass p-2 rounded-2xl flex flex-wrap items-center gap-2 shadow-md">
         <button
           onClick={() => setActiveTab('GENERAL')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${
+          className={`pos-btn-touch flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
             activeTab === 'GENERAL'
-              ? 'bg-emerald-600 text-white shadow-md'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              ? 'bg-emerald-500 text-slate-950 font-extrabold shadow-pos-glow'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-pos-surface'
           }`}
         >
           <Building className="w-4 h-4" />
@@ -239,10 +250,10 @@ export default function SettingsPage() {
 
         <button
           onClick={() => setActiveTab('TAX_INVOICE')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${
+          className={`pos-btn-touch flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
             activeTab === 'TAX_INVOICE'
-              ? 'bg-emerald-600 text-white shadow-md'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              ? 'bg-emerald-500 text-slate-950 font-extrabold shadow-pos-glow'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-pos-surface'
           }`}
         >
           <Receipt className="w-4 h-4" />
@@ -251,10 +262,10 @@ export default function SettingsPage() {
 
         <button
           onClick={() => setActiveTab('STAFF')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${
+          className={`pos-btn-touch flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
             activeTab === 'STAFF'
-              ? 'bg-emerald-600 text-white shadow-md'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              ? 'bg-emerald-500 text-slate-950 font-extrabold shadow-pos-glow'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-pos-surface'
           }`}
         >
           <Users className="w-4 h-4" />
@@ -263,10 +274,10 @@ export default function SettingsPage() {
 
         <button
           onClick={() => setActiveTab('DATA')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${
+          className={`pos-btn-touch flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
             activeTab === 'DATA'
-              ? 'bg-emerald-600 text-white shadow-md'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              ? 'bg-emerald-500 text-slate-950 font-extrabold shadow-pos-glow'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-pos-surface'
           }`}
         >
           <Database className="w-4 h-4" />
@@ -279,31 +290,31 @@ export default function SettingsPage() {
 
       {/* GENERAL TAB */}
       {activeTab === 'GENERAL' && (
-        <form onSubmit={handleSaveRestaurant} className="space-y-5 bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl text-xs">
-          <h3 className="font-bold text-sm text-slate-200 pb-2 border-b border-slate-800">
+        <form onSubmit={handleSaveRestaurant} className="space-y-5 pos-card-glass rounded-2xl p-6 shadow-xl text-xs">
+          <h3 className="font-extrabold text-sm text-slate-900 dark:text-slate-200 pb-2 border-b border-pos-border font-display">
             Restaurant Profile & ImgBB Brand Assets
           </h3>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block font-semibold text-slate-300 mb-1">Restaurant Name *</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Restaurant Name *</label>
               <input
                 type="text"
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-pos-dark border border-pos-border rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-emerald-500"
               />
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-300 mb-1">Tagline / Slogan</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Tagline / Slogan</label>
               <input
                 type="text"
                 value={tagline}
                 onChange={(e) => setTagline(e.target.value)}
                 placeholder="e.g. Authentic Flavors & Fine Dining"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-pos-dark border border-pos-border rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-emerald-500"
               />
             </div>
           </div>
@@ -325,53 +336,53 @@ export default function SettingsPage() {
           </div>
 
           <div>
-            <label className="block font-semibold text-slate-300 mb-1">Full Restaurant Address</label>
+            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Full Restaurant Address</label>
             <textarea
               rows={2}
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-emerald-500"
+              className="w-full px-3 py-2 bg-pos-dark border border-pos-border rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-emerald-500"
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block font-semibold text-slate-300 mb-1">Phone Number</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Phone Number</label>
               <input
                 type="text"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-pos-dark border border-pos-border rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-mono"
               />
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-300 mb-1">Email Address</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Email Address</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-pos-dark border border-pos-border rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-emerald-500"
               />
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-300 mb-1">GSTIN / Tax ID</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">GSTIN / Tax ID</label>
               <input
                 type="text"
                 value={gstin}
                 onChange={(e) => setGstin(e.target.value)}
                 placeholder="19AABCS1429B1Z8"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-pos-dark border border-pos-border rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-mono font-bold"
               />
             </div>
           </div>
 
-          <div className="flex justify-end pt-3 border-t border-slate-800">
+          <div className="flex justify-end pt-3 border-t border-pos-border">
             <button
               type="submit"
               disabled={isSaving}
-              className="flex items-center space-x-2 px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-lg shadow-emerald-900/30 transition-colors"
+              className="pos-btn-touch flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold shadow-pos-glow transition-all"
             >
               <Save className="w-4 h-4" />
               <span>{isSaving ? 'Saving to Firestore...' : 'Save General Settings'}</span>
@@ -382,38 +393,38 @@ export default function SettingsPage() {
 
       {/* TAX & INVOICE TAB */}
       {activeTab === 'TAX_INVOICE' && (
-        <form onSubmit={handleSaveRestaurant} className="space-y-5 bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl text-xs">
-          <h3 className="font-bold text-sm text-slate-200 pb-2 border-b border-slate-800">
+        <form onSubmit={handleSaveRestaurant} className="space-y-5 pos-card-glass rounded-2xl p-6 shadow-xl text-xs">
+          <h3 className="font-extrabold text-sm text-slate-900 dark:text-slate-200 pb-2 border-b border-pos-border font-display">
             Tax Engine & Receipt Customization
           </h3>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block font-semibold text-slate-300 mb-1">Currency Code</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Currency Code</label>
               <input
                 type="text"
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
                 placeholder="INR, USD, EUR"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-pos-dark border border-pos-border rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-emerald-500"
               />
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-300 mb-1">Currency Symbol</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Currency Symbol</label>
               <input
                 type="text"
                 value={currencySymbol}
                 onChange={(e) => setCurrencySymbol(e.target.value)}
                 placeholder="₹, $, €"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-pos-dark border border-pos-border rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-bold"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block font-semibold text-slate-300 mb-1">Default Tax Rate (%)</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Default Tax Rate (%)</label>
               <input
                 type="number"
                 step="0.01"
@@ -421,51 +432,51 @@ export default function SettingsPage() {
                 value={taxRate}
                 onChange={(e) => setTaxRate(e.target.value)}
                 placeholder="5.0"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-pos-dark border border-pos-border rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-num"
               />
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-300 mb-1">Tax Display Name</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Tax Display Name</label>
               <input
                 type="text"
                 value={taxName}
                 onChange={(e) => setTaxName(e.target.value)}
                 placeholder="GST, VAT, Sales Tax"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-pos-dark border border-pos-border rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-emerald-500"
               />
             </div>
           </div>
 
           <div className="space-y-4 pt-2">
             <div>
-              <label className="block font-semibold text-slate-300 mb-1">Invoice Header</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Invoice Header</label>
               <input
                 type="text"
                 value={invoiceHeader}
                 onChange={(e) => setInvoiceHeader(e.target.value)}
                 placeholder="Tax Invoice / Cash Memo"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-pos-dark border border-pos-border rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-emerald-500"
               />
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-300 mb-1">Invoice Footer Note / FSSAI License</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Invoice Footer Note / FSSAI License</label>
               <input
                 type="text"
                 value={invoiceFooter}
                 onChange={(e) => setInvoiceFooter(e.target.value)}
                 placeholder="FSSAI Lic: 12822019000123 • Thank you for dining with us!"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-pos-dark border border-pos-border rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-emerald-500"
               />
             </div>
           </div>
 
-          <div className="flex justify-end pt-3 border-t border-slate-800">
+          <div className="flex justify-end pt-3 border-t border-pos-border">
             <button
               type="submit"
               disabled={isSaving}
-              className="flex items-center space-x-2 px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-lg shadow-emerald-900/30 transition-colors"
+              className="pos-btn-touch flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold shadow-pos-glow transition-all"
             >
               <Save className="w-4 h-4" />
               <span>{isSaving ? 'Saving...' : 'Save Tax & Receipt Settings'}</span>
@@ -476,84 +487,84 @@ export default function SettingsPage() {
 
       {/* STAFF ACCOUNTS TAB */}
       {activeTab === 'STAFF' && (
-        <div className="space-y-4 bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div className="space-y-4 pos-card-glass rounded-2xl p-6 shadow-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-pos-border">
             <div>
-              <h3 className="font-bold text-sm text-slate-200">Staff Accounts ({activeRestaurantId})</h3>
-              <p className="text-xs text-slate-400">Manage waiter, kitchen and cashier logins</p>
+              <h3 className="font-extrabold text-sm text-slate-900 dark:text-slate-200 font-display">Staff Accounts ({activeRestaurantId})</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Manage waiter, kitchen and cashier logins</p>
             </div>
             <button
               onClick={handleOpenAddStaff}
-              className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md"
+              className="pos-btn-touch flex items-center space-x-1.5 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-extrabold shadow-pos-glow"
             >
-              <Key className="w-3.5 h-3.5" />
+              <Key className="w-3.5 h-3.5 stroke-[2.5]" />
               <span>Create Staff Login</span>
             </button>
           </div>
 
-          <div className="p-3 bg-sky-950/30 border border-sky-800/50 rounded-xl text-[11px] text-sky-300 flex items-center space-x-2">
-            <Lock className="w-4 h-4 text-sky-400 shrink-0" />
+          <div className="p-3 bg-sky-500/10 border border-sky-500/25 rounded-xl text-[11px] text-sky-800 dark:text-sky-300 flex items-center space-x-2">
+            <Lock className="w-4 h-4 text-sky-500 shrink-0" />
             <span>Each staff member gets a unique numeric Staff ID and password — no email needed. Accounts are active immediately and scoped to this restaurant only. Only you (the Restaurant Admin) can see this list.</span>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="text-slate-400 border-b border-slate-800">
+              <thead className="bg-pos-dark text-slate-600 dark:text-slate-400 border-b border-pos-border">
                 <tr>
-                  <th className="py-2.5 font-semibold">Staff Member</th>
-                  <th className="py-2.5 font-semibold">Phone</th>
-                  <th className="py-2.5 font-semibold">Staff ID</th>
-                  <th className="py-2.5 font-semibold">Role</th>
-                  <th className="py-2.5 font-semibold">Status</th>
-                  <th className="py-2.5 font-semibold text-right">Actions</th>
+                  <th className="py-2.5 px-3 font-bold uppercase tracking-wider text-[10px]">Staff Member</th>
+                  <th className="py-2.5 px-3 font-bold uppercase tracking-wider text-[10px]">Phone</th>
+                  <th className="py-2.5 px-3 font-bold uppercase tracking-wider text-[10px]">Staff ID</th>
+                  <th className="py-2.5 px-3 font-bold uppercase tracking-wider text-[10px]">Role</th>
+                  <th className="py-2.5 px-3 font-bold uppercase tracking-wider text-[10px]">Status</th>
+                  <th className="py-2.5 px-3 font-bold uppercase tracking-wider text-[10px] text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody className="divide-y divide-pos-border">
                 {staffList.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="py-6 text-center text-slate-500">
+                    <td colSpan="6" className="py-6 text-center text-slate-500 font-semibold">
                       No staff members added yet.
                     </td>
                   </tr>
                 ) : (
                   staffList.map((u) => {
                     return (
-                      <tr key={u.id} className="hover:bg-slate-800/30">
-                        <td className="py-3 font-semibold text-slate-200">{u.name}</td>
-                        <td className="py-3 text-slate-400">{u.phone || '—'}</td>
-                        <td className="py-3 text-slate-200 font-mono font-bold">{u.staffId || '—'}</td>
-                        <td className="py-3">
+                      <tr key={u.id} className="hover:bg-pos-surface/60 transition-colors">
+                        <td className="py-3 px-3 font-bold text-slate-900 dark:text-slate-200">{u.name}</td>
+                        <td className="py-3 px-3 text-slate-600 dark:text-slate-400 font-mono">{u.phone || '—'}</td>
+                        <td className="py-3 px-3 text-slate-900 dark:text-white font-mono font-bold">{u.staffId || '—'}</td>
+                        <td className="py-3 px-3">
                           <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                            className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
                               u.role === 'kitchen'
-                                ? 'bg-orange-950 text-orange-300 border border-orange-800'
+                                ? 'bg-orange-500/15 text-orange-700 dark:text-orange-300 border border-orange-500/30'
                                 : u.role === 'cashier'
-                                ? 'bg-teal-950 text-teal-300 border border-teal-800'
-                                : 'bg-blue-950 text-blue-300 border border-blue-800'
+                                ? 'bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/30'
+                                : 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30'
                             }`}
                           >
                             {u.role}
                           </span>
                         </td>
-                        <td className="py-3">
+                        <td className="py-3 px-3">
                           <button
                             type="button"
                             onClick={() => handleToggleStaffStatus(u)}
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all ${
+                            className={`px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase transition-all ${
                               (u.status || 'active') === 'active'
-                                ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700'
-                                : 'bg-rose-950/80 text-rose-300 border border-rose-700'
+                                ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30'
+                                : 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30'
                             }`}
                             title="Toggle status"
                           >
                             {u.status || 'active'}
                           </button>
                         </td>
-                        <td className="py-3 text-right space-x-1.5">
+                        <td className="py-3 px-3 text-right space-x-1.5">
                           <button
                             type="button"
                             onClick={() => handleDeleteStaff(u)}
-                            className="p-1.5 rounded-lg bg-slate-950 hover:bg-rose-950 text-slate-400 hover:text-rose-400 border border-slate-800 transition-colors"
+                            className="p-1.5 rounded-xl bg-pos-dark hover:bg-rose-500/15 text-slate-600 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 border border-pos-border transition-colors shadow-sm"
                             title="Remove Login"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -578,45 +589,45 @@ export default function SettingsPage() {
         >
           <form onSubmit={handleCreateStaff} className="space-y-3.5 text-xs">
             <div>
-              <label className="block font-semibold text-slate-300 mb-1">Full Name *</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Full Name *</label>
               <input
                 type="text"
                 required
                 value={staffName}
                 onChange={(e) => setStaffName(e.target.value)}
                 placeholder="e.g. Suman Sen"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-pos-dark border border-pos-border rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-emerald-500"
               />
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-300 mb-1">Phone Number *</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Phone Number *</label>
               <div className="relative">
-                <Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                <Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="tel"
                   required
                   value={staffPhone}
                   onChange={(e) => setStaffPhone(e.target.value)}
                   placeholder="e.g. 9876543210"
-                  className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full pl-9 pr-3 py-2 bg-pos-dark border border-pos-border rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-mono"
                 />
               </div>
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="block font-semibold text-slate-300">Unique Numerical ID *</label>
+                <label className="block font-bold text-slate-700 dark:text-slate-300">Unique Numerical ID *</label>
                 <button
                   type="button"
                   onClick={generateNumericId}
-                  className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold underline"
+                  className="text-[11px] text-emerald-600 dark:text-emerald-400 hover:underline font-bold"
                 >
                   Generate ID
                 </button>
               </div>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-mono font-bold text-xs">#</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono font-bold text-xs">#</span>
                 <input
                   type="text"
                   inputMode="numeric"
@@ -625,32 +636,32 @@ export default function SettingsPage() {
                   value={customStaffId}
                   onChange={(e) => setCustomStaffId(e.target.value.replace(/\D/g, ''))}
                   placeholder="e.g. 482913"
-                  className="w-full pl-8 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white font-mono font-bold focus:outline-none focus:border-emerald-500"
+                  className="w-full pl-8 pr-3 py-2 bg-pos-dark border border-pos-border rounded-xl text-slate-900 dark:text-white font-mono font-bold focus:outline-none focus:border-emerald-500"
                 />
               </div>
-              <p className="text-[10px] text-slate-500 mt-1">This unique number is used by the staff member to log into their panel.</p>
+              <p className="text-[10px] text-slate-500 mt-1 font-medium">This unique number is used by the staff member to log into their panel.</p>
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-300 mb-1">Staff Role *</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Staff Role *</label>
               <select
                 value={staffRole}
                 onChange={(e) => setStaffRole(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-pos-dark border border-pos-border rounded-xl text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 font-medium"
               >
-                <option value="waiter">Waiter / Captain (POS, Table Orders & Floor)</option>
-                <option value="kitchen">Kitchen Cooker / Chef (Whole Table Orders & KDS Display)</option>
-                <option value="cashier">Cashier (Table Pricing & Cash/UPI/Card Billing)</option>
+                <option value="waiter" className="bg-pos-card text-slate-900 dark:text-white">Waiter / Captain (POS, Table Orders & Floor)</option>
+                <option value="kitchen" className="bg-pos-card text-slate-900 dark:text-white">Kitchen Cooker / Chef (Whole Table Orders & KDS Display)</option>
+                <option value="cashier" className="bg-pos-card text-slate-900 dark:text-white">Cashier (Table Pricing & Cash/UPI/Card Billing)</option>
               </select>
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="block font-semibold text-slate-300">Unique Password *</label>
+                <label className="block font-bold text-slate-700 dark:text-slate-300">Unique Password *</label>
                 <button
                   type="button"
                   onClick={generateStaffPassword}
-                  className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold underline"
+                  className="text-[11px] text-emerald-600 dark:text-emerald-400 hover:underline font-bold"
                 >
                   Generate Password
                 </button>
@@ -660,22 +671,22 @@ export default function SettingsPage() {
                 required
                 value={staffPass}
                 onChange={(e) => setStaffPass(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white font-mono focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-pos-dark border border-pos-border rounded-xl text-slate-900 dark:text-white font-mono focus:outline-none focus:border-emerald-500"
               />
             </div>
 
-            <div className="flex justify-end space-x-2 pt-2">
+            <div className="flex justify-end space-x-2 pt-2 border-t border-pos-border">
               <button
                 type="button"
                 onClick={() => setIsAddStaffOpen(false)}
-                className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 font-semibold hover:bg-slate-700"
+                className="px-4 py-2 rounded-xl bg-pos-dark text-slate-700 dark:text-slate-300 font-bold hover:bg-pos-surface border border-pos-border"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isCreatingStaff}
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-md disabled:opacity-50"
+                className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold shadow-pos-glow disabled:opacity-50"
               >
                 {isCreatingStaff ? 'Registering Staff...' : 'Create Staff Login'}
               </button>
@@ -692,27 +703,27 @@ export default function SettingsPage() {
           title="✅ Staff Login Created"
         >
           <div className="space-y-3.5 text-xs">
-            <div className="p-3 bg-emerald-950/60 border border-emerald-700 rounded-xl text-emerald-200">
+            <div className="p-3.5 bg-emerald-500/15 border border-emerald-500/30 rounded-xl text-emerald-800 dark:text-emerald-200 font-medium">
               {staffResult.name}'s <strong>{staffResult.role}</strong> login is active right now — share these credentials with them.
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl">
-                <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Staff ID</p>
-                <code className="font-mono text-lg font-bold text-emerald-300">{staffResult.staffId}</code>
+              <div className="p-3.5 bg-pos-dark border border-pos-border rounded-xl">
+                <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">Staff ID</p>
+                <code className="font-mono text-lg font-black text-emerald-600 dark:text-emerald-400">{staffResult.staffId}</code>
               </div>
-              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl">
-                <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Password</p>
-                <code className="font-mono text-lg font-bold text-emerald-300">{staffResult.password}</code>
+              <div className="p-3.5 bg-pos-dark border border-pos-border rounded-xl">
+                <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">Password</p>
+                <code className="font-mono text-lg font-black text-emerald-600 dark:text-emerald-400">{staffResult.password}</code>
               </div>
             </div>
-            <p className="text-slate-400">
+            <p className="text-slate-500 dark:text-slate-400">
               They can sign in on the <strong>Staff Login</strong> tab of the login screen with just this Staff ID and password.
             </p>
             <div className="flex justify-end">
               <button
                 type="button"
                 onClick={() => setStaffResult(null)}
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
+                className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold shadow-pos-glow"
               >
                 Done
               </button>

@@ -19,7 +19,14 @@ import {
   WifiOff,
   Flame,
   User,
-  Coffee
+  Coffee,
+  Sparkles,
+  Percent,
+  X,
+  Layers,
+  ChevronRight,
+  ShieldCheck,
+  Smartphone
 } from 'lucide-react';
 import {
   getCategories,
@@ -103,8 +110,8 @@ export default function POSPage() {
           getMenuItems(activeRestaurantId)
         ]);
         if (isMounted) {
-          setCategories(cats);
-          setMenuItems(items);
+          setCategories(cats || []);
+          setMenuItems(items || []);
         }
       } catch (err) {
         toast.error('Failed to load menu data.');
@@ -119,16 +126,15 @@ export default function POSPage() {
   // 2. Real-Time Table & Active Order Subscriptions
   useEffect(() => {
     const unsubTables = subscribeToTables(activeRestaurantId, (liveTables) => {
-      setTables(liveTables);
-      // If currently selected table doesn't exist, pick the first available
-      if (!selectedTableId && liveTables.length > 0) {
+      setTables(liveTables || []);
+      if (!selectedTableId && liveTables && liveTables.length > 0) {
         const firstAvail = liveTables.find(t => t.status === 'AVAILABLE') || liveTables[0];
         setSelectedTableId(firstAvail.id);
       }
     });
 
     const unsubOrders = subscribeToActiveOrders(activeRestaurantId, (liveOrders) => {
-      setActiveOrders(liveOrders);
+      setActiveOrders(liveOrders || []);
     }, (err) => {
       toast.error(err?.code === 'permission-denied'
         ? 'Permission denied while loading live orders.'
@@ -153,7 +159,6 @@ export default function POSPage() {
     return activeOrders.find(o => o.id === currentTable.activeOrder.orderId) || null;
   }, [activeOrders, currentTable, selectedTableId]);
 
-  // Is this an occupied table with a running order?
   const isRunningOrder = !!currentActiveOrder;
 
   // Add Item to Cart
@@ -247,7 +252,7 @@ export default function POSPage() {
     setOrderNotes('');
   };
 
-  // Cart financial calculations (for new items)
+  // Cart financial calculations
   const cartCalculations = useMemo(() => {
     const subtotal = cart.reduce((sum, i) => sum + i.price * i.quantity, 0);
 
@@ -324,9 +329,6 @@ export default function POSPage() {
     });
   }, [menuItems, selectedCategory, searchQuery, vegFilter]);
 
-  // Table selection handler
-  // Selecting a table only selects it. The table becomes OCCUPIED when the
-  // first order is actually sent to the kitchen (see createOrderWithKOT).
   const handleSelectTable = (table) => {
     setSelectedTableId(table.id);
     setOrderType('DINE_IN');
@@ -335,28 +337,27 @@ export default function POSPage() {
   // 1. Send Order to Kitchen (New Order or Running KOT)
   const handleSendToKitchen = async () => {
     if (cart.length === 0) {
-      toast.warning('Please add items to cart before sending to kitchen.');
+      toast.warning('Please select food items before sending to kitchen.');
       return;
     }
 
     if (orderType === 'DINE_IN' && !selectedTableId) {
-      toast.warning('Please select a table for Dine-In.');
+      toast.warning('Please select a dining table.');
       return;
     }
 
-    if (isSubmitting) return; // Prevent double clicks
+    if (isSubmitting) return;
 
     try {
       setIsSubmitting(true);
 
       const waiterData = {
         uid: user?.uid,
-        name: user?.name || 'Waiter',
+        name: user?.name || 'Server',
         role: user?.role || 'staff'
       };
 
       if (isRunningOrder && currentActiveOrder) {
-        // Appending Running KOT #2, #3 to existing active order
         const res = await addRunningKOTToOrder(
           activeRestaurantId,
           currentActiveOrder.id,
@@ -371,7 +372,6 @@ export default function POSPage() {
         setIsInvoiceModalOpen(true);
         clearCart();
       } else {
-        // Creating Initial Order + KOT #1
         const orderData = {
           orderType,
           tableId: orderType === 'DINE_IN' ? selectedTableId : null,
@@ -413,7 +413,7 @@ export default function POSPage() {
     }
   };
 
-  // 2. Request Bill (Waiter action)
+  // 2. Request Bill
   const handleRequestBill = async () => {
     if (!currentActiveOrder) return;
     try {
@@ -447,7 +447,6 @@ export default function POSPage() {
 
       let targetOrderId = currentActiveOrder?.id;
 
-      // If there was no active order but there were items in cart (e.g. quick takeaway walk-in)
       if (!targetOrderId) {
         const orderData = {
           orderType,
@@ -467,7 +466,6 @@ export default function POSPage() {
         const created = await createOrderWithKOT(activeRestaurantId, orderData, cart, user);
         targetOrderId = created.order.id;
       } else if (cart.length > 0) {
-        // If there were extra un-sent cart items on an active table, append them first
         await addRunningKOTToOrder(activeRestaurantId, targetOrderId, cart, user, orderNotes);
       }
 
@@ -494,7 +492,6 @@ export default function POSPage() {
       setIsPaymentModalOpen(false);
       clearCart();
 
-      // Show final customer receipt
       setPreviewInvoice(settledInvoice);
       setPreviewKOT(null);
       setIsInvoiceModalOpen(true);
@@ -506,257 +503,311 @@ export default function POSPage() {
     }
   };
 
+  const freeTablesCount = tables.filter(t => t.status === 'AVAILABLE').length;
+  const occupiedTablesCount = tables.filter(t => t.status === 'OCCUPIED').length;
+  const billReqCount = tables.filter(t => t.status === 'BILL_REQUESTED').length;
+
   return (
-    <div className="space-y-3 flex flex-col h-[calc(100vh-4.5rem)]">
-      {/* 1. TOP LIVE FLOOR & STATUS BAR */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 shrink-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md">
-        {/* Table Filter Pills */}
-        <div className="flex items-center space-x-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-2 flex items-center shrink-0">
-            <Utensils className="w-3.5 h-3.5 mr-1 text-emerald-400" />
-            Floor Tables:
-          </span>
-          {['ALL', 'AVAILABLE', 'OCCUPIED', 'BILL_REQUESTED'].map((filter) => (
-            <button
-              key={filter}
-              onClick={() => setTableFilter(filter)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
-                tableFilter === filter
-                  ? 'bg-emerald-600 text-white shadow'
-                  : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
-              }`}
-            >
-              {filter === 'ALL' ? 'All Tables' : filter.replace('_', ' ')}
-            </button>
-          ))}
-        </div>
-
-        {/* Live Network & Active Status */}
-        <div className="flex items-center space-x-3 text-xs shrink-0 self-end sm:self-auto">
-          <div className="flex items-center space-x-1 px-2 py-1 rounded-md bg-slate-950 border border-slate-800">
-            {isOnline ? (
-              <span className="flex items-center text-emerald-400">
-                <Wifi className="w-3.5 h-3.5 mr-1 animate-pulse" /> Live Real-Time
-              </span>
-            ) : (
-              <span className="flex items-center text-rose-400">
-                <WifiOff className="w-3.5 h-3.5 mr-1" /> Offline Reconnecting...
-              </span>
-            )}
-          </div>
-          <div className="text-slate-400">
-            Active Orders: <strong className="text-white">{activeOrders.length}</strong>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. TABLE CHIPS ROW */}
-      <div className="flex items-center space-x-2 overflow-x-auto py-1 shrink-0 scrollbar-thin">
-        {tables
-          .filter(t => tableFilter === 'ALL' || t.status === tableFilter)
-          .map((table) => {
-            const isSelected = selectedTableId === table.id && orderType === 'DINE_IN';
-            const isOcc = table.status === 'OCCUPIED';
-            const isBillReq = table.status === 'BILL_REQUESTED';
-
-            let badgeBg = 'bg-slate-900 border-slate-800 text-slate-300';
-            if (isBillReq) badgeBg = 'bg-purple-950/80 border-purple-600 text-purple-200 animate-pulse';
-            else if (isOcc) badgeBg = 'bg-amber-950/70 border-amber-600/80 text-amber-200';
-            else badgeBg = 'bg-emerald-950/40 border-emerald-800/60 text-emerald-300';
-
-            if (isSelected) {
-              badgeBg += ' ring-2 ring-emerald-400 ring-offset-2 ring-offset-slate-950 font-bold';
-            }
-
-            return (
+    <div className="space-y-2.5 flex flex-col h-[calc(100vh-4.75rem)] select-none transition-colors duration-200">
+      {/* 1. TOP LIVE FLOOR STATUS & TABLE STRIP */}
+      <div className="pos-surface-glass rounded-2xl p-3 shrink-0 flex flex-col gap-2.5 border border-pos-border">
+        {/* Table Filter Tabs + Live Statistics Bar */}
+        <div className="flex items-center justify-between gap-2 overflow-x-auto pb-1 sm:pb-0">
+          <div className="flex items-center space-x-1.5 shrink-0">
+            <span className="text-[11px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-wider flex items-center mr-1">
+              <Utensils className="w-3.5 h-3.5 mr-1" />
+              Floor View:
+            </span>
+            {[
+              { id: 'ALL', label: `All Tables (${tables.length})` },
+              { id: 'AVAILABLE', label: `🟢 Free (${freeTablesCount})` },
+              { id: 'OCCUPIED', label: `🟡 Busy (${occupiedTablesCount})` },
+              { id: 'BILL_REQUESTED', label: `🟣 Bill Req (${billReqCount})` }
+            ].map((tab) => (
               <button
-                key={table.id}
-                type="button"
-                onClick={() => handleSelectTable(table)}
-                className={`px-3 py-2 rounded-xl border text-left shrink-0 transition-all flex flex-col justify-between min-w-[105px] ${badgeBg}`}
+                key={tab.id}
+                onClick={() => setTableFilter(tab.id)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all pos-btn-touch ${
+                  tableFilter === tab.id
+                    ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black shadow-pos-amber'
+                    : 'bg-pos-card text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-pos-border'
+                }`}
               >
-                <div className="flex items-center justify-between text-xs w-full">
-                  <span className="font-bold">Table {table.tableNumber}</span>
-                  <span className="text-[10px] opacity-75">👥 {table.capacity}</span>
-                </div>
-                <div className="mt-1 flex items-center justify-between text-[11px]">
-                  <span>{isBillReq ? 'Bill Req' : isOcc ? 'Occupied' : 'Free'}</span>
-                  {isOcc && table.activeOrder?.totalAmount > 0 && (
-                    <span className="font-extrabold text-amber-400">
-                      {currencySymbol}{table.activeOrder.totalAmount}
-                    </span>
-                  )}
-                </div>
+                {tab.label}
               </button>
-            );
-          })}
+            ))}
+          </div>
+
+          <div className="flex items-center space-x-2 text-xs shrink-0">
+            <div className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-pos-card border border-pos-border text-[11px]">
+              {isOnline ? (
+                <span className="flex items-center font-bold text-emerald-600 dark:text-emerald-400">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse mr-1.5"></span>
+                  Petpooja Cloud Live
+                </span>
+              ) : (
+                <span className="flex items-center font-bold text-rose-600 dark:text-rose-400">
+                  <WifiOff className="w-3 h-3 mr-1" /> Offline / Syncing
+                </span>
+              )}
+            </div>
+            <div className="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-pos-card border border-pos-border text-slate-600 dark:text-slate-300 text-[11px]">
+              <span>Active KOTs:</span>
+              <strong className="text-amber-600 dark:text-amber-400 font-mono font-black">{activeOrders.length}</strong>
+            </div>
+          </div>
+        </div>
+
+        {/* Real-Time Table Chips Slider */}
+        <div className="flex items-center space-x-2 overflow-x-auto py-0.5 scrollbar-thin">
+          {tables
+            .filter(t => tableFilter === 'ALL' || t.status === tableFilter)
+            .map((table) => {
+              const isSelected = selectedTableId === table.id && orderType === 'DINE_IN';
+              const isOcc = table.status === 'OCCUPIED';
+              const isBillReq = table.status === 'BILL_REQUESTED';
+
+              let chipStyle = 'bg-pos-card border-pos-border text-slate-700 dark:text-slate-300 hover:border-amber-500/50';
+              if (isBillReq) {
+                chipStyle = 'bg-purple-100 dark:bg-purple-950/70 border-purple-400 dark:border-purple-500 text-purple-900 dark:text-purple-200 shadow-pos-purple animate-pulse-subtle';
+              } else if (isOcc) {
+                chipStyle = 'bg-amber-100 dark:bg-amber-950/50 border-amber-400 dark:border-amber-500/70 text-amber-900 dark:text-amber-200 shadow-sm';
+              } else {
+                chipStyle = 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300';
+              }
+
+              if (isSelected) {
+                chipStyle += ' ring-2 ring-amber-400 ring-offset-2 ring-offset-pos-dark font-black shadow-pos-amber';
+              }
+
+              return (
+                <button
+                  key={table.id}
+                  type="button"
+                  onClick={() => handleSelectTable(table)}
+                  className={`px-3.5 py-2 rounded-xl border text-left shrink-0 transition-all duration-150 flex flex-col justify-between min-w-[115px] pos-btn-touch ${chipStyle}`}
+                >
+                  <div className="flex items-center justify-between text-xs w-full">
+                    <span className="font-extrabold tracking-tight font-display text-slate-900 dark:text-white">T-{table.tableNumber}</span>
+                    <span className="text-[10px] opacity-80 font-mono">👥 {table.capacity}</span>
+                  </div>
+                  <div className="mt-1 flex items-center justify-between text-[11px]">
+                    <span className="font-semibold text-[10px] uppercase">
+                      {isBillReq ? 'Bill Req' : isOcc ? 'Occupied' : 'Vacant'}
+                    </span>
+                    {isOcc && table.activeOrder?.totalAmount > 0 && (
+                      <span className="font-black text-amber-600 dark:text-amber-400 font-num">
+                        {currencySymbol}{table.activeOrder.totalAmount}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+        </div>
       </div>
 
-      {/* 3. MAIN POS LAYOUT (2 COLUMNS: LEFT MENU, RIGHT CART/ORDER) */}
+      {/* 2. MAIN POS WORKSPACE (2 COLUMNS: LEFT MENU CATALOG, RIGHT TICKET CART) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 flex-1 min-h-0">
-        {/* LEFT COLUMN: CATEGORIES + MENU ITEMS (8 Cols) */}
-        <div className="lg:col-span-7 xl:col-span-8 flex flex-col bg-slate-900/80 border border-slate-800 rounded-2xl p-3 overflow-hidden">
-          {/* Search, Veg Filter, and Categories */}
-          <div className="space-y-2.5 shrink-0 pb-2 border-b border-slate-800">
-            <div className="flex items-center gap-2">
+        
+        {/* LEFT COLUMN: CATEGORIES + MENU ITEMS GRID (7-8 Cols) */}
+        <div className="lg:col-span-7 xl:col-span-8 flex flex-col pos-surface-glass rounded-2xl p-3.5 overflow-hidden border border-pos-border shadow-sm">
+          
+          {/* Top Search, Diet Toggle, and Category Pills */}
+          <div className="space-y-3 shrink-0 pb-3 border-b border-pos-border">
+            <div className="flex items-center gap-2.5">
+              {/* Search Bar */}
               <div className="relative flex-1">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search food, drinks, SKU..."
-                  className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                  placeholder="Search dishes, drinks, shortcodes (e.g. Biryani, Paneer, 101)..."
+                  className="w-full pl-10 pr-8 py-2 bg-pos-dark border border-pos-border rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all font-medium"
                 />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-white"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
 
-              {/* Veg / Non-Veg filter */}
-              <div className="flex items-center bg-slate-950 border border-slate-800 p-0.5 rounded-xl text-xs">
-                {['ALL', 'VEG', 'NON_VEG'].map((type) => (
+              {/* Veg / Non-Veg Standard Food Indicators */}
+              <div className="flex items-center bg-pos-dark border border-pos-border p-1 rounded-xl text-xs shrink-0 space-x-1">
+                {[
+                  { id: 'ALL', label: 'All' },
+                  { id: 'VEG', label: '🟢 Veg Only' },
+                  { id: 'NON_VEG', label: '🔴 Non-Veg' }
+                ].map((type) => (
                   <button
-                    key={type}
-                    onClick={() => setVegFilter(type)}
-                    className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
-                      vegFilter === type
-                        ? 'bg-emerald-600 text-white'
-                        : 'text-slate-400 hover:text-white'
+                    key={type.id}
+                    onClick={() => setVegFilter(type.id)}
+                    className={`px-3 py-1 rounded-lg font-bold text-xs transition-all pos-btn-touch ${
+                      vegFilter === type.id
+                        ? 'bg-amber-500 text-slate-950 font-extrabold shadow-sm'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                     }`}
                   >
-                    {type === 'ALL' ? 'All' : type === 'VEG' ? '🟢 Veg' : '🔴 Non-Veg'}
+                    {type.label}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Category Pills */}
-            <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 scrollbar-thin">
+            {/* Category Selector Pills */}
+            <div className="flex items-center space-x-2 overflow-x-auto pb-0.5 scrollbar-thin">
               <button
                 onClick={() => setSelectedCategory('ALL')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
+                className={`px-4 py-2 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all pos-btn-touch ${
                   selectedCategory === 'ALL'
-                    ? 'bg-emerald-600 text-white shadow'
-                    : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                    ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black shadow-pos-amber'
+                    : 'bg-pos-dark text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-pos-border'
                 }`}
               >
-                All Menu
+                🍽️ All Categories ({menuItems.length})
               </button>
-              {categories.map((cat) => (
-                <button
-                  key={cat.id}
-                  onClick={() => setSelectedCategory(cat.id)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
-                    selectedCategory === cat.id
-                      ? 'bg-emerald-600 text-white shadow'
-                      : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
-                  }`}
-                >
-                  {cat.name}
-                </button>
-              ))}
+              {categories.map((cat) => {
+                const count = menuItems.filter(m => m.categoryId === cat.id).length;
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => setSelectedCategory(cat.id)}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all pos-btn-touch ${
+                      selectedCategory === cat.id
+                        ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black shadow-pos-amber'
+                        : 'bg-pos-dark text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-pos-border'
+                    }`}
+                  >
+                    {cat.name} {count > 0 && <span className="opacity-70 font-mono text-[10px]">({count})</span>}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           {/* Menu Items Grid */}
           <div className="flex-1 overflow-y-auto pt-3 pr-1 scrollbar-thin">
             {loading ? (
-              <div className="flex items-center justify-center h-48 text-emerald-400">
-                <div className="w-8 h-8 border-3 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin"></div>
+              <div className="flex flex-col items-center justify-center h-56 text-amber-500">
+                <div className="w-10 h-10 border-3 border-amber-500/30 border-t-amber-500 rounded-full animate-spin mb-3"></div>
+                <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">Loading Petpooja menu catalog...</p>
               </div>
             ) : filteredItems.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-48 text-slate-500">
-                <Utensils className="w-8 h-8 mb-2 opacity-50" />
-                <p className="text-xs">No menu items found</p>
+              <div className="flex flex-col items-center justify-center h-56 text-slate-400 text-xs">
+                <Utensils className="w-10 h-10 mb-2 opacity-40 text-slate-400" />
+                <p className="font-semibold text-slate-700 dark:text-slate-300">No matching dishes found</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">Try searching a different item or category</p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5">
-                {filteredItems.map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => addToCart(item)}
-                    disabled={isItemSoldOut(item)}
-                    className={`group relative p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all duration-150 active:scale-95 ${
-                      isItemSoldOut(item)
-                        ? 'bg-slate-950/50 border-slate-900 opacity-50 cursor-not-allowed'
-                        : 'bg-slate-950 border-slate-800 hover:border-emerald-500 hover:shadow-lg hover:shadow-emerald-950/40'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-start justify-between gap-1 mb-1">
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
-                          item.isVeg
-                            ? 'bg-emerald-950/60 border-emerald-700 text-emerald-400'
-                            : 'bg-rose-950/60 border-rose-700 text-rose-400'
-                        }`}>
-                          {item.isVeg ? 'VEG' : 'NON'}
-                        </span>
-                        {item.printerDestination === 'BAR' && (
-                          <span className="text-[9px] bg-purple-950/60 border border-purple-700 text-purple-300 px-1 rounded">
-                            BAR
-                          </span>
+              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+                {filteredItems.map((item) => {
+                  const soldOut = isItemSoldOut(item);
+                  const lowStock = isLowStock(item);
+                  const qtyLeft = getStockQty(item);
+
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => addToCart(item)}
+                      disabled={soldOut}
+                      className={`group relative p-3.5 rounded-2xl border text-left flex flex-col justify-between transition-all duration-150 pos-btn-touch shadow-sm ${
+                        soldOut
+                          ? 'bg-pos-card/40 border-pos-border opacity-50 cursor-not-allowed'
+                          : 'pos-card-glass hover:border-amber-400 hover:shadow-pos-amber hover:scale-[1.01]'
+                      }`}
+                    >
+                      <div>
+                        {/* Top Indicator Tags */}
+                        <div className="flex items-start justify-between gap-1 mb-2">
+                          <div className="flex items-center space-x-1.5">
+                            {/* Standard Indian Veg / Non-Veg */}
+                            <span className={item.isVeg ? 'badge-veg' : 'badge-nonveg'} title={item.isVeg ? 'Vegetarian' : 'Non-Vegetarian'}>
+                              <span className={item.isVeg ? 'badge-veg-dot' : 'badge-nonveg-dot'} />
+                            </span>
+                            {item.printerDestination === 'BAR' && (
+                              <span className="text-[9px] bg-purple-100 dark:bg-purple-950/80 border border-purple-400 dark:border-purple-500 text-purple-700 dark:text-purple-300 px-1.5 py-0.2 rounded font-extrabold">
+                                🍸 BAR
+                              </span>
+                            )}
+                          </div>
+
+                          {soldOut ? (
+                            <span className="text-[9px] font-black text-rose-700 dark:text-rose-400 bg-rose-100 dark:bg-rose-950/90 px-2 py-0.5 rounded-md border border-rose-300 dark:border-rose-700">
+                              SOLD OUT
+                            </span>
+                          ) : lowStock ? (
+                            <span className="text-[9px] font-black text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-950/90 px-2 py-0.5 rounded-md border border-amber-300 dark:border-amber-700 font-mono">
+                              {qtyLeft} left
+                            </span>
+                          ) : null}
+                        </div>
+
+                        {/* Title & Description */}
+                        <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-300 line-clamp-2 leading-snug">
+                          {item.name}
+                        </h4>
+                        {item.description && (
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 line-clamp-1 mt-1">
+                            {item.description}
+                          </p>
                         )}
                       </div>
-                      <h4 className="text-xs font-bold text-white group-hover:text-emerald-300 line-clamp-2 leading-tight">
-                        {item.name}
-                      </h4>
-                      {item.description && (
-                        <p className="text-[10px] text-slate-400 line-clamp-1 mt-0.5">
-                          {item.description}
-                        </p>
-                      )}
-                    </div>
 
-                    <div className="mt-2.5 pt-1.5 border-t border-slate-800/80 flex items-center justify-between">
-                      <span className="text-xs font-black text-emerald-400">
-                        {currencySymbol}{item.price?.toFixed(2)}
-                        {isItemSoldOut(item) ? (
-                          <span className="ml-1.5 text-[9px] font-bold text-rose-400">SOLD OUT</span>
-                        ) : isLowStock(item) ? (
-                          <span className="ml-1.5 text-[9px] font-bold text-amber-400">{getStockQty(item)} left</span>
-                        ) : null}
-                      </span>
-                      <span className="p-1 rounded-md bg-slate-900 group-hover:bg-emerald-600 group-hover:text-white text-slate-400 transition-colors">
-                        <Plus className="w-3.5 h-3.5" />
-                      </span>
-                    </div>
-                  </button>
-                ))}
+                      {/* Price & Add Button */}
+                      <div className="mt-3.5 pt-2.5 border-t border-pos-border/70 flex items-center justify-between">
+                        <span className="text-sm sm:text-base font-black text-amber-600 dark:text-amber-400 font-num">
+                          {currencySymbol}{item.price?.toFixed(2)}
+                        </span>
+                        <span className="p-1.5 rounded-xl bg-pos-dark group-hover:bg-amber-400 group-hover:text-slate-950 text-slate-500 dark:text-slate-400 border border-pos-border group-hover:border-amber-400 transition-all shadow-sm">
+                          <Plus className="w-4 h-4 stroke-[2.5]" />
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
         </div>
 
-        {/* RIGHT COLUMN: ACTIVE ORDER / CART & KOT DISPATCH (4-5 Cols) */}
-        <div className="lg:col-span-5 xl:col-span-4 flex flex-col bg-slate-900/90 border border-slate-800 rounded-2xl p-3 overflow-hidden">
-          {/* Header & Order Type Switcher */}
-          <div className="pb-2.5 border-b border-slate-800 shrink-0 space-y-2">
+        {/* RIGHT COLUMN: POS TICKET / BILL BUILDER (4-5 Cols) */}
+        <div className="lg:col-span-5 xl:col-span-4 flex flex-col pos-surface-glass rounded-2xl p-4 overflow-hidden shadow-xl border border-pos-border">
+          
+          {/* Ticket Header & Dine-In / Takeaway Toggle */}
+          <div className="pb-3 border-b border-pos-border shrink-0 space-y-2.5">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-bold text-white flex items-center space-x-1.5">
-                  <ShoppingBag className="w-4 h-4 text-emerald-400" />
+                <h3 className="text-sm font-black text-slate-900 dark:text-white flex items-center space-x-2 font-display">
+                  <ShoppingBag className="w-4 h-4 text-amber-500" />
                   <span>
-                    {isRunningOrder ? `Table ${currentTable?.tableNumber} Order` : 'Current Order'}
+                    {isRunningOrder ? `Table ${currentTable?.tableNumber} Ticket` : 'Current Ticket'}
                   </span>
                 </h3>
                 {isRunningOrder && (
-                  <p className="text-[10px] text-amber-400 font-semibold flex items-center space-x-1 mt-0.5">
+                  <p className="text-[11px] text-amber-600 dark:text-amber-300 font-bold flex items-center space-x-1 mt-0.5 font-mono">
                     <span>Order #{currentActiveOrder.orderNumber}</span>
                     <span>• {currentActiveOrder.orderStatus}</span>
                   </p>
                 )}
               </div>
 
-              <div className="flex items-center space-x-1 bg-slate-950 border border-slate-800 p-0.5 rounded-lg text-xs">
+              {/* Order Mode Switch */}
+              <div className="flex items-center space-x-1 bg-pos-dark border border-pos-border p-1 rounded-xl text-xs">
                 {['DINE_IN', 'TAKEAWAY'].map((type) => (
                   <button
                     key={type}
                     onClick={() => setOrderType(type)}
-                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${
+                    className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all pos-btn-touch ${
                       orderType === type
-                        ? 'bg-emerald-600 text-white'
-                        : 'text-slate-400 hover:text-white'
+                        ? 'bg-amber-500 text-slate-950 font-extrabold shadow-sm'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                     }`}
                   >
-                    {type === 'DINE_IN' ? 'Dine In' : 'Takeaway'}
+                    {type === 'DINE_IN' ? '🍽️ Dine In' : '🥡 Takeaway'}
                   </button>
                 ))}
               </div>
@@ -764,40 +815,44 @@ export default function POSPage() {
 
             {/* Server / Table banner */}
             {orderType === 'DINE_IN' && (
-              <div className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-300">
-                <span>Selected: <strong>Table {currentTable?.tableNumber || 'None'}</strong></span>
-                <span className="text-[11px] text-slate-400">Server: {user?.name || 'Staff'}</span>
+              <div className="flex items-center justify-between text-xs px-3 py-2 rounded-xl bg-pos-dark border border-pos-border text-slate-700 dark:text-slate-300">
+                <span>Selected: <strong className="text-slate-900 dark:text-white font-display">Table {currentTable?.tableNumber || 'None'}</strong></span>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">Server: <strong className="text-slate-800 dark:text-slate-200">{user?.name || 'Staff'}</strong></span>
               </div>
             )}
           </div>
 
-          {/* Items Container: Existing Kitchen Items + New Cart Items */}
-          <div className="flex-1 overflow-y-auto py-2 space-y-3 scrollbar-thin">
-            {/* 1. Existing Active Order Items (Sent to Kitchen) */}
+          {/* Ticket Body: Already Cooking items + New Cart Items */}
+          <div className="flex-1 overflow-y-auto py-3 space-y-4 scrollbar-thin">
+            
+            {/* 1. Already Sent To Kitchen (Active KOT Items) */}
             {isRunningOrder && currentActiveOrder.items?.length > 0 && (
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-[11px] font-bold text-amber-400 px-1">
-                  <span>🔥 ALREADY IN KITCHEN ({currentActiveOrder.items.length})</span>
-                  <span className="text-[10px] text-slate-400">{currentActiveOrder.orderStatus}</span>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-[11px] font-extrabold text-amber-600 dark:text-amber-400 px-1">
+                  <span className="flex items-center">
+                    <Flame className="w-3.5 h-3.5 mr-1 fill-current text-amber-500" />
+                    COOKING IN KITCHEN ({currentActiveOrder.items.length})
+                  </span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{currentActiveOrder.orderStatus}</span>
                 </div>
-                <div className="bg-slate-950/80 border border-amber-950/60 rounded-xl p-2 divide-y divide-slate-800/60 text-xs">
+                <div className="bg-pos-dark border border-pos-border rounded-2xl p-3 divide-y divide-pos-border/60 text-xs shadow-inner">
                   {currentActiveOrder.items.map((item, idx) => (
-                    <div key={idx} className="py-1.5 flex items-center justify-between">
+                    <div key={idx} className="py-2 first:pt-0 last:pb-0 flex items-center justify-between">
                       <div>
-                        <div className="flex items-center space-x-1.5">
-                          <span className="font-bold text-white">{item.quantity}x</span>
-                          <span className="text-slate-200">{item.name}</span>
+                        <div className="flex items-center space-x-2">
+                          <span className="font-black text-amber-600 dark:text-amber-400 font-num">{item.quantity}x</span>
+                          <span className="text-slate-900 dark:text-slate-100 font-bold">{item.name}</span>
                           {item.kotNumber && (
-                            <span className="text-[9px] bg-slate-900 border border-slate-700 text-slate-400 px-1 rounded">
+                            <span className="text-[9px] bg-pos-surface border border-pos-border text-slate-500 dark:text-slate-400 px-1.5 py-0.2 rounded font-mono">
                               {item.kotNumber.split('-').slice(-2).join('-')}
                             </span>
                           )}
                         </div>
                         {item.notes && (
-                          <p className="text-[10px] text-amber-300 italic pl-5">Note: {item.notes}</p>
+                          <p className="text-[10px] text-amber-600 dark:text-amber-300 italic pl-6 mt-0.5">Note: {item.notes}</p>
                         )}
                       </div>
-                      <span className="font-semibold text-slate-300">
+                      <span className="font-bold text-slate-900 dark:text-slate-200 font-num">
                         {currencySymbol}{(item.itemTotal || (item.price * item.quantity)).toFixed(2)}
                       </span>
                     </div>
@@ -806,75 +861,78 @@ export default function POSPage() {
               </div>
             )}
 
-            {/* 2. New Cart Items to be dispatched */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-[11px] font-bold text-emerald-400 px-1">
+            {/* 2. New Cart Items (To be punched) */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-[11px] font-extrabold text-emerald-600 dark:text-emerald-400 px-1">
                 <span>
-                  {isRunningOrder ? '➕ NEW ITEMS TO ADD (KOT)' : `CART ITEMS (${cart.length})`}
+                  {isRunningOrder ? '➕ NEW ITEMS TO DISPATCH' : `CART ITEMS (${cart.length})`}
                 </span>
                 {cart.length > 0 && (
                   <button
                     onClick={clearCart}
-                    className="text-[10px] text-rose-400 hover:text-rose-300 flex items-center space-x-0.5"
+                    className="text-[10px] font-bold text-rose-600 dark:text-rose-400 hover:underline flex items-center space-x-1 pos-btn-touch"
                   >
                     <Trash2 className="w-3 h-3" />
-                    <span>Clear</span>
+                    <span>Clear All</span>
                   </button>
                 )}
               </div>
 
               {cart.length === 0 ? (
-                <div className="p-4 rounded-xl border border-dashed border-slate-800 text-center text-slate-500 text-xs">
+                <div className="p-6 rounded-2xl border border-dashed border-pos-border text-center text-slate-400 text-xs bg-pos-dark/40">
                   {isRunningOrder
-                    ? 'Tap menu items to add running KOT to Table ' + currentTable?.tableNumber
-                    : 'Select menu items on the left to start order'}
+                    ? `Tap dishes on left to add Running KOT to Table ${currentTable?.tableNumber}`
+                    : 'Select dishes from the menu on the left to punch order'}
                 </div>
               ) : (
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   {cart.map((item) => (
                     <div
                       key={item.id}
-                      className="p-2 rounded-xl bg-slate-950 border border-slate-800 flex flex-col space-y-1"
+                      className="p-3 rounded-2xl bg-pos-dark border border-pos-border flex flex-col space-y-1.5 shadow-sm"
                     >
                       <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-white truncate max-w-[140px]">
+                        <span className="font-extrabold text-slate-900 dark:text-white truncate max-w-[150px]">
                           {item.name}
                         </span>
+                        
+                        {/* Quantity Stepper */}
                         <div className="flex items-center space-x-1.5">
                           <button
                             onClick={() => updateQuantity(item.id, -1)}
-                            className="p-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300"
+                            className="w-6 h-6 rounded-lg bg-pos-surface hover:bg-pos-card-hover text-slate-700 dark:text-slate-200 flex items-center justify-center border border-pos-border pos-btn-touch shadow-sm"
                           >
                             <Minus className="w-3 h-3" />
                           </button>
-                          <span className="font-bold text-xs w-5 text-center text-white">
+                          <span className="font-black text-xs w-6 text-center text-slate-900 dark:text-white font-num">
                             {item.quantity}
                           </span>
                           <button
                             onClick={() => updateQuantity(item.id, 1)}
-                            className="p-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300"
+                            className="w-6 h-6 rounded-lg bg-pos-surface hover:bg-pos-card-hover text-slate-700 dark:text-slate-200 flex items-center justify-center border border-pos-border pos-btn-touch shadow-sm"
                           >
                             <Plus className="w-3 h-3" />
                           </button>
-                          <span className="font-extrabold text-xs text-emerald-400 ml-1 w-14 text-right">
+                          <span className="font-black text-xs text-amber-600 dark:text-amber-400 ml-1.5 w-16 text-right font-num">
                             {currencySymbol}{(item.price * item.quantity).toFixed(2)}
                           </span>
                         </div>
                       </div>
 
-                      {/* Cooking note button */}
-                      <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5">
+                      {/* Item Cooking Note & Delete */}
+                      <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 pt-1.5 border-t border-pos-border/40">
                         <button
                           onClick={() => openNoteModal(item)}
-                          className="hover:text-emerald-400 underline italic flex items-center space-x-1"
+                          className="hover:text-amber-600 dark:hover:text-amber-300 font-bold italic flex items-center space-x-1"
                         >
-                          <span>{item.notes ? `Note: "${item.notes}"` : '+ Add cooking note'}</span>
+                          <span>{item.notes ? `✍️ "${item.notes}"` : '+ Add cooking note'}</span>
                         </button>
                         <button
                           onClick={() => removeItem(item.id)}
-                          className="text-slate-500 hover:text-rose-400"
+                          className="text-slate-400 hover:text-rose-500 p-1 transition-colors"
+                          title="Remove item"
                         >
-                          <Trash2 className="w-3 h-3" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>
@@ -884,62 +942,62 @@ export default function POSPage() {
             </div>
           </div>
 
-          {/* Financial Calculation Summary */}
-          <div className="pt-2 border-t border-slate-800 shrink-0 space-y-1 text-xs">
-            <div className="flex justify-between text-slate-400">
+          {/* Financial Calculation Summary (Receipt Bottom Style) */}
+          <div className="pt-3 border-t border-pos-border shrink-0 space-y-1.5 text-xs">
+            <div className="flex justify-between text-slate-500 dark:text-slate-400">
               <span>Subtotal:</span>
-              <span className="text-slate-200">
+              <span className="text-slate-900 dark:text-slate-200 font-num font-bold">
                 {currencySymbol}{runningOrderTotals.subtotal.toFixed(2)}
               </span>
             </div>
             {runningOrderTotals.discountAmount > 0 && (
-              <div className="flex justify-between text-emerald-400">
-                <span>Discount:</span>
-                <span>- {currencySymbol}{runningOrderTotals.discountAmount.toFixed(2)}</span>
+              <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-bold">
+                <span>Discount Applied:</span>
+                <span className="font-num">- {currencySymbol}{runningOrderTotals.discountAmount.toFixed(2)}</span>
               </div>
             )}
-            <div className="flex justify-between text-slate-400">
+            <div className="flex justify-between text-slate-500 dark:text-slate-400">
               <span>{restaurant?.taxName || 'GST'} ({restaurant?.taxRate || 5}%):</span>
-              <span className="text-slate-200">
+              <span className="text-slate-900 dark:text-slate-200 font-num">
                 {currencySymbol}{runningOrderTotals.taxAmount.toFixed(2)}
               </span>
             </div>
-            <div className="flex justify-between font-black text-base text-white pt-1 border-t border-slate-800">
-              <span>Total:</span>
-              <span className="text-emerald-400">
+            <div className="flex justify-between items-center font-black text-base text-slate-900 dark:text-white pt-2 border-t border-pos-border">
+              <span className="text-slate-700 dark:text-slate-200 font-display">Grand Total:</span>
+              <span className="text-amber-600 dark:text-amber-400 font-black text-xl font-num">
                 {currencySymbol}{runningOrderTotals.grandTotal.toFixed(2)}
               </span>
             </div>
           </div>
 
-          {/* Action Buttons: KOT Send vs Bill Settlement */}
-          <div className="pt-3 border-t border-slate-800 shrink-0 grid grid-cols-2 gap-2">
-            {/* Send to Kitchen / Send New KOT */}
+          {/* Petpooja High-Action Billing Bar */}
+          <div className="pt-3.5 border-t border-pos-border shrink-0 grid grid-cols-2 gap-2.5">
+            {/* Send to Kitchen / KOT (Petpooja Amber/Yellow) */}
             <button
               type="button"
               onClick={handleSendToKitchen}
               disabled={isSubmitting || cart.length === 0}
-              className="py-2.5 px-3 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-40 text-white font-bold text-xs shadow-lg shadow-orange-950 flex items-center justify-center space-x-1.5 transition-all active:scale-95"
+              className="petpooja-btn-kot py-3 px-3 rounded-2xl disabled:opacity-40 flex items-center justify-center space-x-2 transition-all text-xs"
             >
               {isSubmitting ? (
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                <div className="w-4 h-4 border-2 border-slate-950/30 border-t-slate-950 rounded-full animate-spin"></div>
               ) : (
                 <>
-                  <Send className="w-4 h-4" />
-                  <span>{isRunningOrder ? 'Send New KOT' : 'Send to Kitchen'}</span>
+                  <Flame className="w-4 h-4 fill-current text-slate-950" />
+                  <span>{isRunningOrder ? 'Send New KOT' : 'Send to Kitchen (KOT)'}</span>
                 </>
               )}
             </button>
 
-            {/* Settle Bill & Print */}
+            {/* Settle Bill & Release (Petpooja Emerald Green) */}
             <button
               type="button"
               onClick={handleOpenSettleModal}
               disabled={isSubmitting || (!currentActiveOrder && cart.length === 0)}
-              className="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-bold text-xs shadow-lg shadow-emerald-950 flex items-center justify-center space-x-1.5 transition-all active:scale-95"
+              className="petpooja-btn-pay py-3 px-3 rounded-2xl disabled:opacity-40 flex items-center justify-center space-x-2 transition-all text-xs"
             >
-              <CreditCard className="w-4 h-4" />
-              <span>Settle & Release</span>
+              <CreditCard className="w-4 h-4 text-slate-950" />
+              <span>Settle & Pay</span>
             </button>
           </div>
         </div>
@@ -947,40 +1005,40 @@ export default function POSPage() {
 
       {/* 4. SETTLEMENT / PAYMENT MODAL */}
       {isPaymentModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <h3 className="text-base font-bold text-white flex items-center space-x-2">
-                <CreditCard className="w-5 h-5 text-emerald-400" />
-                <span>Bill Settlement & Checkout</span>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
+          <div className="bg-pos-surface border border-pos-border rounded-3xl max-w-md w-full p-5 space-y-4 shadow-2xl transition-colors">
+            <div className="flex items-center justify-between pb-3 border-b border-pos-border">
+              <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center space-x-2 font-display">
+                <CreditCard className="w-5 h-5 text-amber-500" />
+                <span>Petpooja Fast Checkout</span>
               </h3>
               <button
                 onClick={() => setIsPaymentModalOpen(false)}
-                className="text-slate-400 hover:text-white"
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 rounded-lg"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Bill Summary */}
-            <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1.5 text-xs">
-              <div className="flex justify-between text-slate-300">
-                <span>Table / Target:</span>
-                <strong className="text-white">
-                  {orderType === 'DINE_IN' ? `Table ${currentTable?.tableNumber}` : 'Takeaway'}
+            {/* Bill Summary Box */}
+            <div className="p-4 bg-pos-dark rounded-2xl border border-pos-border space-y-1.5 text-xs shadow-inner">
+              <div className="flex justify-between text-slate-600 dark:text-slate-300">
+                <span>Table / Order:</span>
+                <strong className="text-slate-900 dark:text-white font-display">
+                  {orderType === 'DINE_IN' ? `Table ${currentTable?.tableNumber}` : 'Takeaway Walk-in'}
                 </strong>
               </div>
-              <div className="flex justify-between text-slate-300">
-                <span>Subtotal:</span>
-                <span>{currencySymbol}{runningOrderTotals.subtotal.toFixed(2)}</span>
+              <div className="flex justify-between text-slate-600 dark:text-slate-300">
+                <span>Items Subtotal:</span>
+                <span className="font-num">{currencySymbol}{runningOrderTotals.subtotal.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between text-slate-300">
+              <div className="flex justify-between text-slate-600 dark:text-slate-300">
                 <span>Tax ({restaurant?.taxRate || 5}%):</span>
-                <span>{currencySymbol}{runningOrderTotals.taxAmount.toFixed(2)}</span>
+                <span className="font-num">{currencySymbol}{runningOrderTotals.taxAmount.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between font-bold text-sm text-white pt-1 border-t border-slate-800">
-                <span>Grand Total:</span>
-                <span className="text-emerald-400 font-extrabold text-base">
+              <div className="flex justify-between font-black text-sm text-slate-900 dark:text-white pt-2 border-t border-pos-border">
+                <span className="text-slate-700 dark:text-slate-200 font-display">Payable Amount:</span>
+                <span className="text-amber-600 dark:text-amber-400 font-black text-lg font-num">
                   {currencySymbol}{runningOrderTotals.grandTotal.toFixed(2)}
                 </span>
               </div>
@@ -988,51 +1046,55 @@ export default function POSPage() {
 
             {/* Payment Method Selector */}
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                Select Payment Mode:
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                Payment Tender Mode:
               </label>
               <div className="grid grid-cols-3 gap-2">
-                {['CASH', 'UPI', 'CARD'].map((m) => (
+                {[
+                  { id: 'CASH', label: '💵 Cash' },
+                  { id: 'UPI', label: '📱 UPI / QR' },
+                  { id: 'CARD', label: '💳 Card' }
+                ].map((m) => (
                   <button
-                    key={m}
+                    key={m.id}
                     type="button"
-                    onClick={() => setPaymentMethod(m)}
-                    className={`py-2.5 rounded-xl border text-xs font-bold transition-all ${
-                      paymentMethod === m
-                        ? 'bg-emerald-600 border-emerald-500 text-white shadow-md'
-                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                    onClick={() => setPaymentMethod(m.id)}
+                    className={`py-3 rounded-2xl border text-xs font-extrabold transition-all pos-btn-touch ${
+                      paymentMethod === m.id
+                        ? 'bg-gradient-to-r from-amber-500 to-yellow-400 border-amber-400 text-slate-950 font-black shadow-pos-amber'
+                        : 'bg-pos-dark border-pos-border text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                     }`}
                   >
-                    {m === 'CASH' ? '💵 Cash' : m === 'UPI' ? '📱 UPI / QR' : '💳 Card'}
+                    {m.label}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Customer Details */}
+            {/* Customer Details Inputs */}
             <div className="grid grid-cols-2 gap-2">
               <input
                 type="text"
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
-                placeholder="Customer Name"
-                className="px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                placeholder="Guest Name (Optional)"
+                className="px-3.5 py-2.5 bg-pos-dark border border-pos-border rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-amber-500"
               />
               <input
                 type="tel"
                 value={customerPhone}
                 onChange={(e) => setCustomerPhone(e.target.value)}
-                placeholder="Phone (Optional)"
-                className="px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                placeholder="Phone (For SMS Bill)"
+                className="px-3.5 py-2.5 bg-pos-dark border border-pos-border rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-amber-500 font-mono"
               />
             </div>
 
             {/* Modal Actions */}
-            <div className="flex items-center justify-between pt-3 border-t border-slate-800">
+            <div className="flex items-center justify-between pt-3 border-t border-pos-border">
               <button
                 type="button"
                 onClick={() => setIsPaymentModalOpen(false)}
-                className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-white"
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               >
                 Cancel
               </button>
@@ -1040,14 +1102,14 @@ export default function POSPage() {
                 type="button"
                 onClick={handleCompleteSettlement}
                 disabled={isSubmitting}
-                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-900/50 flex items-center space-x-1.5"
+                className="petpooja-btn-pay px-5 py-2.5 rounded-2xl text-slate-950 font-black text-xs shadow-pos-glow flex items-center space-x-2"
               >
                 {isSubmitting ? (
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  <div className="w-4 h-4 border-2 border-slate-950/30 border-t-slate-950 rounded-full animate-spin"></div>
                 ) : (
                   <>
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>Confirm & Print Bill</span>
+                    <span>Settle & Print Receipt</span>
                   </>
                 )}
               </button>
@@ -1056,33 +1118,57 @@ export default function POSPage() {
         </div>
       )}
 
-      {/* 5. ITEM COOKING NOTE MODAL */}
+      {/* 5. PETPOOJA QUICK COOKING NOTE MODAL WITH PRESET CHIPS */}
       {editingNoteItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-4 space-y-3 shadow-2xl">
-            <h4 className="text-xs font-bold text-white">
-              Special Cooking Note for <span className="text-emerald-400">{editingNoteItem.name}</span>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
+          <div className="bg-pos-surface border border-pos-border rounded-3xl max-w-sm w-full p-4.5 space-y-3.5 shadow-2xl">
+            <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+              Special Instructions for <span className="text-amber-600 dark:text-amber-400">{editingNoteItem.name}</span>
             </h4>
+            
+            {/* Quick preset tags */}
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                'Less Spicy',
+                'Extra Spicy',
+                'No Onion Garlic',
+                'Extra Cheese',
+                'Jain Prep',
+                'Pack Separately',
+                'Serve Hot',
+                'No Ice'
+              ].map((chip) => (
+                <button
+                  key={chip}
+                  type="button"
+                  onClick={() => setNoteInput(prev => prev ? `${prev}, ${chip}` : chip)}
+                  className="px-2.5 py-1 rounded-lg bg-pos-dark hover:bg-pos-card border border-pos-border text-[11px] font-bold text-slate-700 dark:text-slate-300 hover:text-amber-600 dark:hover:text-amber-300 transition-colors pos-btn-touch shadow-sm"
+                >
+                  +{chip}
+                </button>
+              ))}
+            </div>
+
             <input
               type="text"
               value={noteInput}
               onChange={(e) => setNoteInput(e.target.value)}
-              placeholder="e.g. Less spicy, No onion, Extra cheese, Allergies..."
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+              placeholder="Type or click chips above..."
+              className="w-full px-3.5 py-2 bg-pos-dark border border-pos-border rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-amber-500"
               autoFocus
             />
             <div className="flex justify-end space-x-2 pt-2">
               <button
                 onClick={() => setEditingNoteItem(null)}
-                className="px-3 py-1.5 text-xs text-slate-400 hover:text-white"
+                className="px-3.5 py-2 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               >
                 Cancel
               </button>
               <button
                 onClick={saveItemNote}
-                className="px-4 py-1.5 rounded-lg bg-emerald-600 text-white font-bold text-xs"
+                className="petpooja-btn-kot px-4 py-2 rounded-xl text-slate-950 font-black text-xs"
               >
-                Save Note
+                Apply Note
               </button>
             </div>
           </div>

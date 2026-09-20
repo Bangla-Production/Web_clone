@@ -12,7 +12,9 @@ import {
   Info,
   Lock,
   CheckCircle2,
-  CalendarDays
+  CalendarDays,
+  Sun,
+  Moon
 } from 'lucide-react';
 import {
   getRestaurantById,
@@ -20,6 +22,8 @@ import {
   subscribeToMenuItems,
   createReservation
 } from '../services/firestoreService';
+import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
 import Modal from '../components/common/Modal';
 
@@ -50,6 +54,7 @@ export default function PublicMenuPage() {
   const [bookNotes, setBookNotes] = useState('');
   const [bookingSuccess, setBookingSuccess] = useState(false);
 
+  const { theme, toggleTheme } = useTheme();
   const toast = useToast();
 
   // Live data: whatever the restaurant admin adds / edits / deletes in
@@ -108,9 +113,16 @@ export default function PublicMenuPage() {
 
   const currencySymbol = restaurant?.currencySymbol || '₹';
 
+  // Build a lookup map of category display order so items can be sorted by category first
+  const catOrder = categories.reduce((acc, cat) => {
+    acc[cat.id] = Number.isFinite(Number(cat.displayOrder)) ? Number(cat.displayOrder) : 999;
+    return acc;
+  }, {});
+
   // Categories that actually have dishes (empty ones are hidden from guests)
-  const visibleCategories = categories.filter((c) => menuItems.some((i) => i.categoryId === c.id));
-  const catOrder = Object.fromEntries(categories.map((c, idx) => [c.id, c.displayOrder ?? idx]));
+  const visibleCategories = categories
+    .filter((c) => menuItems.some((i) => i.categoryId === c.id))
+    .sort((a, b) => (catOrder[a.id] ?? 999) - (catOrder[b.id] ?? 999));
 
   const handleBookTable = async (e) => {
     e.preventDefault();
@@ -123,7 +135,7 @@ export default function PublicMenuPage() {
         partySize: parseInt(guestCount, 10) || 2,
         reservationDate: bookDate,
         reservationTime: bookTime,
-        tableNumber: 'Online Booking',
+        tableNumber: 'Online Request',
         notes: bookNotes
       });
       setBookingSuccess(true);
@@ -154,16 +166,16 @@ export default function PublicMenuPage() {
   // No restaurant in the link, or it does not exist
   if (!activeId || notFound) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
-        <div className="max-w-sm text-center space-y-3">
-          <Info className="w-10 h-10 mx-auto text-slate-600" />
-          <h1 className="text-lg font-bold text-white">Menu not available</h1>
-          <p className="text-sm text-slate-400">
+      <div className="min-h-screen bg-pos-dark text-slate-900 dark:text-slate-100 flex items-center justify-center p-6 transition-colors duration-200">
+        <div className="max-w-sm text-center space-y-3 pos-card-glass p-8 rounded-2xl border border-pos-border shadow-2xl">
+          <Info className="w-10 h-10 mx-auto text-slate-400" />
+          <h1 className="text-lg font-extrabold text-slate-900 dark:text-white font-display">Menu not available</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             {!activeId
               ? 'This menu link is incomplete. Please scan the restaurant\'s QR code or use the link they shared.'
               : 'We could not find this restaurant. Please check the link and try again.'}
           </p>
-          <Link to="/login" className="inline-block text-xs text-emerald-400 underline">
+          <Link to="/login" className="inline-block text-xs font-bold text-emerald-600 dark:text-emerald-400 underline">
             Staff login
           </Link>
         </div>
@@ -172,76 +184,95 @@ export default function PublicMenuPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 pb-16">
+    <div className="min-h-screen bg-pos-dark text-slate-900 dark:text-slate-100 pb-16 transition-colors duration-200">
       {/* Top Floating Staff Login Bar */}
-      <header className="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 sticky top-0 z-30 px-4 py-2.5 flex items-center justify-between">
+      <header className="pos-surface-glass backdrop-blur-md border-b border-pos-border sticky top-0 z-30 px-4 py-2.5 flex items-center justify-between shadow-sm">
         <div className="flex items-center space-x-2">
           {restaurant?.logoUrl ? (
-            <img src={restaurant.logoUrl} alt="Logo" className="w-7 h-7 rounded-lg object-cover" />
+            <img src={restaurant.logoUrl} alt="Logo" className="w-8 h-8 rounded-xl object-cover shadow-sm border border-pos-border" />
           ) : (
-            <div className="w-7 h-7 rounded-lg bg-emerald-600 flex items-center justify-center font-bold text-xs text-white">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500 flex items-center justify-center font-extrabold text-xs text-slate-950 shadow-sm">
               {restaurant?.name?.charAt(0) || 'R'}
             </div>
           )}
-          <span className="font-bold text-sm text-white truncate max-w-[180px] sm:max-w-none">
+          <span className="font-extrabold text-sm text-slate-900 dark:text-white truncate max-w-[160px] sm:max-w-none font-display">
             {restaurant?.name || 'Restaurant Menu'}
           </span>
         </div>
 
         <div className="flex items-center space-x-2">
+          {/* White Mood / Dark Mood Toggle */}
+          <button
+            onClick={toggleTheme}
+            className="pos-btn-touch flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-pos-dark hover:bg-pos-surface border border-pos-border text-slate-700 dark:text-slate-200 text-xs font-bold transition-all shadow-sm"
+            title={`Switch to ${theme === 'dark' ? 'White Mood (Light)' : 'Dark Mood'}`}
+          >
+            {theme === 'dark' ? (
+              <>
+                <Sun className="w-3.5 h-3.5 text-amber-400 animate-spin-slow" />
+                <span className="hidden md:inline">White Mood</span>
+              </>
+            ) : (
+              <>
+                <Moon className="w-3.5 h-3.5 text-sky-400" />
+                <span className="hidden md:inline">Dark Mood</span>
+              </>
+            )}
+          </button>
+
           <button
             onClick={() => {
               setBookingSuccess(false);
               setIsBookOpen(true);
             }}
-            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md transition-colors"
+            className="pos-btn-touch flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-extrabold shadow-pos-glow transition-all"
           >
-            <CalendarDays className="w-3.5 h-3.5" />
+            <CalendarDays className="w-3.5 h-3.5 stroke-[2.5]" />
             <span>Book Table</span>
           </button>
           <Link
             to="/login"
-            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700 transition-colors"
+            className="pos-btn-touch flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-pos-dark hover:bg-pos-surface text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs font-bold border border-pos-border transition-colors shadow-sm"
           >
-            <Lock className="w-3 h-3 text-emerald-400" />
+            <Lock className="w-3 h-3 text-emerald-500 dark:text-emerald-400" />
             <span>Staff</span>
           </Link>
         </div>
       </header>
 
       {/* Hero Banner with Restaurant Details */}
-      <div className="relative bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border-b border-slate-800 px-4 py-8 text-center sm:py-12">
+      <div className="relative pos-surface-glass border-b border-pos-border px-4 py-8 text-center sm:py-12 shadow-sm">
         <div className="max-w-2xl mx-auto space-y-3">
           {restaurant?.logoUrl ? (
             <img
               src={restaurant.logoUrl}
               alt="Logo"
-              className="w-16 h-16 rounded-2xl mx-auto object-cover border-2 border-emerald-500/40 shadow-xl shadow-emerald-950/50"
+              className="w-16 h-16 rounded-2xl mx-auto object-cover border-2 border-emerald-500/40 shadow-xl"
             />
           ) : (
-            <div className="inline-flex p-3 rounded-2xl bg-emerald-600/20 border border-emerald-500/30 text-emerald-400 shadow-xl shadow-emerald-950/50 mb-1">
+            <div className="inline-flex p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 dark:text-emerald-400 shadow-xl mb-1">
               <Utensils className="w-7 h-7" />
             </div>
           )}
 
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight font-display">
             {restaurant?.name || 'Restaurant Menu'}
           </h1>
           {restaurant?.tagline && (
-            <p className="text-xs sm:text-sm text-emerald-400 font-medium">{restaurant.tagline}</p>
+            <p className="text-xs sm:text-sm text-emerald-600 dark:text-emerald-400 font-semibold">{restaurant.tagline}</p>
           )}
 
-          <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-slate-400 pt-2">
+          <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-slate-500 dark:text-slate-400 pt-2 font-medium">
             {restaurant?.address && (
               <div className="flex items-center space-x-1">
-                <MapPin className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                 <span>{restaurant.address}</span>
               </div>
             )}
             {restaurant?.phone && (
               <div className="flex items-center space-x-1">
-                <Phone className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                <span>{restaurant.phone}</span>
+                <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <span className="font-mono">{restaurant.phone}</span>
               </div>
             )}
           </div>
@@ -249,7 +280,7 @@ export default function PublicMenuPage() {
       </div>
 
       {/* Sticky Search & Category Navigation Bar */}
-      <div className="sticky top-12 z-20 bg-slate-950/95 backdrop-blur-md border-b border-slate-800/80 px-4 py-3 space-y-3 shadow-md">
+      <div className="sticky top-12 z-20 pos-surface-glass backdrop-blur-md border-b border-pos-border px-4 py-3 space-y-3 shadow-md">
         <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center gap-3">
           <div className="relative flex-1 w-full">
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -258,16 +289,16 @@ export default function PublicMenuPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search delicious dishes..."
-              className="w-full pl-10 pr-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+              className="w-full pl-10 pr-4 py-2 bg-pos-dark border border-pos-border rounded-xl text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-medium"
             />
           </div>
 
-          <label className="flex items-center space-x-2 bg-slate-900 border border-slate-800 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-300 cursor-pointer self-stretch sm:self-auto justify-center">
+          <label className="pos-btn-touch flex items-center space-x-2 bg-pos-dark border border-pos-border px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer self-stretch sm:self-auto justify-center shadow-sm">
             <input
               type="checkbox"
               checked={vegOnly}
               onChange={(e) => setVegOnly(e.target.checked)}
-              className="rounded bg-slate-950 border-slate-700 text-emerald-500 focus:ring-0"
+              className="rounded bg-pos-dark border-pos-border text-emerald-500 focus:ring-0"
             />
             <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
             <span>Pure Veg Only</span>
@@ -278,10 +309,10 @@ export default function PublicMenuPage() {
         <div className="max-w-4xl mx-auto flex items-center space-x-2 overflow-x-auto pb-1 no-scrollbar">
           <button
             onClick={() => setSelectedCat('ALL')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+            className={`pos-btn-touch px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
               selectedCat === 'ALL'
-                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/40'
-                : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                ? 'bg-emerald-500 text-slate-950 font-extrabold shadow-pos-glow'
+                : 'bg-pos-dark text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-pos-border'
             }`}
           >
             All Items
@@ -290,10 +321,10 @@ export default function PublicMenuPage() {
             <button
               key={cat.id}
               onClick={() => setSelectedCat(cat.id)}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+              className={`pos-btn-touch px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
                 selectedCat === cat.id
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/40'
-                  : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                  ? 'bg-emerald-500 text-slate-950 font-extrabold shadow-pos-glow'
+                  : 'bg-pos-dark text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-pos-border'
               }`}
             >
               {cat.name}
@@ -305,16 +336,16 @@ export default function PublicMenuPage() {
       {/* Menu Cards Grid */}
       <main className="max-w-4xl mx-auto px-4 mt-6">
         {loading ? (
-          <div className="py-16 text-center text-emerald-400">Loading dishes...</div>
+          <div className="py-16 text-center text-emerald-500 dark:text-emerald-400 font-bold">Loading dishes...</div>
         ) : loadError ? (
-          <div className="py-16 text-center text-rose-300 space-y-2">
+          <div className="py-16 text-center text-rose-500 space-y-2">
             <Info className="w-8 h-8 mx-auto text-rose-500" />
-            <p className="text-sm">Could not load the menu. {loadError}</p>
+            <p className="text-sm font-semibold">Could not load the menu. {loadError}</p>
           </div>
         ) : filteredItems.length === 0 ? (
           <div className="py-16 text-center text-slate-500 space-y-2">
-            <Info className="w-8 h-8 mx-auto text-slate-600" />
-            <p className="text-sm">
+            <Info className="w-8 h-8 mx-auto text-slate-400" />
+            <p className="text-sm font-medium">
               {menuItems.length === 0
                 ? 'The menu is being prepared. Please check back soon.'
                 : 'No dishes found matching your search or filters.'}
@@ -325,11 +356,11 @@ export default function PublicMenuPage() {
             {filteredItems.map((item) => (
               <div
                 key={item.id}
-                className="bg-slate-900/90 border border-slate-800/90 rounded-2xl p-4 shadow-xl flex gap-4 transition-transform hover:-translate-y-0.5 relative overflow-hidden"
+                className="pos-card-glass rounded-2xl p-4 shadow-xl flex gap-4 transition-transform hover:-translate-y-0.5 relative overflow-hidden"
               >
                 {/* Food Image (ImgBB Hosted) */}
                 {item.imageUrl && (
-                  <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden bg-slate-950 shrink-0 relative">
+                  <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden bg-pos-dark border border-pos-border shrink-0 relative shadow-sm">
                     <img
                       src={item.imageUrl}
                       alt={item.name}
@@ -337,8 +368,8 @@ export default function PublicMenuPage() {
                       loading="lazy"
                     />
                     {isItemSoldOut(item) && (
-                      <div className="absolute inset-0 bg-black/75 flex items-center justify-center p-1 text-center">
-                        <span className="text-[10px] font-bold text-rose-400">Sold Out</span>
+                      <div className="absolute inset-0 bg-black/75 flex items-center justify-center p-1 text-center backdrop-blur-xs">
+                        <span className="text-[10px] font-extrabold text-rose-400">Sold Out</span>
                       </div>
                     )}
                   </div>
@@ -348,7 +379,7 @@ export default function PublicMenuPage() {
                 <div className="flex-1 flex flex-col justify-between overflow-hidden">
                   <div>
                     <div className="flex items-start justify-between gap-1 mb-1">
-                      <h3 className="font-bold text-sm text-slate-100 leading-snug">{item.name}</h3>
+                      <h3 className="font-extrabold text-sm text-slate-900 dark:text-slate-100 leading-snug">{item.name}</h3>
                       <span
                         className={`w-3 h-3 rounded-full shrink-0 border mt-0.5 ${
                           item.isVeg
@@ -359,23 +390,23 @@ export default function PublicMenuPage() {
                       />
                     </div>
                     {item.description && (
-                      <p className="text-xs text-slate-400 line-clamp-2 mt-1 leading-relaxed">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mt-1 leading-relaxed">
                         {item.description}
                       </p>
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-800/80">
-                    <span className="text-base font-extrabold text-emerald-400">
+                  <div className="flex items-center justify-between mt-3 pt-2 border-t border-pos-border">
+                    <span className="text-base font-black text-emerald-600 dark:text-emerald-400 font-num">
                       {currencySymbol}{item.price?.toFixed(2)}
                     </span>
                     {isItemSoldOut(item) && (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-950 text-rose-300 border border-rose-800">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
                         Out of Stock
                       </span>
                     )}
                     {!isItemSoldOut(item) && isLowStock(item) && (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
                         Only {getStockQty(item)} left
                       </span>
                     )}
