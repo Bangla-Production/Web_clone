@@ -123,9 +123,11 @@ export async function saveUserProfile(userId, userData) {
 export async function getStaffByRestaurant(restaurantId) {
   try {
     const colRef = collection(db, 'users');
-    const q = query(colRef, where('restaurantId', '==', restaurantId));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    const snapshot = await getDocs(colRef);
+    const targetId = restaurantId || 'spice-haven';
+    return snapshot.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(u => u.restaurantId === targetId || (!u.restaurantId && u.role !== 'super_admin'));
   } catch (error) {
     console.error('getStaffByRestaurant error:', error);
     return [];
@@ -340,7 +342,8 @@ export async function createRestaurantStaff(restaurantId, restaurantName, staffD
     }
   }
 
-  const internalEmail = `staff${staffId}@${restaurantId}.restopulse.local`;
+  const restId = restaurantId || 'spice-haven';
+  const internalEmail = `staff${staffId}@${restId}.restopulse.local`;
 
   // Real Firebase Auth login, but nothing is ever emailed.
   await createStaffAuthAccount({ email: internalEmail, password });
@@ -352,8 +355,8 @@ export async function createRestaurantStaff(restaurantId, restaurantName, staffD
     email: internalEmail,
     username: staffId,
     role,
-    restaurantId,
-    restaurantName: restaurantName || '',
+    restaurantId: restId,
+    restaurantName: restaurantName || 'Spice Haven Bistro',
     status: 'active',
     emailVerified: true,
     // Marks this as a Staff-ID account (no real inbox, so Firebase's own
@@ -712,24 +715,25 @@ export async function getOrders(restaurantId) {
 /**
  * Real-time listener for active (unpaid) orders in the restaurant.
  */
+/**
+ * Real-time listener for active (unpaid) orders in the restaurant.
+ */
 export function subscribeToActiveOrders(restaurantId, callback) {
   if (!restaurantId) return () => {};
   const colRef = collection(db, 'restaurants', restaurantId, 'orders');
-  const q = query(
-    colRef,
-    where('paymentStatus', '==', 'UNPAID'),
-    orderBy('createdAt', 'desc')
-  );
 
-  return onSnapshot(q, (snapshot) => {
-    const orders = snapshot.docs.map(d => {
-      const data = d.data();
-      return {
-        id: d.id,
-        ...data,
-        createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : new Date().toISOString()
-      };
-    });
+  return onSnapshot(colRef, (snapshot) => {
+    const orders = snapshot.docs
+      .map(d => {
+        const data = d.data();
+        return {
+          id: d.id,
+          ...data,
+          createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : (data.createdAt || new Date().toISOString())
+        };
+      })
+      .filter(o => o.paymentStatus === 'UNPAID' || (o.orderStatus && !['PAID', 'CLOSED', 'CANCELLED'].includes(o.orderStatus)))
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     callback(orders);
   }, (error) => {
     console.error('subscribeToActiveOrders error:', error);
@@ -751,7 +755,7 @@ export function subscribeToOrderById(restaurantId, orderId, callback) {
     callback({
       id: snapshot.id,
       ...data,
-      createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : new Date().toISOString()
+      createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : (data.createdAt || new Date().toISOString())
     });
   }, (error) => {
     console.error('subscribeToOrderById error:', error);
@@ -785,21 +789,19 @@ export const settleOrderPayment = settleAndReleaseTableAtomic;
 export function subscribeToKitchenKOTs(restaurantId, callback) {
   if (!restaurantId) return () => {};
   const colRef = collection(db, 'restaurants', restaurantId, 'kots');
-  const q = query(
-    colRef,
-    where('status', 'in', ['NEW', 'CONFIRMED', 'PREPARING', 'READY']),
-    orderBy('createdAt', 'asc')
-  );
 
-  return onSnapshot(q, (snapshot) => {
-    const kots = snapshot.docs.map(d => {
-      const data = d.data();
-      return {
-        id: d.id,
-        ...data,
-        createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : new Date().toISOString()
-      };
-    });
+  return onSnapshot(colRef, (snapshot) => {
+    const kots = snapshot.docs
+      .map(d => {
+        const data = d.data();
+        return {
+          id: d.id,
+          ...data,
+          createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : (data.createdAt || new Date().toISOString())
+        };
+      })
+      .filter(k => ['NEW', 'CONFIRMED', 'PREPARING', 'READY'].includes(k.status))
+      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
     callback(kots);
   }, (error) => {
     console.error('subscribeToKitchenKOTs error:', error);

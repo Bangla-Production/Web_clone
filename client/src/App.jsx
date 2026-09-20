@@ -89,8 +89,8 @@ export default function App() {
                 <Route path="/super-admin" element={<SuperAdminPage />} />
               </Route>
 
-              {/* Protected Staff & Restaurant Admin Area (Super Admin is redirected away) */}
-              <Route element={<ProtectedRoute allowedRoles={allRoles} blockSuperAdmin />}>
+              {/* Protected Staff & Restaurant Admin Area */}
+              <Route element={<ProtectedRoute allowedRoles={allRoles} />}>
                 <Route element={<AppLayout />}>
 
                   {/* Kitchen Display (All authorized roles) */}

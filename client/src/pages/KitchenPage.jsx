@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import {
   subscribeToKitchenKOTs,
+  subscribeToActiveOrders,
+  createOrderWithKOT,
   updateKOTStatus,
   markKOTPrinted
 } from '../services/firestoreService';
@@ -26,14 +28,17 @@ import InvoiceModal from '../components/invoice/InvoiceModal';
 
 export default function KitchenPage() {
   const [kots, setKots] = useState([]);
+  const [activeOrders, setActiveOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isSendingDemo, setIsSendingDemo] = useState(false);
   const [viewMode, setViewMode] = useState('WHOLE_TABLE'); // 'WHOLE_TABLE' | 'KANBAN'
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [selectedKOTForPrint, setSelectedKOTForPrint] = useState(null);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
-  const { activeRestaurantId } = useAuth();
+  const { activeRestaurantId, user } = useAuth();
   const toast = useToast();
+  const targetRestId = activeRestaurantId || user?.restaurantId || 'spice-haven';
 
   // Track known KOT IDs to play audio only on genuinely NEW incoming KOTs
   const knownKotIdsRef = useRef(new Set());
@@ -41,7 +46,7 @@ export default function KitchenPage() {
 
   useEffect(() => {
     setLoading(true);
-    const unsubscribe = subscribeToKitchenKOTs(activeRestaurantId, (liveKots) => {
+    const unsubscribeKots = subscribeToKitchenKOTs(targetRestId, (liveKots) => {
       // Check for new KOTs
       if (!isFirstLoadRef.current) {
         const hasBrandNew = liveKots.some(
@@ -61,10 +66,15 @@ export default function KitchenPage() {
       setLoading(false);
     });
 
+    const unsubscribeOrders = subscribeToActiveOrders(targetRestId, (liveOrders) => {
+      setActiveOrders(liveOrders);
+    });
+
     return () => {
-      unsubscribe();
+      unsubscribeKots();
+      unsubscribeOrders();
     };
-  }, [activeRestaurantId, isAudioMuted, toast]);
+  }, [targetRestId, isAudioMuted, toast]);
 
   const toggleMute = () => {
     const nextState = !isAudioMuted;
@@ -80,7 +90,7 @@ export default function KitchenPage() {
 
   const handleStatusChange = async (kot, newStatus) => {
     try {
-      await updateKOTStatus(activeRestaurantId, kot.id, newStatus, kot.orderId);
+      await updateKOTStatus(targetRestId, kot.id, newStatus, kot.orderId);
       toast.success(`KOT #${kot.kotNumber} moved to ${newStatus}`);
     } catch (err) {
       toast.error('Failed to update KOT status.');
@@ -90,6 +100,41 @@ export default function KitchenPage() {
   const handlePrintKOT = (kot) => {
     setSelectedKOTForPrint(kot);
     setIsPrintModalOpen(true);
+  };
+
+  // Dispatch a demo order for quick testing
+  const handleSendSampleOrder = async () => {
+    try {
+      setIsSendingDemo(true);
+      const demoItems = [
+        { name: 'Butter Chicken Special', price: 340, quantity: 2, notes: 'Medium Spicy, Extra Butter' },
+        { name: 'Butter Garlic Naan', price: 60, quantity: 4, notes: 'Crispy' },
+        { name: 'Paneer Butter Masala', price: 250, quantity: 1, notes: 'Less Oil' }
+      ];
+
+      const demoTableNum = String(Math.floor(1 + Math.random() * 8));
+      await createOrderWithKOT(
+        targetRestId,
+        {
+          orderType: 'DINE_IN',
+          tableNumber: demoTableNum,
+          subtotal: 990,
+          taxRate: 5,
+          taxAmount: 49.5,
+          totalAmount: 1039.5,
+          orderNotes: 'Demo Kitchen Order'
+        },
+        demoItems,
+        { name: user?.name || 'Chef Server', role: 'kitchen', uid: user?.uid }
+      );
+
+      toast.success(`Demo Order sent to Kitchen for Table ${demoTableNum}!`);
+    } catch (err) {
+      console.error('Demo order error:', err);
+      toast.error('Failed to send demo order.');
+    } finally {
+      setIsSendingDemo(false);
+    }
   };
 
   // Group KOTs into columns for Kanban
@@ -223,10 +268,25 @@ export default function KitchenPage() {
       {viewMode === 'WHOLE_TABLE' && (
         <div className="flex-1 overflow-y-auto min-h-0">
           {tableGroupedOrders.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-slate-500 text-xs bg-slate-900 border border-slate-800 rounded-2xl p-6">
-              <ChefHat className="w-12 h-12 text-slate-700 mb-3 opacity-50" />
-              <p className="font-bold text-slate-300 text-sm">No active table orders in the kitchen.</p>
-              <p className="text-slate-500 text-xs mt-1">When waiters punch table orders, the whole table breakdown will display here in real time for all cookers.</p>
+            <div className="flex flex-col items-center justify-center h-80 text-slate-500 text-xs bg-slate-900/90 border border-slate-800 rounded-2xl p-8 text-center max-w-lg mx-auto mt-6 shadow-xl">
+              <div className="w-16 h-16 rounded-2xl bg-orange-950/60 border border-orange-700/60 flex items-center justify-center text-orange-400 mb-4 shadow">
+                <ChefHat className="w-9 h-9" />
+              </div>
+              <h3 className="font-bold text-slate-100 text-base">Kitchen Display Station is Online</h3>
+              <p className="text-slate-400 text-xs mt-1.5 leading-relaxed">
+                Waiting for incoming tickets from waiters and table orders. When orders are placed, whole table dishes & tickets will appear here live with audio alerts.
+              </p>
+              <div className="mt-5 flex items-center space-x-3">
+                <button
+                  type="button"
+                  onClick={handleSendSampleOrder}
+                  disabled={isSendingDemo}
+                  className="px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs shadow-lg shadow-orange-950 flex items-center space-x-2 transition-all disabled:opacity-50"
+                >
+                  <Flame className="w-4 h-4 fill-current" />
+                  <span>{isSendingDemo ? 'Dispatching Demo Order...' : '🍳 Send Test Kitchen Order'}</span>
+                </button>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">

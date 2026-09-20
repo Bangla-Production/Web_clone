@@ -2,8 +2,8 @@ import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
-export default function ProtectedRoute({ allowedRoles, blockSuperAdmin = false }) {
-  const { user, loading, isAuthenticated } = useAuth();
+export default function ProtectedRoute({ allowedRoles }) {
+  const { user, loading, isAuthenticated, isSuperAdmin, isRestaurantAdmin } = useAuth();
 
   if (loading) {
     return (
@@ -20,41 +20,19 @@ export default function ProtectedRoute({ allowedRoles, blockSuperAdmin = false }
     return <Navigate to="/login" replace />;
   }
 
-  // Super Admin only manages the platform (/super-admin) — never restaurant screens.
-  if (blockSuperAdmin) {
-    const r = (user?.role || '').toLowerCase();
-    const e = (user?.email || '').toLowerCase().trim();
-    if (r === 'super_admin' || e === 'altcafe2026@gmail.com') {
-      return <Navigate to="/super-admin" replace />;
-    }
-  }
-
   if (allowedRoles) {
     const role = (user?.role || '').toLowerCase();
-    const userEmail = (user?.email || '').toLowerCase().trim();
     const normalizedAllowed = allowedRoles.map(r => r.toLowerCase());
+    const isPrivileged = isSuperAdmin || isRestaurantAdmin || role === 'super_admin' || role === 'restaurant_admin' || role === 'owner' || user?.email === 'altcafe2026@gmail.com';
 
-    const isSuperAdminUser = userEmail === 'altcafe2026@gmail.com' || role === 'super_admin';
-    const isSuperAdminRoute = normalizedAllowed.length === 1 && normalizedAllowed[0] === 'super_admin';
-
-    // Super Admin Route (/super-admin): Strictly only for altcafe2026@gmail.com / super_admin
-    if (isSuperAdminRoute) {
-      if (!isSuperAdminUser) {
-        if (role === 'kitchen') return <Navigate to="/kitchen" replace />;
-        if (role === 'restaurant_admin') return <Navigate to="/dashboard" replace />;
-        return <Navigate to="/pos" replace />;
-      }
+    // Super Admin / Restaurant Admin has global access across all panels
+    if (isPrivileged || normalizedAllowed.includes(role)) {
       return <Outlet />;
     }
 
-    // Role check for other routes: Super Admin has global access, or user must match allowedRoles
-    if (isSuperAdminUser || normalizedAllowed.includes(role)) {
-      return <Outlet />;
-    }
-
-    // Unauthorized access redirect
+    // Unauthorized access redirects based on role
     if (role === 'kitchen') return <Navigate to="/kitchen" replace />;
-    if (role === 'restaurant_admin') return <Navigate to="/dashboard" replace />;
+    if (role === 'cashier') return <Navigate to="/cashier" replace />;
     return <Navigate to="/pos" replace />;
   }
 
