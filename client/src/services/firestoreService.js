@@ -1063,6 +1063,7 @@ export async function createOrderWithKOT(restaurantId, orderData, kotItems, wait
           tableNumber: orderData.tableNumber,
           totalAmount: orderPayload.totalAmount,
           itemCount: kotItems.reduce((sum, i) => sum + (parseInt(i.quantity, 10) || 1), 0),
+          kotCount: 1,
           waiterName: waiterData?.name || 'Staff',
           status: 'CONFIRMED',
           createdAt: new Date().toISOString()
@@ -1190,6 +1191,7 @@ export async function addRunningKOTToOrder(restaurantId, orderId, newItems, wait
           tableNumber: currentOrder.tableNumber,
           totalAmount: grandTotal,
           itemCount: mergedItems.reduce((sum, i) => sum + i.quantity, 0),
+          kotCount: nextKotIndex,
           waiterName: waiterData?.name || currentOrder.waiterName || 'Staff',
           status: 'CONFIRMED',
           createdAt: currentOrder.createdAt?.toDate ? currentOrder.createdAt.toDate().toISOString() : new Date().toISOString()
@@ -1236,10 +1238,68 @@ export async function updateKOTStatus(restaurantId, kotId, newStatus, orderId = 
       });
     }
 
+    // Kitchen tapped "Dismiss / Served": tell the waiter who took this order.
+    if (newStatus === 'SERVED') {
+      await raiseServeAlert(restaurantId, kotDocRef);
+    }
+
     return true;
   } catch (error) {
     console.error('updateKOTStatus error:', error);
     throw error;
+  }
+}
+
+/**
+ * Puts a "kitchen served" alert on the table document. The waiter's app already
+ * listens to tables in real time, so no extra collection, index or rule is needed.
+ * A failure here must never block the kitchen, so errors are only logged.
+ */
+async function raiseServeAlert(restaurantId, kotDocRef) {
+  try {
+    const kotSnap = await getDoc(kotDocRef);
+    const kot = kotSnap.exists() ? kotSnap.data() : null;
+    if (!kot || !kot.tableId) return; // takeaway / no table -> nothing to show
+
+    const tableRef = doc(db, 'restaurants', restaurantId, 'tables', kot.tableId);
+    const tableSnap = await getDoc(tableRef);
+    const table = tableSnap.exists() ? tableSnap.data() : {};
+    const sameOrder = (o) => o && o.orderNumber === (kot.orderNumber || null);
+
+    // Waiter has not tapped the previous alert yet -> the badge counts up (1, 2, 3 ...)
+    const pending = sameOrder(table.serveAlert) ? (table.serveAlert.count || 1) + 1 : 1;
+
+    // Running list of every KOT of this order the kitchen has served (kept after the waiter taps).
+    const prevKots = sameOrder(table.servedInfo) ? table.servedInfo.kots || [] : [];
+    const kotKey = kot.kotNumber || kotDocRef.id;
+    const kots = prevKots.includes(kotKey) ? prevKots : [...prevKots, kotKey];
+
+    await updateDoc(tableRef, {
+      serveAlert: {
+        alertId: kotDocRef.id,
+        kotNumber: kot.kotNumber || null,
+        orderNumber: kot.orderNumber || null,
+        tableNumber: kot.tableNumber || null,
+        waiterId: kot.waiterId || null,
+        waiterName: kot.waiterName || null,
+        count: pending,
+        at: serverTimestamp()
+      },
+      servedInfo: { orderNumber: kot.orderNumber || null, kots }
+    });
+  } catch (error) {
+    console.warn('raiseServeAlert failed (kitchen action still saved):', error);
+  }
+}
+
+/** Waiter acknowledged the alert on a table. */
+export async function clearServeAlert(restaurantId, tableId) {
+  try {
+    await updateDoc(doc(db, 'restaurants', restaurantId, 'tables', tableId), { serveAlert: null });
+    return true;
+  } catch (error) {
+    console.error('clearServeAlert error:', error);
+    return false;
   }
 }
 

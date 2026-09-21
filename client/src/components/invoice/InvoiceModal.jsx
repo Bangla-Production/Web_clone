@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Printer, X, SlidersHorizontal, Check } from 'lucide-react';
 import Modal from '../common/Modal';
 import PrintableReceipt from './PrintableReceipt';
@@ -29,6 +30,7 @@ export default function InvoiceModal({ isOpen, onClose, invoice = null, kot = nu
   };
 
   return (
+    <>
     <Modal isOpen={isOpen} onClose={onClose} title={title} maxWidth="max-w-md">
       <div className="space-y-4">
         {/* Paper Size Selector */}
@@ -64,7 +66,7 @@ export default function InvoiceModal({ isOpen, onClose, invoice = null, kot = nu
         </div>
 
         {/* Printable Paper Area */}
-        <div className="print-container bg-slate-950 p-3 rounded-xl border border-slate-800/80 flex justify-center max-h-[60vh] overflow-y-auto">
+        <div className="bg-slate-950 p-3 rounded-xl border border-slate-800/80 flex justify-center max-h-[60vh] overflow-y-auto">
           {isKOT ? (
             <PrintableKOT kot={kot} restaurant={restaurant} paperSize={paperSize} />
           ) : (
@@ -93,5 +95,19 @@ export default function InvoiceModal({ isOpen, onClose, invoice = null, kot = nu
         </div>
       </div>
     </Modal>
+
+    {/* What the printer actually receives: a copy of the paper, outside the app layout.
+        Hidden on screen; when printing, index.css hides the app and shows only this. */}
+    {createPortal(
+      <div className="print-area" style={{ width: paperSize === '58mm' ? '58mm' : '80mm' }}>
+        {isKOT ? (
+          <PrintableKOT kot={kot} restaurant={restaurant} paperSize={paperSize} />
+        ) : (
+          <PrintableReceipt invoice={invoice} restaurant={restaurant} paperSize={paperSize} />
+        )}
+      </div>,
+      document.body
+    )}
+    </>
   );
 }

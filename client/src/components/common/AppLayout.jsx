@@ -2,12 +2,15 @@ import React, { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
+import ServeAlertListener from './ServeAlertListener';
 
 export default function AppLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-pos-dark text-slate-800 dark:text-slate-100 selection:bg-amber-500 selection:text-slate-950 transition-colors duration-200">
+      <ServeAlertListener />
+
       {/* Sidebar Navigation */}
       <Sidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
 

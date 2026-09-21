@@ -73,6 +73,44 @@ class KitchenAudioAlert {
     this.isMuted = muted;
   }
 
+  /** Browsers only allow sound after a tap/click - call this from a user gesture. */
+  unlock() {
+    try {
+      this.init();
+      if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  /** Bright rising "order up" chime for the waiter (different from the kitchen bell). */
+  playServedChime() {
+    if (this.isMuted) return;
+    try {
+      this.init();
+      if (!this.ctx) return;
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+
+      const start = this.ctx.currentTime;
+      [659.25, 880, 1174.66].forEach((freq, i) => {
+        const t = start + i * 0.16;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, t);
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(0.35, t + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.5);
+      });
+    } catch (e) {
+      console.warn('Could not play served chime:', e);
+    }
+  }
+
   playOrderBell() {
     if (this.isMuted) return;
     try {
@@ -108,3 +146,6 @@ class KitchenAudioAlert {
 }
 
 export const kitchenAudio = new KitchenAudioAlert();
+
+// Separate audio instance for the waiter's "kitchen served" alert.
+export const serveAudio = new KitchenAudioAlert();

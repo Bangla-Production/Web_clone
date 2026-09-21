@@ -1,11 +1,14 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 export default function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md' }) {
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm no-print">
+  // Render on <body>: a parent with backdrop-filter/transform would otherwise trap
+  // this "fixed" overlay inside itself (it showed behind the page / got clipped).
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm no-print">
       <div
         className={`pos-card-glass rounded-2xl shadow-2xl w-full ${maxWidth} max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150 border border-pos-border`}
       >
@@ -20,6 +23,7 @@ export default function Modal({ isOpen, onClose, title, children, maxWidth = 'ma
         </div>
         <div className="p-6 overflow-y-auto">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

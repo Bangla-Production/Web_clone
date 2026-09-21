@@ -12,15 +12,22 @@ import {
   CreditCard,
   Send,
   Eye,
-  FileText
+  FileText,
+  BellRing,
+  Check,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import {
   subscribeToTables,
   createTable,
   updateTableStatus,
   deleteTable,
-  requestBillForTable
+  requestBillForTable,
+  clearServeAlert
 } from '../services/firestoreService';
+import { serveAudio } from '../services/thermalPrintService';
+import { visibleServeAlerts, isServeSoundMuted, setServeSoundMuted } from '../utils/serveAlerts';
 import { useAuth } from '../context/AuthContext';
 import { useRestaurant } from '../context/RestaurantContext';
 import { useToast } from '../context/ToastContext';
@@ -32,6 +39,7 @@ export default function TablesPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [tableNumber, setTableNumber] = useState('');
   const [capacity, setCapacity] = useState('4');
+  const [soundMuted, setSoundMuted] = useState(isServeSoundMuted());
 
   const { activeRestaurantId, user } = useAuth();
   const { currencySymbol } = useRestaurant();
@@ -108,6 +116,22 @@ export default function TablesPage() {
     }
   };
 
+  const serveAlerts = visibleServeAlerts(tables, user);
+  const serveAlertByTable = new Map(serveAlerts.map((a) => [a.tableId, a]));
+
+  const handleDismissAlert = (tableId) => clearServeAlert(activeRestaurantId, tableId);
+  const handleDismissAll = () => serveAlerts.forEach((a) => clearServeAlert(activeRestaurantId, a.tableId));
+
+  const handleToggleSound = () => {
+    const next = !soundMuted;
+    setSoundMuted(next);
+    setServeSoundMuted(next);
+    if (!next) {
+      serveAudio.unlock();
+      serveAudio.playServedChime(); // preview
+    }
+  };
+
   const availableCount = tables.filter((t) => t.status === 'AVAILABLE').length;
   const occupiedCount = tables.filter((t) => t.status === 'OCCUPIED').length;
   const billReqCount = tables.filter((t) => t.status === 'BILL_REQUESTED').length;
@@ -115,10 +139,10 @@ export default function TablesPage() {
   return (
     <div className="space-y-5 transition-colors duration-200">
       {/* Top Header */}
-      <div className="pos-surface-glass p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-pos-border">
-        <div>
-          <div className="flex items-center space-x-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-600 dark:text-amber-400">
+      <div className="pos-surface-glass p-5 rounded-2xl flex flex-col lg:flex-row lg:items-center justify-between gap-4 border border-pos-border">
+        <div className="min-w-0">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 shrink-0 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-600 dark:text-amber-400">
               <Grid2X2 className="w-5 h-5" />
             </div>
             <div>
@@ -126,15 +150,15 @@ export default function TablesPage() {
                 Table & Floor Management
               </h1>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Petpooja multi-section floor layout • Real-time synchronization with waiter tablets and kitchen
+                Live table status, synced with the waiter tablets and the kitchen
               </p>
             </div>
           </div>
         </div>
 
         {/* Counter chips & Action */}
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="flex items-center space-x-2 bg-pos-dark px-3 py-1.5 rounded-xl border border-pos-border text-xs">
+        <div className="flex flex-wrap items-center gap-3 shrink-0">
+          <div className="flex items-center space-x-3 bg-pos-dark px-4 py-2.5 rounded-xl border border-pos-border text-xs">
             <span className="flex items-center space-x-1.5 text-emerald-600 dark:text-emerald-400 font-bold">
               <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
               <span>{availableCount} Vacant</span>
@@ -152,6 +176,16 @@ export default function TablesPage() {
           </div>
 
           <button
+            type="button"
+            onClick={handleToggleSound}
+            title={soundMuted ? 'Served alert sound is off' : 'Served alert sound is on'}
+            className="flex items-center space-x-1.5 px-3 py-2.5 rounded-xl border border-pos-border bg-pos-dark text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-pos-card-hover transition-colors"
+          >
+            {soundMuted ? <VolumeX className="w-4 h-4 text-slate-400" /> : <Volume2 className="w-4 h-4 text-emerald-500" />}
+            <span>{soundMuted ? 'Sound off' : 'Sound on'}</span>
+          </button>
+
+          <button
             onClick={() => setIsAddModalOpen(true)}
             className="petpooja-btn-kot flex items-center space-x-2 px-4 py-2.5 rounded-xl text-slate-950 text-xs font-black transition-all"
           >
@@ -161,8 +195,48 @@ export default function TablesPage() {
         </div>
       </div>
 
+      {/* Kitchen served alerts */}
+      {serveAlerts.length > 0 && (
+        <div className="rounded-2xl border-2 border-emerald-400 dark:border-emerald-500/60 bg-emerald-50 dark:bg-emerald-950/30 p-4 flex flex-col md:flex-row md:items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 shrink-0 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 animate-pulse">
+              <BellRing className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-black text-slate-900 dark:text-white">
+                Kitchen served {serveAlerts.length === 1 ? '1 table' : `${serveAlerts.length} tables`}
+              </p>
+              <p className="text-xs text-slate-600 dark:text-slate-400">Tap a table number once you have seen it.</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 md:ml-auto">
+            {serveAlerts.map((a) => (
+              <button
+                key={a.tableId}
+                type="button"
+                onClick={() => handleDismissAlert(a.tableId)}
+                title={a.orderNumber ? `Order #${a.orderNumber}` : 'Dismiss'}
+                className="pos-btn-touch flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm shadow-pos-glow"
+              >
+                <span>Table {a.tableNumber}</span>
+                <Check className="w-4 h-4 stroke-[3]" />
+              </button>
+            ))}
+            {serveAlerts.length > 1 && (
+              <button
+                type="button"
+                onClick={handleDismissAll}
+                className="px-3 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-emerald-500/10"
+              >
+                Dismiss all
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Tables Visual Floor Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
         {loading ? (
           <div className="col-span-full py-20 text-center text-slate-400">
             <div className="w-10 h-10 border-3 border-amber-500/20 border-t-amber-400 rounded-full animate-spin mx-auto mb-3"></div>
@@ -188,16 +262,35 @@ export default function TablesPage() {
               cardStyle = 'bg-amber-50 dark:bg-amber-950/25 border-amber-400 dark:border-amber-500/40 shadow-sm';
             }
 
+            const serveAlert = serveAlertByTable.get(table.id);
+            if (serveAlert) {
+              cardStyle += ' ring-2 ring-emerald-400 border-emerald-400 shadow-pos-glow';
+            }
+
             return (
               <div
                 key={table.id}
-                className={`p-4.5 rounded-2xl border flex flex-col justify-between transition-all duration-200 ${cardStyle}`}
+                className={`relative p-5 rounded-2xl border flex flex-col justify-between min-h-[168px] transition-all duration-200 ${cardStyle}`}
               >
+                {/* Kitchen-served sign: number = how many served batches the waiter has not seen yet */}
+                {serveAlert && (
+                  <button
+                    type="button"
+                    onClick={() => handleDismissAlert(table.id)}
+                    title="Food is ready - tap to dismiss"
+                    className="absolute -top-3 -right-3 z-10 flex items-center space-x-1.5 pl-2 pr-1.5 py-1 rounded-full bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/40 border-2 border-white dark:border-slate-900 animate-bounce"
+                  >
+                    <BellRing className="w-4 h-4 stroke-[2.5]" />
+                    <span className="min-w-[1.5rem] h-6 px-1 rounded-full bg-slate-950 text-emerald-400 font-num font-black text-sm flex items-center justify-center">
+                      {serveAlert.count}
+                    </span>
+                  </button>
+                )}
                 <div>
-                  <div className="flex items-start justify-between">
-                    <div>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
                       <div className="flex items-center space-x-2">
-                        <h3 className="font-display font-black text-xl text-slate-900 dark:text-white">
+                        <h3 className="font-display font-black text-xl leading-tight text-slate-900 dark:text-white truncate">
                           Table {table.tableNumber}
                         </h3>
                       </div>
@@ -207,7 +300,7 @@ export default function TablesPage() {
                       </div>
                     </div>
                     <span
-                      className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
+                      className={`inline-flex items-center shrink-0 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
                         isAvailable
                           ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
                           : isBillReq
@@ -218,6 +311,20 @@ export default function TablesPage() {
                       {isAvailable ? 'Vacant' : isBillReq ? 'Bill Req' : 'Occupied'}
                     </span>
                   </div>
+
+                  {serveAlert && (
+                    <div className="mt-3 px-3 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-xs font-bold text-emerald-700 dark:text-emerald-300 flex items-center justify-between gap-2">
+                      <span className="flex items-center space-x-1.5">
+                        <BellRing className="w-3.5 h-3.5 animate-pulse" />
+                        <span>Food ready to serve</span>
+                      </span>
+                      <span className="font-num">
+                        {serveAlert.totalKots > 0
+                          ? `${Math.min(serveAlert.servedKots, serveAlert.totalKots)}/${serveAlert.totalKots} served`
+                          : `${serveAlert.servedKots} served`}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Active Order Details */}
                   {!isAvailable && activeOrder && (
@@ -237,7 +344,7 @@ export default function TablesPage() {
                 </div>
 
                 {/* Card Actions */}
-                <div className="mt-4 pt-3 border-t border-pos-border flex items-center justify-between gap-2">
+                <div className="mt-5 pt-4 border-t border-pos-border flex items-center justify-between gap-2">
                   {isAvailable ? (
                     <button
                       type="button"
@@ -275,7 +382,7 @@ export default function TablesPage() {
                   <button
                     type="button"
                     onClick={() => handleDeleteTable(table.id)}
-                    className="p-2 rounded-xl text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+                    className="shrink-0 w-9 h-9 flex items-center justify-center rounded-xl text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
                     title="Delete Table"
                   >
                     <Trash2 className="w-4 h-4" />

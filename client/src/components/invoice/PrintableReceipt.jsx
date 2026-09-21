@@ -1,5 +1,8 @@
 import React from 'react';
 
+// name | qty | rate | amount
+const ITEM_GRID = { gridTemplateColumns: 'minmax(0,1fr) 2.2em 4.8em 5.2em' };
+
 export default function PrintableReceipt({ invoice, restaurant, paperSize = '80mm' }) {
   if (!invoice) return null;
 
@@ -13,7 +16,7 @@ export default function PrintableReceipt({ invoice, restaurant, paperSize = '80m
 
   return (
     <div
-      className={`bg-white text-black p-4 rounded font-mono shadow-inner border border-gray-300 mx-auto select-none print:shadow-none print:border-none print:p-0 ${
+      className={`w-full bg-white text-black p-4 rounded font-mono shadow-inner border border-gray-300 mx-auto select-none print:shadow-none print:border-none print:p-0 ${
         is58mm ? 'max-w-[58mm] text-[10px]' : 'max-w-[80mm] text-xs'
       }`}
       style={{ fontFamily: '"Courier New", Courier, monospace' }}
@@ -37,23 +40,22 @@ export default function PrintableReceipt({ invoice, restaurant, paperSize = '80m
 
       {/* Invoice Details */}
       <div className="py-2 border-b border-dashed border-black text-[11px] space-y-0.5">
-        <div className="flex justify-between font-black">
-          <span>TAX INVOICE: {invoice.invoiceNumber || 'INV-001'}</span>
-          <span className="bg-black text-white px-1 rounded text-[10px] uppercase">
+        <div className="flex items-center justify-between gap-2 font-black">
+          <span>TAX INVOICE</span>
+          <span className="border border-black px-1.5 rounded text-[10px] uppercase leading-4 whitespace-nowrap">
             {invoice.paymentStatus || 'PAID'}
           </span>
         </div>
-        <div className="flex justify-between text-gray-800 text-[10px]">
-          <span>Order: #{invoice.orderNumber || order.orderNumber || 'N/A'}</span>
+        <div className="text-[10px] text-gray-800 break-all">Invoice: {invoice.invoiceNumber || 'INV-001'}</div>
+        <div className="text-[10px] text-gray-800 break-all">Order: #{invoice.orderNumber || order.orderNumber || 'N/A'}</div>
+        <div className="flex justify-between gap-2 text-black font-bold text-[11px]">
           <span>Type: {invoice.orderType || order.orderType || 'DINE_IN'}</span>
+          {tableNum && <span>TABLE: {tableNum}</span>}
         </div>
         {tableNum && (
-          <div className="flex justify-between text-black font-bold text-[11px]">
-            <span>TABLE: {tableNum}</span>
-            <span>Server: {invoice.waiterName || invoice.billedBy || 'Staff'}</span>
-          </div>
+          <div className="text-[10px] text-gray-800">Server: {invoice.waiterName || invoice.billedBy || 'Staff'}</div>
         )}
-        <div className="flex justify-between text-gray-700 text-[10px]">
+        <div className="flex justify-between gap-2 text-gray-700 text-[10px]">
           <span>Date: {dateObj.toLocaleDateString()}</span>
           <span>Time: {dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
         </div>
@@ -64,22 +66,22 @@ export default function PrintableReceipt({ invoice, restaurant, paperSize = '80m
         )}
       </div>
 
-      {/* Items Table */}
+      {/* Items Table - fixed columns so numbers never run into each other */}
       <div className="py-2 border-b-2 border-dashed border-black">
-        <div className="flex justify-between font-black text-[10px] pb-1 border-b border-black">
-          <span className="w-1/2 text-left">ITEM</span>
-          <span className="w-1/6 text-center">QTY</span>
-          <span className="w-1/6 text-right">RATE</span>
-          <span className="w-1/6 text-right">AMT</span>
+        <div className="grid gap-x-1 font-black text-[10px] pb-1 border-b border-black" style={ITEM_GRID}>
+          <span className="text-left">ITEM</span>
+          <span className="text-center">QTY</span>
+          <span className="text-right">RATE</span>
+          <span className="text-right">AMT</span>
         </div>
         <div className="divide-y divide-gray-200 text-[11px]">
           {items.map((item, idx) => (
-            <div key={idx} className="flex justify-between py-1">
-              <span className="w-1/2 text-left font-semibold truncate">{item.name}</span>
-              <span className="w-1/6 text-center font-bold">{item.quantity}</span>
-              <span className="w-1/6 text-right">{item.price?.toFixed(2)}</span>
-              <span className="w-1/6 text-right font-black">
-                {(item.itemTotal || (item.price * item.quantity)).toFixed(2)}
+            <div key={idx} className="grid gap-x-1 py-1" style={ITEM_GRID}>
+              <span className="text-left font-semibold break-words min-w-0">{item.name}</span>
+              <span className="text-center font-bold">{item.quantity}</span>
+              <span className="text-right whitespace-nowrap">{Number(item.price || 0).toFixed(2)}</span>
+              <span className="text-right font-black whitespace-nowrap">
+                {Number(item.itemTotal || (item.price * item.quantity) || 0).toFixed(2)}
               </span>
             </div>
           ))}

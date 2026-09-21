@@ -83,37 +83,50 @@
   }
 }
 
-/* Custom thermal receipt & KOT printing stylesheet */
+/* Custom thermal receipt & KOT printing stylesheet
+   The paper is rendered in a separate .print-area (portal on <body>).
+   On screen it is hidden; when printing, the whole app is hidden and only
+   the paper is shown - so the receipt/KOT prints, not the page behind it. */
+.print-area {
+  display: none;
+}
+
 @media print {
   @page {
     margin: 0;
     size: auto;
   }
 
+  html,
   body {
-    background: white !important;
-    color: black !important;
+    background: #fff !important;
+    color: #000 !important;
+    height: auto !important;
+    overflow: visible !important;
     padding: 0 !important;
     margin: 0 !important;
   }
-  
+
+  #root {
+    display: none !important;
+  }
+
   .no-print {
     display: none !important;
   }
 
-  .print-only {
+  .print-area {
     display: block !important;
-  }
-
-  .print-container {
-    width: 100% !important;
-    max-width: 80mm !important;
     margin: 0 auto !important;
     padding: 4mm !important;
-    font-family: monospace, 'Courier New', Courier !important;
-    color: #000 !important;
+    box-sizing: border-box !important;
     background: #fff !important;
-    border: none !important;
+    color: #000 !important;
+    font-family: 'Courier New', Courier, monospace !important;
+  }
+
+  .print-area * {
+    color: #000 !important;
     box-shadow: none !important;
   }
 }

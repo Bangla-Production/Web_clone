@@ -7,6 +7,14 @@ export default {
   ],
   theme: {
     extend: {
+      // Used across the app (p-4.5, border-3) but missing from Tailwind v3 defaults,
+      // so those classes were silently ignored (no padding, invisible spinners).
+      spacing: {
+        '4.5': '1.125rem',
+      },
+      borderWidth: {
+        '3': '3px',
+      },
       fontFamily: {
         sans: ['"Plus Jakarta Sans"', 'system-ui', '-apple-system', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
