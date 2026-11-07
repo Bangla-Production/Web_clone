@@ -19,7 +19,9 @@ import {
   Flame,
   CreditCard,
   Layers,
-  Sparkles
+  Sparkles,
+  ShoppingBag,
+  Bike
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useRestaurant } from '../../context/RestaurantContext';
@@ -63,6 +65,14 @@ export default function Sidebar({ isOpen, setIsOpen }) {
           path: '/cashier',
           icon: Receipt,
           allowed: ['super_admin', 'restaurant_admin', 'cashier', 'staff']
+        },
+        {
+          label: 'Online Orders',
+          path: '/online-orders',
+          icon: ShoppingBag,
+          allowed: operationalRoles,
+          badge: 'NEW',
+          badgeColor: 'bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/40'
         },
       ]
     },
@@ -223,8 +233,23 @@ export default function Sidebar({ isOpen, setIsOpen }) {
           })}
         </div>
 
+        {/* Customer-facing links */}
+        <div className="p-3 border-t border-pos-border bg-pos-card/30 space-y-2">
+          <NavLink
+            to="/order"
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-700/50 text-xs text-indigo-700 dark:text-indigo-300 hover:border-indigo-400 dark:hover:border-indigo-500 hover:shadow-md transition-all font-bold"
+          >
+            <span className="flex items-center space-x-2 truncate">
+              <ShoppingBag className="w-3.5 h-3.5 shrink-0 text-indigo-500" />
+              <span>Customer Order Portal</span>
+            </span>
+            <ExternalLink className="w-3.5 h-3.5 shrink-0 text-indigo-400" />
+          </NavLink>
+        </div>
         {/* Public Customer QR Menu Link */}
-        <div className="p-3 border-t border-pos-border bg-pos-card/30">
+        <div className="px-3 pb-3 bg-pos-card/30">
           <NavLink
             to={`/menu/${user?.restaurantId || activeRestaurantId}`}
             target="_blank"

@@ -4,6 +4,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider } from './context/ToastContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { RestaurantProvider } from './context/RestaurantContext';
+import { CustomerAuthProvider } from './context/CustomerAuthContext';
 
 import AppLayout from './components/common/AppLayout';
 import ProtectedRoute from './components/common/ProtectedRoute';
@@ -23,6 +24,10 @@ import SettingsPage from './pages/SettingsPage';
 import PublicMenuPage from './pages/PublicMenuPage';
 import ReservationsPage from './pages/ReservationsPage';
 import SuperAdminPage from './pages/SuperAdminPage';
+
+// New pages
+import OnlineOrdersPage from './pages/OnlineOrdersPage';
+import CustomerPortalPage from './pages/CustomerPortalPage';
 
 // Root redirect handler
 function RootRedirect() {
@@ -76,57 +81,67 @@ export default function App() {
       <ToastProvider>
         <AuthProvider>
           <RestaurantProvider>
-            <BrowserRouter>
-              <Routes>
-                {/* Public Routes */}
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/menu" element={<PublicMenuPage />} />
-                <Route path="/menu/:restaurantId" element={<PublicMenuPage />} />
+            {/* CustomerAuthProvider wraps the whole tree so the customer portal
+                can share the same auth infrastructure */}
+            <CustomerAuthProvider>
+              <BrowserRouter>
+                <Routes>
+                  {/* ── Public / Customer-facing Routes ─────────────────────── */}
+                  <Route path="/login" element={<LoginPage />} />
+                  <Route path="/menu" element={<PublicMenuPage />} />
+                  <Route path="/menu/:restaurantId" element={<PublicMenuPage />} />
 
-                {/* Root Redirect */}
-                <Route path="/" element={<RootRedirect />} />
+                  {/* Customer Portal — browse all restaurants, login/register */}
+                  <Route path="/order" element={<CustomerPortalPage />} />
+                  <Route path="/order/:restaurantId" element={<PublicMenuPage />} />
 
-                {/* Super Admin: platform management only (standalone page, no restaurant screens) */}
-                <Route element={<ProtectedRoute allowedRoles={['super_admin']} />}>
-                  <Route path="/super-admin" element={<SuperAdminPage />} />
-                </Route>
+                  {/* Root Redirect */}
+                  <Route path="/" element={<RootRedirect />} />
 
-                {/* Protected Staff & Restaurant Admin Area */}
-                <Route element={<ProtectedRoute allowedRoles={allRoles} />}>
-                  <Route element={<AppLayout />}>
+                  {/* ── Super Admin ──────────────────────────────────────────── */}
+                  <Route element={<ProtectedRoute allowedRoles={['super_admin']} />}>
+                    <Route path="/super-admin" element={<SuperAdminPage />} />
+                  </Route>
 
-                    {/* Kitchen Display (All authorized roles) */}
-                    <Route path="/kitchen" element={<KitchenPage />} />
+                  {/* ── Protected Staff & Restaurant Admin Area ──────────────── */}
+                  <Route element={<ProtectedRoute allowedRoles={allRoles} />}>
+                    <Route element={<AppLayout />}>
 
-                    {/* POS & Table Floor (Waiters, Cashiers, Admins) */}
-                    <Route element={<ProtectedRoute allowedRoles={operationalRoles} />}>
-                      <Route path="/pos" element={<POSPage />} />
-                      <Route path="/tables" element={<TablesPage />} />
-                      <Route path="/orders" element={<OrdersPage />} />
-                      <Route path="/reservations" element={<ReservationsPage />} />
-                    </Route>
+                      {/* Kitchen Display (All authorized roles) */}
+                      <Route path="/kitchen" element={<KitchenPage />} />
 
-                    {/* Invoices, Billing & Cashier Terminal */}
-                    <Route element={<ProtectedRoute allowedRoles={cashierAndAdmin} />}>
-                      <Route path="/cashier" element={<CashierPage />} />
-                      <Route path="/invoices" element={<InvoicesPage />} />
-                    </Route>
+                      {/* POS & Table Floor (Waiters, Cashiers, Admins) */}
+                      <Route element={<ProtectedRoute allowedRoles={operationalRoles} />}>
+                        <Route path="/pos" element={<POSPage />} />
+                        <Route path="/tables" element={<TablesPage />} />
+                        <Route path="/orders" element={<OrdersPage />} />
+                        <Route path="/reservations" element={<ReservationsPage />} />
+                        {/* Online Orders / Takeaway & Delivery */}
+                        <Route path="/online-orders" element={<OnlineOrdersPage />} />
+                      </Route>
 
-                    {/* Menu, Inventory & Analytics Admin routes */}
-                    <Route element={<ProtectedRoute allowedRoles={adminOnly} />}>
-                      <Route path="/dashboard" element={<DashboardPage />} />
-                      <Route path="/menu-admin" element={<MenuAdminPage />} />
-                      <Route path="/inventory" element={<InventoryPage />} />
-                      <Route path="/reports" element={<ReportsPage />} />
-                      <Route path="/settings" element={<SettingsPage />} />
+                      {/* Invoices, Billing & Cashier Terminal */}
+                      <Route element={<ProtectedRoute allowedRoles={cashierAndAdmin} />}>
+                        <Route path="/cashier" element={<CashierPage />} />
+                        <Route path="/invoices" element={<InvoicesPage />} />
+                      </Route>
+
+                      {/* Menu, Inventory & Analytics Admin routes */}
+                      <Route element={<ProtectedRoute allowedRoles={adminOnly} />}>
+                        <Route path="/dashboard" element={<DashboardPage />} />
+                        <Route path="/menu-admin" element={<MenuAdminPage />} />
+                        <Route path="/inventory" element={<InventoryPage />} />
+                        <Route path="/reports" element={<ReportsPage />} />
+                        <Route path="/settings" element={<SettingsPage />} />
+                      </Route>
                     </Route>
                   </Route>
-                </Route>
 
-                {/* Fallback 404 */}
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </BrowserRouter>
+                  {/* Fallback 404 */}
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </BrowserRouter>
+            </CustomerAuthProvider>
           </RestaurantProvider>
         </AuthProvider>
       </ToastProvider>

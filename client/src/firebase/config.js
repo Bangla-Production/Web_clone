@@ -4,11 +4,14 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
-  onAuthStateChanged
+  onAuthStateChanged,
+  sendEmailVerification,
+  sendPasswordResetEmail
 } from 'firebase/auth';
 import {
   getFirestore,
   collection,
+  collectionGroup,
   doc,
   getDoc,
   getDocs,
@@ -51,8 +54,11 @@ export {
   createUserWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
+  sendEmailVerification,
+  sendPasswordResetEmail,
   // Firestore methods
   collection,
+  collectionGroup,
   doc,
   getDoc,
   getDocs,

@@ -23,9 +23,12 @@ import {
   createReservation
 } from '../services/firestoreService';
 import { useAuth } from '../context/AuthContext';
+import { useCustomerAuth } from '../context/CustomerAuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
 import Modal from '../components/common/Modal';
+import { placeOnlineOrder } from '../services/onlineOrderService';
+import { ShoppingBag, Bike, Package, Plus, Minus, X, Truck, Compass, ArrowRight } from 'lucide-react';
 
 export default function PublicMenuPage() {
   const { restaurantId } = useParams();
@@ -54,8 +57,84 @@ export default function PublicMenuPage() {
   const [bookNotes, setBookNotes] = useState('');
   const [bookingSuccess, setBookingSuccess] = useState(false);
 
+  // -- Online Order Cart State --------------------------------------------------
+  const [cart, setCart]                 = useState([]); // { item, qty }
+  const [orderType, setOrderType]       = useState('TAKEAWAY'); // 'TAKEAWAY' | 'DELIVERY'
+  const [isCartOpen, setIsCartOpen]     = useState(false);
+  const [orderName, setOrderName]       = useState('');
+  const [orderPhone, setOrderPhone]     = useState('');
+  const [orderAddress, setOrderAddress] = useState('');
+  const [orderNotes, setOrderNotes]     = useState('');
+  const [orderLoading, setOrderLoading] = useState(false);
+  const [orderSuccess, setOrderSuccess] = useState(false);
+  const [orderId, setOrderId]           = useState('');
+
+  const cartTotal = cart.reduce((sum, { item, qty }) => sum + (item.price || 0) * qty, 0);
+  const cartCount = cart.reduce((sum, { qty }) => sum + qty, 0);
+
+  const addToCart = (item) => {
+    if (isItemSoldOut(item)) return;
+    setCart(prev => {
+      const idx = prev.findIndex(e => e.item.id === item.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = { ...copy[idx], qty: copy[idx].qty + 1 };
+        return copy;
+      }
+      return [...prev, { item, qty: 1 }];
+    });
+  };
+
+  const removeFromCart = (itemId) => {
+    setCart(prev => {
+      const idx = prev.findIndex(e => e.item.id === itemId);
+      if (idx < 0) return prev;
+      const copy = [...prev];
+      if (copy[idx].qty <= 1) copy.splice(idx, 1);
+      else copy[idx] = { ...copy[idx], qty: copy[idx].qty - 1 };
+      return copy;
+    });
+  };
+
+  const handlePlaceOrder = async (e) => {
+    e.preventDefault();
+    if (!orderName || !orderPhone) return;
+    if (orderType === 'DELIVERY' && !orderAddress) {
+      toast.error('Please enter a delivery address.');
+      return;
+    }
+    setOrderLoading(true);
+    try {
+      const result = await placeOnlineOrder(activeId, {
+        customerName: orderName,
+        customerPhone: orderPhone,
+        deliveryAddress: orderAddress,
+        notes: orderNotes,
+        orderType,
+        items: cart.map(({ item, qty }) => ({ id: item.id, name: item.name, price: item.price, qty })),
+        totalAmount: cartTotal,
+      });
+      setOrderId(result.id);
+      setOrderSuccess(true);
+      setCart([]);
+      toast.success('Your order has been placed successfully!');
+    } catch (err) {
+      toast.error('Could not place order. Please try again.');
+    } finally {
+      setOrderLoading(false);
+    }
+  };
+
   const { theme, toggleTheme } = useTheme();
   const toast = useToast();
+  const { customer } = useCustomerAuth();
+
+  useEffect(() => {
+    if (customer) {
+      if (!orderName && customer.name) setOrderName(customer.name);
+      if (!orderPhone && customer.phone) setOrderPhone(customer.phone);
+    }
+  }, [customer]);
 
   // Live data: whatever the restaurant admin adds / edits / deletes in
   // Menu Management shows up here immediately, no reload needed.
@@ -217,6 +296,31 @@ export default function PublicMenuPage() {
                 <Moon className="w-3.5 h-3.5 text-sky-400" />
                 <span className="hidden md:inline">Dark Mood</span>
               </>
+            )}
+          </button>
+
+          {/* All Restaurants link */}
+          <Link
+            to="/order"
+            className="pos-btn-touch flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-pos-dark hover:bg-pos-surface border border-pos-border text-slate-700 dark:text-slate-200 text-xs font-bold transition-all shadow-sm"
+            title="Browse all restaurants"
+          >
+            <Compass className="w-3.5 h-3.5 text-indigo-500" />
+            <span className="hidden sm:inline">All Shops</span>
+          </Link>
+
+          {/* Cart / Order Online Button */}
+          <button
+            onClick={() => setIsCartOpen(true)}
+            className="pos-btn-touch flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-extrabold shadow-pos-glow transition-all"
+            title="View Cart / Place Takeaway or Delivery Order"
+          >
+            <ShoppingBag className="w-3.5 h-3.5" />
+            <span>Order</span>
+            {cartCount > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full bg-white text-indigo-700 text-[10px] font-black">
+                {cartCount}
+              </span>
             )}
           </button>
 
@@ -397,18 +501,56 @@ export default function PublicMenuPage() {
                   </div>
 
                   <div className="flex items-center justify-between mt-3 pt-2 border-t border-pos-border">
-                    <span className="text-base font-black text-emerald-600 dark:text-emerald-400 font-num">
-                      {currencySymbol}{item.price?.toFixed(2)}
-                    </span>
-                    {isItemSoldOut(item) && (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
-                        Out of Stock
+                    <div>
+                      <span className="text-base font-black text-emerald-600 dark:text-emerald-400 font-num">
+                        {currencySymbol}{item.price?.toFixed(2)}
                       </span>
-                    )}
-                    {!isItemSoldOut(item) && isLowStock(item) && (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
-                        Only {getStockQty(item)} left
-                      </span>
+                      {isItemSoldOut(item) && (
+                        <span className="ml-2 px-2 py-0.5 rounded text-[10px] font-extrabold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
+                          Out of Stock
+                        </span>
+                      )}
+                      {!isItemSoldOut(item) && isLowStock(item) && (
+                        <span className="ml-2 px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                          Only {getStockQty(item)} left
+                        </span>
+                      )}
+                    </div>
+
+                    {!isItemSoldOut(item) && (
+                      (() => {
+                        const inCart = cart.find(e => e.item.id === item.id);
+                        return inCart ? (
+                          <div className="flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-700 rounded-xl px-1.5 py-0.5 shadow-sm">
+                            <button
+                              type="button"
+                              onClick={() => removeFromCart(item.id)}
+                              className="w-5 h-5 rounded-lg bg-indigo-600 hover:bg-red-600 text-white flex items-center justify-center transition-colors text-xs font-bold"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <span className="font-mono font-bold text-xs text-indigo-700 dark:text-indigo-300 w-4 text-center">
+                              {inCart.qty}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => addToCart(item)}
+                              className="w-5 h-5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center transition-colors text-xs font-bold"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => addToCart(item)}
+                            className="pos-btn-touch flex items-center space-x-1 px-3 py-1 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-sm transition-all"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Add</span>
+                          </button>
+                        );
+                      })()
                     )}
                   </div>
                 </div>
@@ -417,6 +559,29 @@ export default function PublicMenuPage() {
           </div>
         )}
       </main>
+
+      {/* Floating Bottom Cart Bar */}
+      {cartCount > 0 && (
+        <div className="fixed bottom-4 left-4 right-4 max-w-lg mx-auto z-40">
+          <button
+            onClick={() => setIsCartOpen(true)}
+            className="w-full flex items-center justify-between px-5 py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-2xl hover:from-indigo-500 hover:to-purple-500 transition-all font-bold text-sm border border-indigo-400/40"
+          >
+            <div className="flex items-center space-x-2.5">
+              <span className="w-6 h-6 rounded-full bg-white text-indigo-700 flex items-center justify-center text-xs font-black">
+                {cartCount}
+              </span>
+              <span>{cartCount === 1 ? '1 Item' : `${cartCount} Items`} in Cart</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <span className="font-mono text-base font-black">₹{cartTotal.toFixed(0)}</span>
+              <span className="flex items-center text-xs uppercase tracking-wider font-extrabold bg-white/20 px-2 py-0.5 rounded-lg">
+                View Cart <ArrowRight className="w-3.5 h-3.5 ml-1" />
+              </span>
+            </div>
+          </button>
+        </div>
+      )}
 
       {/* Table Booking Modal */}
       {isBookOpen && (
@@ -522,6 +687,148 @@ export default function PublicMenuPage() {
                   className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-md"
                 >
                   Confirm Table Request
+                </button>
+              </div>
+            </form>
+          )}
+        </Modal>
+      )}
+
+      {/* ── Cart / Online Order Modal ─────────────────────────────────────── */}
+      {isCartOpen && (
+        <Modal isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} title="Order Online" maxWidth="max-w-lg">
+          {orderSuccess ? (
+            <div className="text-center py-8 space-y-3">
+              <CheckCircle2 className="w-14 h-14 text-emerald-400 mx-auto" />
+              <h3 className="font-black text-lg text-white">Order Placed!</h3>
+              <p className="text-xs text-slate-300">
+                Your {orderType === 'DELIVERY' ? 'delivery' : 'takeaway'} order #{orderId.slice(-6).toUpperCase()} has been placed and the restaurant will prepare it shortly.
+              </p>
+              {orderType === 'DELIVERY' && (
+                <div className="p-3 bg-cyan-950/40 border border-cyan-800 rounded-xl text-cyan-300 text-xs flex items-center justify-center gap-2">
+                  <Truck className="w-4 h-4 text-cyan-400" />
+                  <span>Doorstep delivery enabled via <strong>Porter Logistics</strong>.</span>
+                </div>
+              )}
+              <button
+                onClick={() => { setIsCartOpen(false); setOrderSuccess(false); }}
+                className="mt-2 px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs"
+              >
+                Close
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handlePlaceOrder} className="space-y-4 text-xs">
+              {/* Order Type Toggle */}
+              <div className="flex rounded-xl overflow-hidden border border-slate-700 w-full">
+                {['TAKEAWAY', 'DELIVERY'].map(t => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setOrderType(t)}
+                    className={`flex-1 py-2.5 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors ${
+                      orderType === t ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                    }`}
+                  >
+                    {t === 'TAKEAWAY' ? <Package className="w-3.5 h-3.5"/> : <Bike className="w-3.5 h-3.5"/>}
+                    {t === 'TAKEAWAY' ? 'Takeaway' : 'Delivery'}
+                  </button>
+                ))}
+              </div>
+
+              {orderType === 'DELIVERY' && (
+                <div className="flex items-center gap-2 p-2.5 rounded-xl bg-cyan-950/40 border border-cyan-800/60 text-cyan-300 text-[11px]">
+                  <Truck className="w-4 h-4 text-cyan-400 shrink-0" />
+                  <span>On-demand courier delivery with <strong>Porter</strong>. Tracking provided upon dispatch.</span>
+                </div>
+              )}
+
+              {/* Cart Items */}
+              {cart.length === 0 ? (
+                <p className="text-slate-400 text-center py-4">No items in cart</p>
+              ) : (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {cart.map(({ item, qty }) => (
+                    <div key={item.id} className="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-slate-800 border border-slate-700">
+                      <span className="text-white font-semibold flex-1 truncate">{item.name}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => removeFromCart(item.id)}
+                          className="w-6 h-6 rounded-full bg-slate-700 hover:bg-red-700 text-white flex items-center justify-center transition-colors"
+                        >
+                          <Minus className="w-3 h-3"/>
+                        </button>
+                        <span className="font-mono text-white w-4 text-center">{qty}</span>
+                        <button
+                          type="button"
+                          onClick={() => addToCart(item)}
+                          className="w-6 h-6 rounded-full bg-slate-700 hover:bg-indigo-600 text-white flex items-center justify-center transition-colors"
+                        >
+                          <Plus className="w-3 h-3"/>
+                        </button>
+                      </div>
+                      <span className="font-mono font-bold text-indigo-300 w-16 text-right">
+                        ₹{(item.price * qty).toFixed(0)}
+                      </span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between font-black text-sm text-white px-2 pt-1 border-t border-slate-700">
+                    <span>Total Amount</span>
+                    <span className="text-emerald-400">₹{cartTotal.toFixed(0)}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Customer Details */}
+              <div className="space-y-2">
+                <input
+                  required
+                  value={orderName}
+                  onChange={e => setOrderName(e.target.value)}
+                  placeholder="Your Name *"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                />
+                <input
+                  required
+                  type="tel"
+                  value={orderPhone}
+                  onChange={e => setOrderPhone(e.target.value)}
+                  placeholder="Phone Number *"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                />
+                {orderType === 'DELIVERY' && (
+                  <input
+                    required
+                    value={orderAddress}
+                    onChange={e => setOrderAddress(e.target.value)}
+                    placeholder="Full Delivery Address (Street, Building, Landmark) *"
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                  />
+                )}
+                <textarea
+                  rows={2}
+                  value={orderNotes}
+                  onChange={e => setOrderNotes(e.target.value)}
+                  placeholder="Cooking / delivery notes (optional)"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsCartOpen(false)}
+                  className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 font-semibold hover:bg-slate-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={orderLoading || cart.length === 0}
+                  className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold shadow-md disabled:opacity-50 flex items-center gap-2"
+                >
+                  {orderLoading ? 'Placing...' : `Place ${orderType === 'DELIVERY' ? 'Delivery' : 'Takeaway'} Order (₹${cartTotal.toFixed(0)})`}
                 </button>
               </div>
             </form>
