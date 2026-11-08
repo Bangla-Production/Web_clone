@@ -117,5 +117,32 @@ service cloud.firestore {
         allow read, write: if isAuthenticated();
       }
     }
+
+    // 3. Online Orders & Food Delivery (Customer / Restaurant / Delivery Partner)
+    match /onlineOrders/{orderId} {
+      allow read, create, update: if true;
+      allow delete: if isAuthenticated();
+    }
+
+    // 4. Live GPS Delivery Tracking
+    match /deliveryTracking/{orderId} {
+      allow read, create, update: if true;
+      allow delete: if isAuthenticated();
+    }
+
+    // 5. Delivery Partners (Riders)
+    match /deliveryPartners/{partnerId} {
+      allow read, create, update: if true;
+      allow delete: if isAuthenticated();
+    }
+
+    // 6. Customer Addresses
+    match /customerAddresses/{customerId} {
+      allow read, write: if true;
+
+      match /addresses/{addressId} {
+        allow read, write: if true;
+      }
+    }
   }
 }

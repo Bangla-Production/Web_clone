@@ -28,7 +28,9 @@ import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
 import Modal from '../components/common/Modal';
 import { placeOnlineOrder } from '../services/onlineOrderService';
-import { ShoppingBag, Bike, Package, Plus, Minus, X, Truck, Compass, ArrowRight } from 'lucide-react';
+import { calculateDeliveryEstimate, initDeliveryTracking } from '../services/deliveryService';
+import { getSavedCustomerLocation } from '../services/locationService';
+import { ShoppingBag, Bike, Package, Plus, Minus, X, Truck, Compass, ArrowRight, Navigation2, CheckCircle } from 'lucide-react';
 
 export default function PublicMenuPage() {
   const { restaurantId } = useParams();
@@ -68,9 +70,15 @@ export default function PublicMenuPage() {
   const [orderLoading, setOrderLoading] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [orderId, setOrderId]           = useState('');
+  const [customerLoc, setCustomerLoc]   = useState(() => getSavedCustomerLocation());
 
   const cartTotal = cart.reduce((sum, { item, qty }) => sum + (item.price || 0) * qty, 0);
   const cartCount = cart.reduce((sum, { qty }) => sum + qty, 0);
+
+  // Dynamic delivery calculations
+  const deliveryEstimate = calculateDeliveryEstimate(restaurant, customerLoc, cartTotal);
+  const finalDeliveryFee = orderType === 'DELIVERY' ? deliveryEstimate.fee : 0;
+  const grandTotal = cartTotal + finalDeliveryFee;
 
   const addToCart = (item) => {
     if (isItemSoldOut(item)) return;
@@ -99,26 +107,51 @@ export default function PublicMenuPage() {
   const handlePlaceOrder = async (e) => {
     e.preventDefault();
     if (!orderName || !orderPhone) return;
-    if (orderType === 'DELIVERY' && !orderAddress) {
-      toast.error('Please enter a delivery address.');
-      return;
+    if (orderType === 'DELIVERY') {
+      if (!orderAddress) {
+        toast.error('Please enter a delivery address.');
+        return;
+      }
+      if (!deliveryEstimate.isServiceable) {
+        toast.error(`Delivery is unavailable beyond ${deliveryEstimate.maxRadius} km. Please select Takeaway.`);
+        return;
+      }
     }
     setOrderLoading(true);
     try {
       const result = await placeOnlineOrder(activeId, {
         customerName: orderName,
         customerPhone: orderPhone,
-        deliveryAddress: orderAddress,
+        deliveryAddress: orderType === 'DELIVERY' ? orderAddress : null,
+        customerCoordinates: customerLoc ? { lat: customerLoc.lat, lng: customerLoc.lng } : null,
+        deliveryFee: finalDeliveryFee,
+        estimatedDeliveryMinutes: deliveryEstimate.estimatedTimeMins,
         notes: orderNotes,
         orderType,
         items: cart.map(({ item, qty }) => ({ id: item.id, name: item.name, price: item.price, qty })),
-        totalAmount: cartTotal,
+        subtotal: cartTotal,
+        totalAmount: grandTotal,
       });
+
+      if (orderType === 'DELIVERY' && result?.id) {
+        await initDeliveryTracking(result.id, {
+          restaurantId: activeId,
+          restaurantName: restaurant?.name || 'Restaurant',
+          restaurantCoordinates: restaurant?.coordinates || {
+            lat: restaurant?.lat || 22.5726,
+            lng: restaurant?.lng || 88.3639
+          },
+          customerCoordinates: customerLoc ? { lat: customerLoc.lat, lng: customerLoc.lng } : null,
+          deliveryAddress: orderAddress,
+        });
+      }
+
       setOrderId(result.id);
       setOrderSuccess(true);
       setCart([]);
       toast.success('Your order has been placed successfully!');
     } catch (err) {
+      console.error('Order error:', err);
       toast.error('Could not place order. Please try again.');
     } finally {
       setOrderLoading(false);
@@ -134,7 +167,10 @@ export default function PublicMenuPage() {
       if (!orderName && customer.name) setOrderName(customer.name);
       if (!orderPhone && customer.phone) setOrderPhone(customer.phone);
     }
-  }, [customer]);
+    if (customerLoc?.formattedAddress && !orderAddress) {
+      setOrderAddress(customerLoc.formattedAddress);
+    }
+  }, [customer, customerLoc]);
 
   // Live data: whatever the restaurant admin adds / edits / deletes in
   // Menu Management shows up here immediately, no reload needed.
@@ -705,9 +741,17 @@ export default function PublicMenuPage() {
                 Your {orderType === 'DELIVERY' ? 'delivery' : 'takeaway'} order #{orderId.slice(-6).toUpperCase()} has been placed and the restaurant will prepare it shortly.
               </p>
               {orderType === 'DELIVERY' && (
-                <div className="p-3 bg-cyan-950/40 border border-cyan-800 rounded-xl text-cyan-300 text-xs flex items-center justify-center gap-2">
-                  <Truck className="w-4 h-4 text-cyan-400" />
-                  <span>Doorstep delivery enabled via <strong>Porter Logistics</strong>.</span>
+                <div className="p-3 bg-cyan-950/40 border border-cyan-800 rounded-xl text-cyan-300 text-xs flex flex-col items-center justify-center gap-2">
+                  <div className="flex items-center gap-2 font-semibold">
+                    <Truck className="w-4 h-4 text-cyan-400" />
+                    <span>Doorstep delivery with live GPS rider tracking.</span>
+                  </div>
+                  <a
+                    href={`/track/${orderId}`}
+                    className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5"
+                  >
+                    <Navigation2 className="w-3.5 h-3.5" /> Track Live Order on Map →
+                  </a>
                 </div>
               )}
               <button
@@ -737,10 +781,33 @@ export default function PublicMenuPage() {
               </div>
 
               {orderType === 'DELIVERY' && (
-                <div className="flex items-center gap-2 p-2.5 rounded-xl bg-cyan-950/40 border border-cyan-800/60 text-cyan-300 text-[11px]">
-                  <Truck className="w-4 h-4 text-cyan-400 shrink-0" />
-                  <span>On-demand courier delivery with <strong>Porter</strong>. Tracking provided upon dispatch.</span>
-                </div>
+                deliveryEstimate.isServiceable ? (
+                  <div className="p-3 rounded-xl bg-slate-800/80 border border-slate-700/80 space-y-1.5 text-[11px]">
+                    <div className="flex items-center justify-between text-slate-300">
+                      <span className="flex items-center gap-1.5 font-semibold text-cyan-400">
+                        <Bike className="w-3.5 h-3.5" /> Est. Distance & ETA
+                      </span>
+                      <span className="font-medium text-slate-200">{deliveryEstimate.distanceKm} km · ~{deliveryEstimate.estimatedTimeMins} mins</span>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-400">
+                      <span>Delivery Fee:</span>
+                      <span className="font-bold text-white">
+                        {deliveryEstimate.isFree ? (
+                          <span className="text-emerald-400 font-black">FREE (Order ₹{deliveryEstimate.freeAbove}+)</span>
+                        ) : (
+                          `₹${deliveryEstimate.fee}`
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-800 text-rose-300 text-[11px] space-y-1">
+                    <p className="font-bold">Delivery Unavailable for this location</p>
+                    <p className="text-[10px] text-rose-400">
+                      Distance ({deliveryEstimate.distanceKm} km) exceeds restaurant delivery radius ({deliveryEstimate.maxRadius} km). Please switch to Takeaway.
+                    </p>
+                  </div>
+                )
               )}
 
               {/* Cart Items */}
@@ -773,9 +840,25 @@ export default function PublicMenuPage() {
                       </span>
                     </div>
                   ))}
-                  <div className="flex justify-between font-black text-sm text-white px-2 pt-1 border-t border-slate-700">
-                    <span>Total Amount</span>
-                    <span className="text-emerald-400">₹{cartTotal.toFixed(0)}</span>
+                  
+                  {/* Bill Breakdown */}
+                  <div className="space-y-1 pt-2 border-t border-slate-700 text-xs">
+                    <div className="flex justify-between text-slate-400">
+                      <span>Food Items ({cartCount})</span>
+                      <span className="text-white">₹{cartTotal.toFixed(0)}</span>
+                    </div>
+                    {orderType === 'DELIVERY' && (
+                      <div className="flex justify-between text-slate-400">
+                        <span>Delivery Fee</span>
+                        <span className={deliveryEstimate.isFree ? 'text-emerald-400 font-bold' : 'text-white'}>
+                          {deliveryEstimate.isFree ? 'FREE' : `₹${deliveryEstimate.fee}`}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-black text-sm text-white pt-1 border-t border-slate-700/60">
+                      <span>Grand Total</span>
+                      <span className="text-emerald-400">₹{grandTotal.toFixed(0)}</span>
+                    </div>
                   </div>
                 </div>
               )}
@@ -825,10 +908,14 @@ export default function PublicMenuPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={orderLoading || cart.length === 0}
+                  disabled={orderLoading || cart.length === 0 || (orderType === 'DELIVERY' && !deliveryEstimate.isServiceable)}
                   className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold shadow-md disabled:opacity-50 flex items-center gap-2"
                 >
-                  {orderLoading ? 'Placing...' : `Place ${orderType === 'DELIVERY' ? 'Delivery' : 'Takeaway'} Order (₹${cartTotal.toFixed(0)})`}
+                  {orderLoading
+                    ? 'Placing...'
+                    : orderType === 'DELIVERY' && !deliveryEstimate.isServiceable
+                    ? 'Out of Delivery Range'
+                    : `Place ${orderType === 'DELIVERY' ? 'Delivery' : 'Takeaway'} Order (₹${grandTotal.toFixed(0)})`}
                 </button>
               </div>
             </form>

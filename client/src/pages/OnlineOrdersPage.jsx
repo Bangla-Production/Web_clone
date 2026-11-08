@@ -6,8 +6,7 @@ import {
 } from 'lucide-react';
 import {
   subscribeToOnlineOrders,
-  updateOnlineOrderStatus,
-  createPorterShipment
+  updateOnlineOrderStatus
 } from '../services/onlineOrderService';
 import { useAuth } from '../context/AuthContext';
 import { useRestaurant } from '../context/RestaurantContext';
@@ -62,7 +61,6 @@ function OrderTypeBadge({ type }) {
 function OrderCard({ order, restaurantId, onUpdated }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
-  const [porterBusy, setPorterBusy] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
   const advanceStatus = async (toStatus) => {
@@ -81,24 +79,6 @@ function OrderCard({ order, restaurantId, onUpdated }) {
   const cancelOrder = async () => {
     if (!window.confirm('Cancel this order?')) return;
     await advanceStatus('CANCELLED');
-  };
-
-  const dispatchPorter = async () => {
-    setPorterBusy(true);
-    try {
-      const result = await createPorterShipment(restaurantId, order.id, {
-        pickup: { lat: 0, lng: 0, address: 'Restaurant address' },
-        drop:   { lat: 0, lng: 0, address: order.deliveryAddress || 'Customer address' },
-        customer: { name: order.customerName || 'Customer', phone: order.customerPhone || '0000000000' },
-        items: (order.items || []).map(it => ({ name: it.name, qty: it.qty || it.quantity || 1 })),
-      });
-      toast.success('Porter delivery dispatched! Tracking: ' + result.trackingUrl);
-      if (onUpdated) onUpdated();
-    } catch (err) {
-      toast.error('Porter dispatch failed: ' + err.message);
-    } finally {
-      setPorterBusy(false);
-    }
   };
 
   const ts = order.createdAt?.toDate?.() || new Date();
@@ -174,13 +154,13 @@ function OrderCard({ order, restaurantId, onUpdated }) {
             )}
           </div>
 
-          {/* Porter tracking */}
-          {order.porterTrackingUrl && (
+          {/* Live tracking link */}
+          {isDelivery && (
             <a
-              href={order.porterTrackingUrl} target="_blank" rel="noopener noreferrer"
+              href={`/track/${order.id}`} target="_blank" rel="noopener noreferrer"
               className="inline-flex items-center gap-2 text-xs font-semibold text-cyan-600 dark:text-cyan-400 hover:underline"
             >
-              <Navigation2 className="w-3.5 h-3.5"/> Track via Porter → {order.porterShipmentId}
+              <Navigation2 className="w-3.5 h-3.5"/> Live Delivery Map & Tracking →
             </a>
           )}
 
@@ -208,7 +188,7 @@ function OrderCard({ order, restaurantId, onUpdated }) {
             </button>
           )}
 
-          {/* From PREPARING: branch to Ready (Takeaway) or Dispatch Porter (Delivery) */}
+          {/* From PREPARING: branch to Ready (Takeaway) or Out for Delivery */}
           {order.status === 'PREPARING' && !isDelivery && (
             <button
               onClick={() => advanceStatus('READY')}
@@ -218,22 +198,13 @@ function OrderCard({ order, restaurantId, onUpdated }) {
               <Zap className="w-3.5 h-3.5"/> Mark Ready for Pickup
             </button>
           )}
-          {order.status === 'PREPARING' && isDelivery && !order.porterShipmentId && (
-            <button
-              onClick={dispatchPorter}
-              disabled={porterBusy}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-600 text-white text-xs font-bold shadow transition-all disabled:opacity-60"
-            >
-              <Truck className="w-3.5 h-3.5"/> {porterBusy ? 'Dispatching...' : 'Dispatch via Porter'}
-            </button>
-          )}
-          {order.status === 'PREPARING' && isDelivery && order.porterShipmentId && (
+          {order.status === 'PREPARING' && isDelivery && (
             <button
               onClick={() => advanceStatus('OUT_FOR_DELIVERY')}
               disabled={busy}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold shadow transition-all disabled:opacity-60"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow transition-all disabled:opacity-60"
             >
-              <Bike className="w-3.5 h-3.5"/> Mark Out for Delivery
+              <Bike className="w-3.5 h-3.5"/> Out for Delivery
             </button>
           )}
 
@@ -295,7 +266,7 @@ export default function OnlineOrdersPage() {
               <span className="px-2.5 py-0.5 rounded-full bg-blue-500 text-white text-xs font-bold animate-pulse">{newCount} new</span>
             )}
           </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Takeaway & Delivery — Porter integrated</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Takeaway & Live Delivery Management</p>
         </div>
         {loading && <RefreshCw className="w-5 h-5 text-slate-400 animate-spin"/>}
       </div>

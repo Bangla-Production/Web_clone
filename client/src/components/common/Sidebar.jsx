@@ -74,6 +74,14 @@ export default function Sidebar({ isOpen, setIsOpen }) {
           badge: 'NEW',
           badgeColor: 'bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/40'
         },
+        {
+          label: 'Delivery Management',
+          path: '/delivery-management',
+          icon: Bike,
+          allowed: operationalRoles,
+          badge: 'GPS',
+          badgeColor: 'bg-cyan-500/20 text-cyan-600 dark:text-cyan-300 border border-cyan-500/40'
+        },
       ]
     },
     {
