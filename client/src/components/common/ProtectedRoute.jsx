@@ -10,7 +10,7 @@ export default function ProtectedRoute({ allowedRoles }) {
       <div className="flex h-screen w-screen items-center justify-center bg-slate-950 text-emerald-400">
         <div className="flex flex-col items-center space-y-4">
           <div className="w-10 h-10 border-4 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin"></div>
-          <p className="text-sm font-medium tracking-wide text-slate-400">Loading RestoPulse...</p>
+          <p className="text-sm font-medium tracking-wide text-slate-400">Loading Abar Khabo...</p>
         </div>
       </div>
     );

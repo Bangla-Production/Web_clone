@@ -169,7 +169,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
             </div>
             <div className="truncate">
               <h2 className="font-black text-sm text-slate-900 dark:text-white truncate tracking-tight font-display">
-                {restaurant?.name || 'RestoPulse POS'}
+                {restaurant?.name || 'Abar Khabo POS'}
               </h2>
               <div className="flex items-center space-x-1.5 mt-0.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>

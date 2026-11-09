@@ -929,7 +929,7 @@ export default function PublicMenuPage() {
       {/* Footer */}
       <footer className="max-w-4xl mx-auto px-4 mt-12 text-center text-xs text-slate-500 space-y-1">
         <p>Prices are exclusive of applicable taxes ({restaurant?.taxRate || 5}% {restaurant?.taxName || 'GST'}).</p>
-        <p className="text-[10px]">RestoPulse Cloud Digital Dining Menu</p>
+        <p className="text-[10px]">Abar Khabo Cloud Digital Dining Menu</p>
       </footer>
     </div>
   );

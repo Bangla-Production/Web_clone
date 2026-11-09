@@ -81,7 +81,7 @@ export default function DeliveryPartnerAuthPage() {
           <Bike className="w-8 h-8" />
         </div>
         <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-          RestoPulse Delivery Partner
+          Abar Khabo Delivery Partner
         </h2>
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
           {isRegister ? 'Register your vehicle & start delivering' : 'Sign in to access your rider dashboard'}

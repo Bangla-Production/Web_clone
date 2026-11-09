@@ -48,6 +48,10 @@ export default function LoginPage() {
   const toast = useToast();
   const navigate = useNavigate();
 
+  useEffect(() => {
+    document.title = 'Abar Khabo — Staff & Admin Login';
+  }, []);
+
   const handleNavigationByUser = (userObj) => {
     const role = userObj?.role;
     if (role === 'super_admin') {
@@ -157,7 +161,7 @@ export default function LoginPage() {
           <div className="space-y-3">
             <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-black tracking-wider uppercase">
               <Zap className="w-3.5 h-3.5 fill-current animate-bounce" />
-              <span>Commercial Petpooja Cloud POS</span>
+              <span>Abar Khabo Cloud POS</span>
             </div>
 
             <div className="flex items-center justify-center lg:justify-start space-x-3">
@@ -166,10 +170,10 @@ export default function LoginPage() {
               </div>
               <div>
                 <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-slate-900 dark:text-white font-display">
-                  {restaurant?.name || 'RestoPulse POS'}
+                  Abar Khabo
                 </h1>
                 <p className="text-xs text-amber-600 dark:text-amber-400 font-bold tracking-wide">
-                  High-Speed Cloud Billing & Kitchen Dispatch
+                  {restaurant?.name && restaurant.name !== 'A' && restaurant.name !== 'Abar Khabo' ? `${restaurant.name} • ` : ''}High-Speed Cloud Billing & Kitchen Dispatch
                 </p>
               </div>
             </div>
@@ -466,16 +470,13 @@ export default function LoginPage() {
                 <KeyRound className="w-4 h-4 text-amber-500" />
                 <span className="text-[11px]">Multi-branch POS Station Ready</span>
               </div>
-              {lastRestaurantId && (
-                <Link
-                  to={`/menu/${lastRestaurantId}`}
-                  target="_blank"
-                  className="text-amber-600 dark:text-amber-400 hover:underline font-bold text-[11px] flex items-center space-x-1"
-                >
-                  <span>QR Menu</span>
-                  <span>↗</span>
-                </Link>
-              )}
+              <Link
+                to="/"
+                className="text-amber-600 dark:text-amber-400 hover:underline font-bold text-[11px] flex items-center space-x-1"
+              >
+                <span>Abar Khabo Food Portal</span>
+                <span>↗</span>
+              </Link>
             </div>
           </div>
         </div>

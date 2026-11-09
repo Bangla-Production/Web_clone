@@ -71,7 +71,7 @@ export default function Header({ setIsSidebarOpen }) {
             <div>
               <div className="flex items-center space-x-2">
                 <span className="text-xs sm:text-sm font-black tracking-tight text-slate-900 dark:text-white truncate max-w-[160px] sm:max-w-xs font-display">
-                  {restaurant?.name || 'RestoPulse POS'}
+                  {restaurant?.name || 'Abar Khabo POS'}
                 </span>
                 <span className="hidden md:inline-block px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 font-mono">
                   Station 01 • Main
