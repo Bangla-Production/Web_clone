@@ -43,7 +43,9 @@ export default function ServeAlertListener() {
       fresh.forEach((a) => seenRef.current.add(a.alertId));
 
       if (!isServeSoundMuted()) serveAudio.playServedChime();
-      toast.info(`Kitchen served: Table ${fresh.map((a) => a.tableNumber).join(', ')}`);
+      const tablesList = fresh.map((a) => a.tableNumber).filter(Boolean).join(', ');
+      const summary = fresh[0]?.itemsSummary ? ` (${fresh[0].itemsSummary})` : '';
+      toast.info(`🔔 Food ready to serve: Table ${tablesList}${summary}`);
     });
 
     return () => unsubscribe();

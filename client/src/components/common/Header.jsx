@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, Clock, Building, Maximize2, Minimize2, Sparkles, Wifi, ShieldCheck, User, Utensils, Sun, Moon } from 'lucide-react';
+import { Menu, Clock, Building, Maximize2, Minimize2, Sparkles, Wifi, ShieldCheck, User, Utensils, Sun, Moon, LogOut } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useTheme } from '../../context/ThemeContext';
 import { getAllRestaurants } from '../../services/firestoreService';
 
 export default function Header({ setIsSidebarOpen }) {
-  const { user, isSuperAdmin, activeRestaurantId, selectActiveRestaurant } = useAuth();
+  const { user, isSuperAdmin, activeRestaurantId, selectActiveRestaurant, logout } = useAuth();
   const { restaurant } = useRestaurant();
   const { theme, isDark, toggleTheme } = useTheme();
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -138,6 +138,21 @@ export default function Header({ setIsSidebarOpen }) {
           title={isFullscreen ? 'Exit Fullscreen' : 'Enter POS Fullscreen'}
         >
           {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+        </button>
+
+        {/* Staff Logout Button */}
+        <button
+          onClick={async () => {
+            if (window.confirm('Are you sure you want to log out of your staff session?')) {
+              await logout();
+              window.location.href = '/login';
+            }
+          }}
+          className="pos-btn-touch flex items-center space-x-1.5 px-3 py-1.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60 hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-all text-xs font-black shadow-sm"
+          title="Log Out Staff Session"
+        >
+          <LogOut className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Logout</span>
         </button>
       </div>
     </header>

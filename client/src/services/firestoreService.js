@@ -1230,7 +1230,7 @@ export async function updateKOTStatus(restaurantId, kotId, newStatus, orderId = 
     });
 
     // If orderId is provided, also sync parent order status if appropriate
-    if (orderId && ['PREPARING', 'READY'].includes(newStatus)) {
+    if (orderId && ['PREPARING', 'READY', 'SERVED'].includes(newStatus)) {
       const orderDocRef = doc(db, 'restaurants', restaurantId, 'orders', orderId);
       await updateDoc(orderDocRef, {
         orderStatus: newStatus,
@@ -1238,8 +1238,8 @@ export async function updateKOTStatus(restaurantId, kotId, newStatus, orderId = 
       });
     }
 
-    // Kitchen tapped "Dismiss / Served": tell the waiter who took this order.
-    if (newStatus === 'SERVED') {
+    // Kitchen marked food 'READY' or 'COOKED': send immediate alert to floor/waiters!
+    if (['READY', 'COOKED', 'SERVED'].includes(newStatus)) {
       await raiseServeAlert(restaurantId, kotDocRef);
     }
 
@@ -1274,14 +1274,22 @@ async function raiseServeAlert(restaurantId, kotDocRef) {
     const kotKey = kot.kotNumber || kotDocRef.id;
     const kots = prevKots.includes(kotKey) ? prevKots : [...prevKots, kotKey];
 
+    const itemsSummary = Array.isArray(kot.items)
+      ? kot.items.map((it) => `${it.quantity || 1}x ${it.name}`).join(', ')
+      : '';
+
     await updateDoc(tableRef, {
       serveAlert: {
         alertId: kotDocRef.id,
+        kotId: kotDocRef.id,
         kotNumber: kot.kotNumber || null,
         orderNumber: kot.orderNumber || null,
         tableNumber: kot.tableNumber || null,
         waiterId: kot.waiterId || null,
         waiterName: kot.waiterName || null,
+        itemsSummary,
+        items: (kot.items || []).map((it) => ({ name: it.name, quantity: it.quantity || 1 })),
+        readyAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         count: pending,
         at: serverTimestamp()
       },
@@ -1289,6 +1297,44 @@ async function raiseServeAlert(restaurantId, kotDocRef) {
     });
   } catch (error) {
     console.warn('raiseServeAlert failed (kitchen action still saved):', error);
+  }
+}
+
+/**
+ * Waiter marks food as 'Served' from table card:
+ * 1. Updates KOT status to 'SERVED'
+ * 2. Syncs order status to 'SERVED' if orderId provided
+ * 3. Clears the active serve alert on the table
+ */
+export async function markTableKOTServed(restaurantId, tableId, kotId = null, orderId = null) {
+  try {
+    if (kotId) {
+      const kotDocRef = doc(db, 'restaurants', restaurantId, 'kots', kotId);
+      await updateDoc(kotDocRef, {
+        status: 'SERVED',
+        servedAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+    }
+    if (orderId) {
+      const orderDocRef = doc(db, 'restaurants', restaurantId, 'orders', orderId);
+      await updateDoc(orderDocRef, {
+        orderStatus: 'SERVED',
+        updatedAt: serverTimestamp()
+      });
+    }
+    await updateDoc(doc(db, 'restaurants', restaurantId, 'tables', tableId), {
+      serveAlert: null
+    });
+    return true;
+  } catch (error) {
+    console.error('markTableKOTServed error:', error);
+    try {
+      await updateDoc(doc(db, 'restaurants', restaurantId, 'tables', tableId), {
+        serveAlert: null
+      });
+    } catch (_) {}
+    return false;
   }
 }
 

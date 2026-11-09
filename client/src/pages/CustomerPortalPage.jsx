@@ -13,6 +13,7 @@ import LocationPermissionModal from '../components/delivery/LocationPermissionMo
 import AddressSelectorModal from '../components/delivery/AddressSelectorModal';
 import { useCustomerAuth } from '../context/CustomerAuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { validateIndianPhone } from '../utils/phoneValidation';
 
 // ─── Auth Panel (login / register) ───────────────────────────────────────────
 
@@ -31,13 +32,23 @@ function AuthPanel({ onClose }) {
   const submit = async (e) => {
     e.preventDefault();
     setError(''); setSuccess('');
+
+    if (mode === 'register') {
+      const phoneCheck = validateIndianPhone(phone);
+      if (!phoneCheck.isValid) {
+        setError(phoneCheck.message);
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       if (mode === 'login') {
         await login(email, password);
         onClose();
       } else if (mode === 'register') {
-        await register({ name, email, phone, password });
+        const phoneCheck = validateIndianPhone(phone);
+        await register({ name, email, phone: phoneCheck.cleaned, password });
         setSuccess('Account created! Check your email to verify, then log in.');
         setMode('login');
       } else {
@@ -58,13 +69,13 @@ function AuthPanel({ onClose }) {
 
         <div className="flex items-center gap-2 mb-5">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center">
-            <User className="w-5 h-5 text-white" />
+            <Utensils className="w-5 h-5 text-white" />
           </div>
           <div>
             <h2 className="font-extrabold text-slate-900 dark:text-white text-lg leading-none">
               {mode === 'login' ? 'Customer Login' : mode === 'register' ? 'Create Account' : 'Reset Password'}
             </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">RestoPulse Customer Portal</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Abar Khabo Customer Portal</p>
           </div>
         </div>
 
@@ -187,13 +198,21 @@ function CustomerOrdersModal({ onClose, defaultPhone }) {
           </div>
         </div>
 
-        <form onSubmit={(e) => { e.preventDefault(); fetchOrders(phone); }} className="flex gap-2 mb-4">
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          const check = validateIndianPhone(phone);
+          if (!check.isValid) {
+            alert(check.message);
+            return;
+          }
+          fetchOrders(check.cleaned);
+        }} className="flex gap-2 mb-4">
           <div className="relative flex-1">
             <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="tel"
               className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-amber-400"
-              placeholder="Enter mobile phone number to find orders"
+              placeholder="Enter 10-digit mobile number"
               value={phone}
               onChange={e => setPhone(e.target.value)}
               required
@@ -357,6 +376,7 @@ export default function CustomerPortalPage() {
   const [showAddressSelector, setShowAddressSelector] = useState(false);
 
   useEffect(() => {
+    document.title = 'Abar Khabo — Online Food Delivery & Takeaway';
     getAllRestaurants()
       .then((list) => setRestaurants(list.filter(r => r.status !== 'suspended')))
       .catch(console.error)
@@ -383,8 +403,8 @@ export default function CustomerPortalPage() {
             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow">
               <Utensils className="w-4 h-4 text-white" />
             </div>
-            <span className="font-extrabold text-lg tracking-tight text-slate-900 dark:text-white">RestoPulse</span>
-            <span className="hidden md:inline text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-700">Customer Portal</span>
+            <span className="font-extrabold text-lg tracking-tight text-slate-900 dark:text-white">Abar Khabo</span>
+            <span className="hidden md:inline text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-700">Food Discovery & Delivery</span>
           </div>
 
           {/* Location Delivery Selector Pill */}

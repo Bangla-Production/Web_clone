@@ -30,6 +30,8 @@ import Modal from '../components/common/Modal';
 import { placeOnlineOrder } from '../services/onlineOrderService';
 import { calculateDeliveryEstimate, initDeliveryTracking } from '../services/deliveryService';
 import { getSavedCustomerLocation } from '../services/locationService';
+import CheckoutLocationSection from '../components/delivery/CheckoutLocationSection';
+import { validateIndianPhone } from '../utils/phoneValidation';
 import { ShoppingBag, Bike, Package, Plus, Minus, X, Truck, Compass, ArrowRight, Navigation2, CheckCircle } from 'lucide-react';
 
 export default function PublicMenuPage() {
@@ -106,10 +108,22 @@ export default function PublicMenuPage() {
 
   const handlePlaceOrder = async (e) => {
     e.preventDefault();
-    if (!orderName || !orderPhone) return;
+    if (orderLoading) return; // Prevent double click
+    if (!orderName || !orderPhone) {
+      toast.error('Please enter your name and phone number.');
+      return;
+    }
+
+    // Strict 10-digit Indian phone validation
+    const phoneCheck = validateIndianPhone(orderPhone);
+    if (!phoneCheck.isValid) {
+      toast.error(phoneCheck.message);
+      return;
+    }
+
     if (orderType === 'DELIVERY') {
-      if (!orderAddress) {
-        toast.error('Please enter a delivery address.');
+      if (!orderAddress || !orderAddress.trim()) {
+        toast.error('Please enter or detect your delivery address.');
         return;
       }
       if (!deliveryEstimate.isServiceable) {
@@ -117,16 +131,17 @@ export default function PublicMenuPage() {
         return;
       }
     }
+
     setOrderLoading(true);
     try {
       const result = await placeOnlineOrder(activeId, {
-        customerName: orderName,
-        customerPhone: orderPhone,
-        deliveryAddress: orderType === 'DELIVERY' ? orderAddress : null,
+        customerName: orderName.trim(),
+        customerPhone: phoneCheck.cleaned,
+        deliveryAddress: orderType === 'DELIVERY' ? orderAddress.trim() : (restaurant?.address ? `Takeaway: ${restaurant.address}` : 'Takeaway - Self Pickup at Counter'),
         customerCoordinates: customerLoc ? { lat: customerLoc.lat, lng: customerLoc.lng } : null,
         deliveryFee: finalDeliveryFee,
         estimatedDeliveryMinutes: deliveryEstimate.estimatedTimeMins,
-        notes: orderNotes,
+        notes: (orderNotes || '').trim(),
         orderType,
         items: cart.map(({ item, qty }) => ({ id: item.id, name: item.name, price: item.price, qty })),
         subtotal: cartTotal,
@@ -151,8 +166,8 @@ export default function PublicMenuPage() {
       setCart([]);
       toast.success('Your order has been placed successfully!');
     } catch (err) {
-      console.error('Order error:', err);
-      toast.error('Could not place order. Please try again.');
+      console.error('Order placement error:', err);
+      toast.error(err?.message || 'Could not place order. Please try again.');
     } finally {
       setOrderLoading(false);
     }
@@ -243,10 +258,16 @@ export default function PublicMenuPage() {
     e.preventDefault();
     if (!guestName || !guestPhone) return;
 
+    const phoneCheck = validateIndianPhone(guestPhone);
+    if (!phoneCheck.isValid) {
+      toast.error(phoneCheck.message);
+      return;
+    }
+
     try {
       await createReservation(activeId, {
-        customerName: guestName,
-        customerPhone: guestPhone,
+        customerName: guestName.trim(),
+        customerPhone: phoneCheck.cleaned,
         partySize: parseInt(guestCount, 10) || 2,
         reservationDate: bookDate,
         reservationTime: bookTime,
@@ -290,8 +311,8 @@ export default function PublicMenuPage() {
               ? 'This menu link is incomplete. Please scan the restaurant\'s QR code or use the link they shared.'
               : 'We could not find this restaurant. Please check the link and try again.'}
           </p>
-          <Link to="/login" className="inline-block text-xs font-bold text-emerald-600 dark:text-emerald-400 underline">
-            Staff login
+          <Link to="/" className="inline-block text-xs font-bold text-emerald-600 dark:text-emerald-400 underline">
+            Browse all restaurants on Abar Khabo
           </Link>
         </div>
       </div>
@@ -371,11 +392,12 @@ export default function PublicMenuPage() {
             <span>Book Table</span>
           </button>
           <Link
-            to="/login"
+            to="/"
             className="pos-btn-touch flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-pos-dark hover:bg-pos-surface text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs font-bold border border-pos-border transition-colors shadow-sm"
+            title="Browse all restaurants"
           >
-            <Lock className="w-3 h-3 text-emerald-500 dark:text-emerald-400" />
-            <span>Staff</span>
+            <Utensils className="w-3 h-3 text-amber-500" />
+            <span className="hidden sm:inline">Abar Khabo</span>
           </Link>
         </div>
       </header>
@@ -656,12 +678,13 @@ export default function PublicMenuPage() {
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-300 mb-1">Mobile Phone Number *</label>
+                <label className="block font-semibold text-slate-300 mb-1">Mobile Phone Number (10 digits) *</label>
                 <input
                   type="tel"
                   required
+                  maxLength={10}
                   value={guestPhone}
-                  onChange={(e) => setGuestPhone(e.target.value)}
+                  onChange={(e) => setGuestPhone(e.target.value.replace(/\D/g, ''))}
                   placeholder="e.g. 9876543210"
                   className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-emerald-500"
                 />
@@ -780,35 +803,16 @@ export default function PublicMenuPage() {
                 ))}
               </div>
 
-              {orderType === 'DELIVERY' && (
-                deliveryEstimate.isServiceable ? (
-                  <div className="p-3 rounded-xl bg-slate-800/80 border border-slate-700/80 space-y-1.5 text-[11px]">
-                    <div className="flex items-center justify-between text-slate-300">
-                      <span className="flex items-center gap-1.5 font-semibold text-cyan-400">
-                        <Bike className="w-3.5 h-3.5" /> Est. Distance & ETA
-                      </span>
-                      <span className="font-medium text-slate-200">{deliveryEstimate.distanceKm} km · ~{deliveryEstimate.estimatedTimeMins} mins</span>
-                    </div>
-                    <div className="flex items-center justify-between text-slate-400">
-                      <span>Delivery Fee:</span>
-                      <span className="font-bold text-white">
-                        {deliveryEstimate.isFree ? (
-                          <span className="text-emerald-400 font-black">FREE (Order ₹{deliveryEstimate.freeAbove}+)</span>
-                        ) : (
-                          `₹${deliveryEstimate.fee}`
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-800 text-rose-300 text-[11px] space-y-1">
-                    <p className="font-bold">Delivery Unavailable for this location</p>
-                    <p className="text-[10px] text-rose-400">
-                      Distance ({deliveryEstimate.distanceKm} km) exceeds restaurant delivery radius ({deliveryEstimate.maxRadius} km). Please switch to Takeaway.
-                    </p>
-                  </div>
-                )
-              )}
+              {/* Checkout Location & Serviceability (Delivery / Takeaway) */}
+              <CheckoutLocationSection
+                orderType={orderType}
+                restaurant={restaurant}
+                deliveryAddress={orderAddress}
+                onAddressChange={setOrderAddress}
+                customerLoc={customerLoc}
+                onLocationDetected={setCustomerLoc}
+                deliveryEstimate={deliveryEstimate}
+              />
 
               {/* Cart Items */}
               {cart.length === 0 ? (
@@ -863,38 +867,37 @@ export default function PublicMenuPage() {
                 </div>
               )}
 
-              {/* Customer Details */}
+              {/* Customer Contact Details */}
               <div className="space-y-2">
                 <input
                   required
                   value={orderName}
                   onChange={e => setOrderName(e.target.value)}
-                  placeholder="Your Name *"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                  placeholder="Your Full Name *"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white text-xs focus:outline-none focus:border-indigo-500"
                 />
-                <input
-                  required
-                  type="tel"
-                  value={orderPhone}
-                  onChange={e => setOrderPhone(e.target.value)}
-                  placeholder="Phone Number *"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-indigo-500"
-                />
-                {orderType === 'DELIVERY' && (
+                <div className="relative">
                   <input
                     required
-                    value={orderAddress}
-                    onChange={e => setOrderAddress(e.target.value)}
-                    placeholder="Full Delivery Address (Street, Building, Landmark) *"
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                    type="tel"
+                    maxLength={10}
+                    value={orderPhone}
+                    onChange={e => setOrderPhone(e.target.value.replace(/\D/g, ''))}
+                    placeholder="10-digit Mobile Number (e.g. 9876543210) *"
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white text-xs focus:outline-none focus:border-indigo-500"
                   />
-                )}
+                  {orderPhone && orderPhone.length === 10 && /^[6-9]/.test(orderPhone) && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-400 text-[11px] font-bold">
+                      ✓ Valid
+                    </span>
+                  )}
+                </div>
                 <textarea
                   rows={2}
                   value={orderNotes}
                   onChange={e => setOrderNotes(e.target.value)}
                   placeholder="Cooking / delivery notes (optional)"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white text-xs focus:outline-none focus:border-indigo-500"
                 />
               </div>
 

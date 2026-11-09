@@ -24,7 +24,8 @@ import {
   updateTableStatus,
   deleteTable,
   requestBillForTable,
-  clearServeAlert
+  clearServeAlert,
+  markTableKOTServed
 } from '../services/firestoreService';
 import { serveAudio } from '../services/thermalPrintService';
 import { visibleServeAlerts, isServeSoundMuted, setServeSoundMuted } from '../utils/serveAlerts';
@@ -121,6 +122,16 @@ export default function TablesPage() {
 
   const handleDismissAlert = (tableId) => clearServeAlert(activeRestaurantId, tableId);
   const handleDismissAll = () => serveAlerts.forEach((a) => clearServeAlert(activeRestaurantId, a.tableId));
+
+  const handleMarkServed = async (tableId, kotId, orderId) => {
+    try {
+      await markTableKOTServed(activeRestaurantId, tableId, kotId, orderId);
+      toast.success('Food marked as served!');
+    } catch (err) {
+      console.error('handleMarkServed error:', err);
+      toast.error('Failed to update served status.');
+    }
+  };
 
   const handleToggleSound = () => {
     const next = !soundMuted;
@@ -276,8 +287,8 @@ export default function TablesPage() {
                 {serveAlert && (
                   <button
                     type="button"
-                    onClick={() => handleDismissAlert(table.id)}
-                    title="Food is ready - tap to dismiss"
+                    onClick={() => handleMarkServed(table.id, serveAlert.kotId, serveAlert.orderNumber)}
+                    title="Food is ready - tap to mark served"
                     className="absolute -top-3 -right-3 z-10 flex items-center space-x-1.5 pl-2 pr-1.5 py-1 rounded-full bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/40 border-2 border-white dark:border-slate-900 animate-bounce"
                   >
                     <BellRing className="w-4 h-4 stroke-[2.5]" />
@@ -313,16 +324,34 @@ export default function TablesPage() {
                   </div>
 
                   {serveAlert && (
-                    <div className="mt-3 px-3 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-xs font-bold text-emerald-700 dark:text-emerald-300 flex items-center justify-between gap-2">
-                      <span className="flex items-center space-x-1.5">
-                        <BellRing className="w-3.5 h-3.5 animate-pulse" />
-                        <span>Food ready to serve</span>
-                      </span>
-                      <span className="font-num">
-                        {serveAlert.totalKots > 0
-                          ? `${Math.min(serveAlert.servedKots, serveAlert.totalKots)}/${serveAlert.totalKots} served`
-                          : `${serveAlert.servedKots} served`}
-                      </span>
+                    <div className="mt-3 p-3 rounded-2xl bg-emerald-500/15 border-2 border-emerald-500/60 text-xs space-y-2 shadow-sm">
+                      <div className="flex items-center justify-between font-black text-emerald-800 dark:text-emerald-300">
+                        <span className="flex items-center space-x-1.5">
+                          <BellRing className="w-3.5 h-3.5 animate-bounce text-emerald-600 dark:text-emerald-400" />
+                          <span>Food Ready to Serve!</span>
+                        </span>
+                        {serveAlert.readyAt && (
+                          <span className="text-[10px] font-mono font-medium text-slate-500 dark:text-slate-400">
+                            {serveAlert.readyAt}
+                          </span>
+                        )}
+                      </div>
+                      {serveAlert.itemsSummary && (
+                        <p className="text-[11px] text-slate-700 dark:text-slate-200 font-medium line-clamp-2">
+                          🍽️ {serveAlert.itemsSummary}
+                        </p>
+                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleMarkServed(table.id, serveAlert.kotId, serveAlert.orderNumber);
+                        }}
+                        className="w-full py-1.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-md shadow-emerald-600/30 flex items-center justify-center space-x-1.5 transition-all pos-btn-touch mt-1"
+                      >
+                        <Check className="w-3.5 h-3.5 stroke-[3]" />
+                        <span>Served</span>
+                      </button>
                     </div>
                   )}
 

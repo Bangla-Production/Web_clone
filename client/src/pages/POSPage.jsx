@@ -41,6 +41,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useRestaurant } from '../context/RestaurantContext';
 import { useToast } from '../context/ToastContext';
+import { validateIndianPhone } from '../utils/phoneValidation';
 import InvoiceModal from '../components/invoice/InvoiceModal';
 
 export default function POSPage() {
@@ -441,6 +442,14 @@ export default function POSPage() {
   // 4. Complete Payment & Atomic Table Release
   const handleCompleteSettlement = async () => {
     if (isSubmitting) return;
+
+    if (customerPhone && customerPhone.trim()) {
+      const phoneValidation = validateIndianPhone(customerPhone, false);
+      if (!phoneValidation.isValid) {
+        toast.error(phoneValidation.message);
+        return;
+      }
+    }
 
     try {
       setIsSubmitting(true);

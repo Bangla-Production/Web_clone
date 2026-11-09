@@ -50,7 +50,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
           label: 'Kitchen Display (KDS)',
           path: '/kitchen',
           icon: ChefHat,
-          allowed: ['super_admin', 'restaurant_admin', 'staff', 'waiter', 'kitchen', 'cashier'],
+          allowed: ['super_admin', 'restaurant_admin', 'staff', 'kitchen', 'cashier'],
           badge: 'LIVE',
           badgeColor: 'bg-sky-500/20 text-sky-600 dark:text-sky-300 border border-sky-500/40'
         },

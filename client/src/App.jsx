@@ -78,6 +78,7 @@ function RootRedirect() {
 export default function App() {
   const allRoles = ['super_admin', 'restaurant_admin', 'owner', 'staff', 'waiter', 'cashier', 'kitchen'];
   const operationalRoles = ['super_admin', 'restaurant_admin', 'owner', 'staff', 'waiter', 'cashier'];
+  const kitchenRoles = ['super_admin', 'restaurant_admin', 'owner', 'kitchen'];
   const cashierAndAdmin = ['super_admin', 'restaurant_admin', 'owner', 'cashier', 'staff'];
   const adminOnly = ['super_admin', 'restaurant_admin', 'owner'];
 
@@ -97,6 +98,7 @@ export default function App() {
                     <Route path="/menu/:restaurantId" element={<PublicMenuPage />} />
 
                     {/* Customer Portal — browse all restaurants, login/register */}
+                    <Route path="/" element={<CustomerPortalPage />} />
                     <Route path="/customer" element={<CustomerPortalPage />} />
                     <Route path="/order" element={<CustomerPortalPage />} />
                     <Route path="/order/:restaurantId" element={<PublicMenuPage />} />
@@ -108,9 +110,6 @@ export default function App() {
                     <Route path="/rider/login" element={<DeliveryPartnerAuthPage />} />
                     <Route path="/rider" element={<DeliveryPartnerDashboardPage />} />
 
-                    {/* Root Redirect */}
-                    <Route path="/" element={<RootRedirect />} />
-
                     {/* ── Super Admin ──────────────────────────────────────────── */}
                     <Route element={<ProtectedRoute allowedRoles={['super_admin']} />}>
                       <Route path="/super-admin" element={<SuperAdminPage />} />
@@ -120,8 +119,10 @@ export default function App() {
                     <Route element={<ProtectedRoute allowedRoles={allRoles} />}>
                       <Route element={<AppLayout />}>
 
-                        {/* Kitchen Display (All authorized roles) */}
-                        <Route path="/kitchen" element={<KitchenPage />} />
+                        {/* Kitchen Display (Strictly Kitchen & Admins — Waiters Forbidden) */}
+                        <Route element={<ProtectedRoute allowedRoles={kitchenRoles} />}>
+                          <Route path="/kitchen" element={<KitchenPage />} />
+                        </Route>
 
                         {/* POS & Table Floor (Waiters, Cashiers, Admins) */}
                         <Route element={<ProtectedRoute allowedRoles={operationalRoles} />}>

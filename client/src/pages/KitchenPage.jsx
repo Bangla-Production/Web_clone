@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   ChefHat,
   Clock,
@@ -12,7 +13,8 @@ import {
   Flame,
   AlertTriangle,
   Sparkles,
-  UtensilsCrossed
+  UtensilsCrossed,
+  LogOut
 } from 'lucide-react';
 import {
   subscribeToKitchenKOTs,
@@ -37,9 +39,18 @@ export default function KitchenPage() {
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [listenError, setListenError] = useState('');
 
-  const { activeRestaurantId, user } = useAuth();
+  const { activeRestaurantId, user, logout } = useAuth();
+  const navigate = useNavigate();
   const toast = useToast();
   const targetRestId = activeRestaurantId || user?.restaurantId || 'spice-haven';
+
+  // Waiter restriction: waiters cannot access kitchen display station
+  useEffect(() => {
+    if (user && user.role === 'waiter') {
+      toast.error('Waiters do not have access to the Kitchen Display System.');
+      navigate('/pos', { replace: true });
+    }
+  }, [user, navigate, toast]);
 
   // Track known KOT IDs to play audio only on genuinely NEW incoming KOTs
   const knownKotIdsRef = useRef(new Set());
@@ -272,6 +283,24 @@ export default function KitchenPage() {
           >
             <Bell className="w-3.5 h-3.5 text-amber-500 animate-pulse-subtle" />
             <span>Test Chime</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await logout();
+                toast.success('Kitchen staff logged out successfully.');
+                navigate('/login');
+              } catch (e) {
+                console.error('Logout error:', e);
+              }
+            }}
+            className="px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800 font-bold flex items-center space-x-1.5 transition-all pos-btn-touch"
+            title="Log Out Staff"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Logout</span>
           </button>
         </div>
       </div>

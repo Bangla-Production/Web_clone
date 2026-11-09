@@ -116,6 +116,11 @@ service cloud.firestore {
       match /customers/{custId} {
         allow read, write: if isAuthenticated();
       }
+
+      match /onlineOrders/{orderId} {
+        allow read, create, update: if true;
+        allow delete: if isAuthenticated();
+      }
     }
 
     // 3. Online Orders & Food Delivery (Customer / Restaurant / Delivery Partner)
