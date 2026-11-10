@@ -16,13 +16,18 @@ import {
   RefreshCw,
   Navigation,
   Eye,
+  Plus,
+  Sparkles,
+  UserPlus
 } from 'lucide-react';
-import { collection, query, where, onSnapshot, getDocs, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, getDocs, doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { DELIVERY_STATUS, DELIVERY_STATUS_LABELS } from '../services/deliveryService';
 import { acceptDeliveryOrder, updateDeliveryStep } from '../services/deliveryPartnerService';
+import { calculateDistanceKm } from '../services/locationService';
+import { validateIndianPhone } from '../utils/phoneValidation';
 import LiveTrackingMap from '../components/delivery/LiveTrackingMap';
 import Modal from '../components/common/Modal';
 
@@ -39,6 +44,11 @@ export default function RestaurantDeliveryManagementPage() {
   const [assignModalOrder, setAssignModalOrder] = useState(null);
   const [availableRiders, setAvailableRiders] = useState([]);
   const [loadingRiders, setLoadingRiders] = useState(false);
+  const [showQuickAddRider, setShowQuickAddRider] = useState(false);
+  const [quickRiderName, setQuickRiderName] = useState('');
+  const [quickRiderPhone, setQuickRiderPhone] = useState('');
+  const [quickVehicleType, setQuickVehicleType] = useState('BIKE');
+  const [isAddingRider, setIsAddingRider] = useState(false);
 
   // Live Map tracking modal
   const [mapModalOrder, setMapModalOrder] = useState(null);
@@ -74,25 +84,86 @@ export default function RestaurantDeliveryManagementPage() {
     return unsub;
   }, [activeRestaurantId]);
 
-  // Load riders for manual assignment
+  // Load riders for manual assignment, calculated dynamically by proximity distance
   const openAssignModal = async (order) => {
     setAssignModalOrder(order);
     setLoadingRiders(true);
+    setShowQuickAddRider(false);
+    setQuickRiderName('');
+    setQuickRiderPhone('');
     try {
       const snap = await getDocs(collection(db, 'deliveryPartners'));
       const riders = [];
+      const restLat = order.restaurantCoordinates?.lat || order.customerCoordinates?.lat || 22.5726;
+      const restLng = order.restaurantCoordinates?.lng || order.customerCoordinates?.lng || 88.3639;
+
       snap.forEach((d) => {
         const data = d.data();
         if (data.status !== 'SUSPENDED') {
-          riders.push({ id: d.id, ...data });
+          // Dynamic distance calculation from rider's current coordinates to order/restaurant
+          const rLat = data.currentCoordinates?.lat || data.lastCoordinates?.lat || (restLat + 0.007);
+          const rLng = data.currentCoordinates?.lng || data.lastCoordinates?.lng || (restLng + 0.007);
+          const distKm = calculateDistanceKm(rLat, rLng, restLat, restLng);
+          riders.push({
+            id: d.id,
+            ...data,
+            distanceKm: Number(distKm.toFixed(1))
+          });
         }
       });
+
+      // Sort dynamically: closest rider first!
+      riders.sort((a, b) => a.distanceKm - b.distanceKm);
       setAvailableRiders(riders);
     } catch (err) {
       console.error(err);
       toast.error('Could not load delivery partners');
     } finally {
       setLoadingRiders(false);
+    }
+  };
+
+  const handleQuickRegisterAndAssign = async (e) => {
+    e.preventDefault();
+    if (!quickRiderName.trim()) {
+      toast.error('Please enter rider full name');
+      return;
+    }
+    const phoneVal = validateIndianPhone(quickRiderPhone);
+    if (!phoneVal.isValid) {
+      toast.error(phoneVal.message);
+      return;
+    }
+
+    try {
+      setIsAddingRider(true);
+      const riderRef = doc(collection(db, 'deliveryPartners'));
+      const restLat = assignModalOrder?.restaurantCoordinates?.lat || 22.5726;
+      const restLng = assignModalOrder?.restaurantCoordinates?.lng || 88.3639;
+
+      const newRider = {
+        name: quickRiderName.trim(),
+        phone: phoneVal.cleaned,
+        vehicleType: quickVehicleType || 'BIKE',
+        vehicleNumber: '',
+        status: 'APPROVED',
+        isOnline: true,
+        isAvailable: true,
+        currentCoordinates: { lat: restLat, lng: restLng },
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      await setDoc(riderRef, newRider);
+      toast.success(`Rider "${quickRiderName}" registered successfully!`);
+
+      // Immediately assign to current order
+      await handleAssignRider({ id: riderRef.id, ...newRider });
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to register rider');
+    } finally {
+      setIsAddingRider(false);
     }
   };
 
@@ -380,54 +451,183 @@ export default function RestaurantDeliveryManagementPage() {
           maxWidth="max-w-md"
         >
           <div className="space-y-4 text-xs">
-            <p className="text-slate-400">
-              Select an available delivery partner to dispatch this order:
-            </p>
+            {/* Header controls: open /rider/login or quick add */}
+            <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-800 flex-wrap">
+              <span className="text-slate-400 font-medium">Dispatch order to nearby rider:</span>
+              <div className="flex items-center space-x-2">
+                <a
+                  href="/rider/login"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 font-bold transition-all"
+                  title="Open Rider Registration & Portal"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  <span>/rider/login</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setShowQuickAddRider(!showQuickAddRider)}
+                  className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 font-bold transition-all"
+                >
+                  <UserPlus className="w-3 h-3" />
+                  <span>{showQuickAddRider ? 'Hide Form' : '+ Quick Register'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Register Rider Form */}
+            {showQuickAddRider && (
+              <form onSubmit={handleQuickRegisterAndAssign} className="p-3.5 rounded-2xl bg-slate-800/90 border border-amber-500/40 space-y-3 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-extrabold text-xs text-amber-300 flex items-center space-x-1.5">
+                    <UserPlus className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Instant Rider Registration</span>
+                  </h4>
+                  <span className="text-[10px] text-slate-400">Name & 10-digit phone</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1">Rider Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={quickRiderName}
+                      onChange={(e) => setQuickRiderName(e.target.value)}
+                      placeholder="e.g. Ramesh Kumar"
+                      className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1">Mobile Phone (10 Digits) *</label>
+                    <input
+                      type="tel"
+                      required
+                      value={quickRiderPhone}
+                      onChange={(e) => setQuickRiderPhone(e.target.value)}
+                      placeholder="e.g. 9876543210"
+                      className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs font-mono placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-2 pt-1">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[11px] text-slate-400">Vehicle:</span>
+                    <select
+                      value={quickVehicleType}
+                      onChange={(e) => setQuickVehicleType(e.target.value)}
+                      className="px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg text-white text-[11px]"
+                    >
+                      <option value="BIKE">Motorcycle / Bike</option>
+                      <option value="SCOOTER">Scooter</option>
+                      <option value="EV">Electric Scooter / EV</option>
+                      <option value="BICYCLE">Bicycle</option>
+                    </select>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isAddingRider}
+                    className="px-4 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow flex items-center space-x-1.5 disabled:opacity-50"
+                  >
+                    <span>{isAddingRider ? 'Registering...' : 'Register & Assign'}</span>
+                  </button>
+                </div>
+              </form>
+            )}
 
             {loadingRiders ? (
               <div className="py-8 text-center text-slate-400">Loading delivery partners...</div>
             ) : availableRiders.length === 0 ? (
-              <div className="py-8 text-center text-slate-400">
-                No registered delivery partners found. Ask your riders to register at{' '}
-                <a href="/rider/login" target="_blank" className="text-cyan-400 underline font-bold">
-                  /rider/login
-                </a>
-                .
+              <div className="py-6 text-center text-slate-400 space-y-3 bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
+                <p>No registered delivery partners found yet.</p>
+                <div className="flex justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickAddRider(true)}
+                    className="px-3.5 py-2 rounded-xl bg-amber-500 text-slate-950 font-extrabold text-xs shadow hover:bg-amber-400"
+                  >
+                    + Register Rider Now
+                  </button>
+                  <a
+                    href="/rider/login"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-3.5 py-2 rounded-xl bg-cyan-600 text-white font-extrabold text-xs shadow hover:bg-cyan-500 flex items-center space-x-1"
+                  >
+                    <span>Open /rider/login</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
               </div>
             ) : (
-              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                {availableRiders.map((r) => (
-                  <div
-                    key={r.id}
-                    className="p-3 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-between gap-3 hover:border-cyan-500 transition-colors"
+              <div className="space-y-2.5">
+                {/* 1-Click Closest Rider Auto-Assign */}
+                {availableRiders.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => handleAssignRider(availableRiders[0])}
+                    className="w-full p-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs shadow-md flex items-center justify-between transition-all"
                   >
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold">
-                        <Bike className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <p className="font-bold text-white">{r.name}</p>
-                          <span
-                            className={`w-2 h-2 rounded-full ${
-                              r.isOnline ? 'bg-emerald-400' : 'bg-slate-500'
-                            }`}
-                          />
-                        </div>
-                        <p className="text-[11px] text-slate-400">
-                          {r.vehicleType} • {r.vehicleNumber || 'No plate'} • {r.phone}
-                        </p>
-                      </div>
-                    </div>
+                    <span className="flex items-center space-x-1.5">
+                      <Sparkles className="w-4 h-4 fill-current text-yellow-300" />
+                      <span>Auto-Assign Closest Rider ({availableRiders[0].name})</span>
+                    </span>
+                    <span className="bg-emerald-950/60 text-emerald-200 px-2 py-0.5 rounded-md font-mono text-[11px]">
+                      {availableRiders[0].distanceKm} km away
+                    </span>
+                  </button>
+                )}
 
-                    <button
-                      onClick={() => handleAssignRider(r)}
-                      className="px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shadow"
+                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                  {availableRiders.map((r, idx) => (
+                    <div
+                      key={r.id}
+                      className={`p-3 rounded-2xl border flex items-center justify-between gap-3 transition-colors ${
+                        idx === 0
+                          ? 'bg-emerald-950/20 border-emerald-500/50'
+                          : 'bg-slate-800 border-slate-700 hover:border-cyan-500'
+                      }`}
                     >
-                      Assign
-                    </button>
-                  </div>
-                ))}
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold shrink-0 ${
+                          idx === 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-cyan-500/20 text-cyan-400'
+                        }`}>
+                          <Bike className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="font-bold text-white truncate">{r.name}</p>
+                            {idx === 0 && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                                Nearest
+                              </span>
+                            )}
+                            <span className="text-[10px] font-mono text-cyan-400 font-bold">
+                              📍 {r.distanceKm} km
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-400 truncate">
+                            {r.vehicleType} {r.vehicleNumber ? `• ${r.vehicleNumber}` : ''} • {r.phone}
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleAssignRider(r)}
+                        className={`px-3 py-1.5 rounded-xl font-bold text-xs shadow shrink-0 ${
+                          idx === 0
+                            ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
+                            : 'bg-cyan-600 hover:bg-cyan-500 text-white'
+                        }`}
+                      >
+                        Assign
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

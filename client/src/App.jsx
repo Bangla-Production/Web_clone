@@ -77,6 +77,7 @@ function RootRedirect() {
 
 export default function App() {
   const allRoles = ['super_admin', 'restaurant_admin', 'owner', 'staff', 'waiter', 'cashier', 'kitchen'];
+  const posRoles = ['super_admin', 'restaurant_admin', 'owner', 'staff', 'waiter'];
   const operationalRoles = ['super_admin', 'restaurant_admin', 'owner', 'staff', 'waiter', 'cashier'];
   const kitchenRoles = ['super_admin', 'restaurant_admin', 'owner', 'kitchen'];
   const cashierAndAdmin = ['super_admin', 'restaurant_admin', 'owner', 'cashier', 'staff'];
@@ -124,9 +125,13 @@ export default function App() {
                           <Route path="/kitchen" element={<KitchenPage />} />
                         </Route>
 
-                        {/* POS & Table Floor (Waiters, Cashiers, Admins) */}
-                        <Route element={<ProtectedRoute allowedRoles={operationalRoles} />}>
+                        {/* POS & Waiter Terminal (Strictly Waiters, Staff & Admins — Cashiers Forbidden) */}
+                        <Route element={<ProtectedRoute allowedRoles={posRoles} />}>
                           <Route path="/pos" element={<POSPage />} />
+                        </Route>
+
+                        {/* Table Floor & Operations */}
+                        <Route element={<ProtectedRoute allowedRoles={operationalRoles} />}>
                           <Route path="/tables" element={<TablesPage />} />
                           <Route path="/orders" element={<OrdersPage />} />
                           <Route path="/reservations" element={<ReservationsPage />} />

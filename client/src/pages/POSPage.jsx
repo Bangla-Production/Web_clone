@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getStockQty, isItemSoldOut, isLowStock } from '../utils/stock';
 import {
   Search,
@@ -48,6 +49,14 @@ export default function POSPage() {
   const { user, activeRestaurantId } = useAuth();
   const { restaurant, currencySymbol, taxName } = useRestaurant();
   const toast = useToast();
+  const navigate = useNavigate();
+
+  // Cashier restriction: cashiers do not use waiter POS terminal
+  useEffect(() => {
+    if (user && user.role === 'cashier') {
+      navigate('/cashier', { replace: true });
+    }
+  }, [user, navigate]);
 
   // Network connection state
   const [isOnline, setIsOnline] = useState(navigator.onLine);

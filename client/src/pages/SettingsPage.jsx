@@ -14,7 +14,9 @@ import {
   Trash2,
   Lock,
   Phone,
-  Database
+  Database,
+  Bike,
+  Navigation
 } from 'lucide-react';
 import {
   getRestaurantById,
@@ -54,6 +56,16 @@ export default function SettingsPage() {
   const [invoiceHeader, setInvoiceHeader] = useState('');
   const [invoiceFooter, setInvoiceFooter] = useState('');
 
+  // Delivery Fee configuration state
+  const [deliveryFeeMode, setDeliveryFeeMode] = useState('DISTANCE_BASED'); // 'DISTANCE_BASED' | 'FIXED' | 'FREE'
+  const [fixedDeliveryFee, setFixedDeliveryFee] = useState('30');
+  const [baseDeliveryFee, setBaseDeliveryFee] = useState('30');
+  const [baseDeliveryKm, setBaseDeliveryKm] = useState('3');
+  const [perKmDeliveryFee, setPerKmDeliveryFee] = useState('10');
+  const [freeDeliveryAbove, setFreeDeliveryAbove] = useState('500');
+  const [deliveryRadiusKm, setDeliveryRadiusKm] = useState('12');
+  const [prepTimeMinutes, setPrepTimeMinutes] = useState('20');
+
   // Staff accounts state
   const [staffList, setStaffList] = useState([]);
   const [isAddStaffOpen, setIsAddStaffOpen] = useState(false);
@@ -82,6 +94,14 @@ export default function SettingsPage() {
       setTaxName(restaurant.taxName || 'GST');
       setInvoiceHeader(restaurant.invoiceHeader || '');
       setInvoiceFooter(restaurant.invoiceFooter || '');
+      setDeliveryFeeMode(restaurant.deliveryFeeMode || 'DISTANCE_BASED');
+      setFixedDeliveryFee(restaurant.fixedDeliveryFee !== undefined ? String(restaurant.fixedDeliveryFee) : '30');
+      setBaseDeliveryFee(restaurant.baseDeliveryFee !== undefined ? String(restaurant.baseDeliveryFee) : '30');
+      setBaseDeliveryKm(restaurant.baseDeliveryKm !== undefined ? String(restaurant.baseDeliveryKm) : '3');
+      setPerKmDeliveryFee(restaurant.perKmDeliveryFee !== undefined ? String(restaurant.perKmDeliveryFee) : '10');
+      setFreeDeliveryAbove(restaurant.freeDeliveryAbove !== undefined ? String(restaurant.freeDeliveryAbove) : '500');
+      setDeliveryRadiusKm(restaurant.deliveryRadiusKm !== undefined ? String(restaurant.deliveryRadiusKm) : '12');
+      setPrepTimeMinutes(restaurant.prepTimeMinutes !== undefined ? String(restaurant.prepTimeMinutes) : '20');
     }
   }, [restaurant]);
 
@@ -111,7 +131,15 @@ export default function SettingsPage() {
         taxRate: parseFloat(taxRate) || 0,
         taxName,
         invoiceHeader,
-        invoiceFooter
+        invoiceFooter,
+        deliveryFeeMode,
+        fixedDeliveryFee: parseFloat(fixedDeliveryFee) || 0,
+        baseDeliveryFee: parseFloat(baseDeliveryFee) || 0,
+        baseDeliveryKm: parseFloat(baseDeliveryKm) || 3,
+        perKmDeliveryFee: parseFloat(perKmDeliveryFee) || 0,
+        freeDeliveryAbove: parseFloat(freeDeliveryAbove) || 0,
+        deliveryRadiusKm: parseFloat(deliveryRadiusKm) || 12,
+        prepTimeMinutes: parseInt(prepTimeMinutes, 10) || 20
       };
       await updateContextRest(payload);
     } finally {
@@ -258,6 +286,18 @@ export default function SettingsPage() {
         >
           <Receipt className="w-4 h-4" />
           <span>Taxes & Receipts</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('DELIVERY')}
+          className={`pos-btn-touch flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            activeTab === 'DELIVERY'
+              ? 'bg-emerald-500 text-slate-950 font-extrabold shadow-pos-glow'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-pos-surface'
+          }`}
+        >
+          <Bike className="w-4 h-4" />
+          <span>Delivery & Fees</span>
         </button>
 
         <button
@@ -480,6 +520,223 @@ export default function SettingsPage() {
             >
               <Save className="w-4 h-4" />
               <span>{isSaving ? 'Saving...' : 'Save Tax & Receipt Settings'}</span>
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* DELIVERY & CHARGES TAB */}
+      {activeTab === 'DELIVERY' && (
+        <form onSubmit={handleSaveRestaurant} className="space-y-6 pos-card-glass rounded-2xl p-6 shadow-xl text-xs">
+          <div>
+            <h3 className="font-extrabold text-sm text-slate-900 dark:text-slate-200 pb-2 border-b border-pos-border font-display flex items-center justify-between">
+              <span className="flex items-center space-x-2">
+                <Bike className="w-4 h-4 text-emerald-500" />
+                <span>Delivery Pricing Engine & Service Controls</span>
+              </span>
+              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                Mode: {deliveryFeeMode === 'FREE' ? 'Free Delivery' : deliveryFeeMode === 'FIXED' ? 'Flat Fee' : 'Distance Auto'}
+              </span>
+            </h3>
+            <p className="text-slate-500 dark:text-slate-400 mt-1.5 text-xs">
+              Configure how delivery fees are calculated for consumers during online checkout.
+            </p>
+          </div>
+
+          {/* Pricing Mode Selector */}
+          <div>
+            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-2">
+              Delivery Fee Pricing Model *
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <button
+                type="button"
+                onClick={() => setDeliveryFeeMode('DISTANCE_BASED')}
+                className={`p-3.5 rounded-xl border text-left transition-all pos-btn-touch ${
+                  deliveryFeeMode === 'DISTANCE_BASED'
+                    ? 'bg-emerald-500/15 border-emerald-500 text-slate-900 dark:text-white shadow-pos-glow'
+                    : 'bg-pos-dark border-pos-border text-slate-600 dark:text-slate-400 hover:border-slate-400'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-extrabold text-xs">🚗 Distance-Based</span>
+                  <span className="text-[10px] font-mono font-bold text-emerald-500">Auto Per Km</span>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">
+                  Calculates base fee for initial km, plus rate per additional km to customer.
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDeliveryFeeMode('FIXED')}
+                className={`p-3.5 rounded-xl border text-left transition-all pos-btn-touch ${
+                  deliveryFeeMode === 'FIXED'
+                    ? 'bg-amber-500/15 border-amber-500 text-slate-900 dark:text-white shadow-pos-amber'
+                    : 'bg-pos-dark border-pos-border text-slate-600 dark:text-slate-400 hover:border-slate-400'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-extrabold text-xs">🏷️ Fixed Flat Fee</span>
+                  <span className="text-[10px] font-mono font-bold text-amber-500">Fixed ₹</span>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">
+                  Charge a consistent delivery fee on every order regardless of distance.
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDeliveryFeeMode('FREE')}
+                className={`p-3.5 rounded-xl border text-left transition-all pos-btn-touch ${
+                  deliveryFeeMode === 'FREE'
+                    ? 'bg-purple-500/15 border-purple-500 text-slate-900 dark:text-white shadow-pos-purple'
+                    : 'bg-pos-dark border-pos-border text-slate-600 dark:text-slate-400 hover:border-slate-400'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-extrabold text-xs">🎁 Always Free</span>
+                  <span className="text-[10px] font-mono font-bold text-purple-500">₹0 Delivery</span>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">
+                  Zero delivery fee for all customers to promote higher online order volume.
+                </p>
+              </button>
+            </div>
+          </div>
+
+          {/* Conditional Controls based on mode */}
+          {deliveryFeeMode === 'FIXED' && (
+            <div className="p-4 rounded-xl bg-pos-dark border border-pos-border space-y-3">
+              <label className="block font-bold text-slate-700 dark:text-slate-300">
+                Fixed Flat Delivery Fee (₹) *
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                required
+                value={fixedDeliveryFee}
+                onChange={(e) => setFixedDeliveryFee(e.target.value)}
+                placeholder="e.g. 30"
+                className="w-full sm:w-64 px-3 py-2 bg-pos-surface border border-pos-border rounded-xl text-slate-900 dark:text-white font-num font-bold focus:outline-none focus:border-amber-500"
+              />
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Customers will be charged exactly ₹{fixedDeliveryFee || 0} for delivery.
+              </p>
+            </div>
+          )}
+
+          {deliveryFeeMode === 'DISTANCE_BASED' && (
+            <div className="p-4 rounded-xl bg-pos-dark border border-pos-border space-y-4">
+              <h4 className="font-extrabold text-xs text-slate-800 dark:text-slate-200">
+                Auto Per-Kilometer Distance Rules
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Base Delivery Fee (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={baseDeliveryFee}
+                    onChange={(e) => setBaseDeliveryFee(e.target.value)}
+                    placeholder="30"
+                    className="w-full px-3 py-2 bg-pos-surface border border-pos-border rounded-xl text-slate-900 dark:text-white font-num focus:outline-none focus:border-emerald-500"
+                  />
+                  <span className="text-[10px] text-slate-500">Starting charge</span>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Base Distance Covered (km)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={baseDeliveryKm}
+                    onChange={(e) => setBaseDeliveryKm(e.target.value)}
+                    placeholder="3"
+                    className="w-full px-3 py-2 bg-pos-surface border border-pos-border rounded-xl text-slate-900 dark:text-white font-num focus:outline-none focus:border-emerald-500"
+                  />
+                  <span className="text-[10px] text-slate-500">Included in base fee</span>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Rate per Extra Km (₹/km)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={perKmDeliveryFee}
+                    onChange={(e) => setPerKmDeliveryFee(e.target.value)}
+                    placeholder="10"
+                    className="w-full px-3 py-2 bg-pos-surface border border-pos-border rounded-xl text-slate-900 dark:text-white font-num focus:outline-none focus:border-emerald-500"
+                  />
+                  <span className="text-[10px] text-slate-500">Beyond base km</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Common Delivery Thresholds & Constraints */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 border-t border-pos-border">
+            <div>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                Free Delivery Above Order (₹)
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={freeDeliveryAbove}
+                onChange={(e) => setFreeDeliveryAbove(e.target.value)}
+                placeholder="500 (0 to disable)"
+                className="w-full px-3 py-2 bg-pos-dark border border-pos-border rounded-xl text-slate-900 dark:text-white font-num focus:outline-none focus:border-emerald-500"
+              />
+              <span className="text-[10px] text-slate-500">0 disables free threshold</span>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                Max Service Radius (km)
+              </label>
+              <input
+                type="number"
+                min="1"
+                value={deliveryRadiusKm}
+                onChange={(e) => setDeliveryRadiusKm(e.target.value)}
+                placeholder="12"
+                className="w-full px-3 py-2 bg-pos-dark border border-pos-border rounded-xl text-slate-900 dark:text-white font-num focus:outline-none focus:border-emerald-500"
+              />
+              <span className="text-[10px] text-slate-500">Orders beyond are blocked</span>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                Kitchen Prep Time (mins)
+              </label>
+              <input
+                type="number"
+                min="5"
+                value={prepTimeMinutes}
+                onChange={(e) => setPrepTimeMinutes(e.target.value)}
+                placeholder="20"
+                className="w-full px-3 py-2 bg-pos-dark border border-pos-border rounded-xl text-slate-900 dark:text-white font-num focus:outline-none focus:border-emerald-500"
+              />
+              <span className="text-[10px] text-slate-500">Estimated cooking duration</span>
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-3 border-t border-pos-border">
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="pos-btn-touch flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold shadow-pos-glow transition-all"
+            >
+              <Save className="w-4 h-4" />
+              <span>{isSaving ? 'Saving...' : 'Save Delivery & Fee Settings'}</span>
             </button>
           </div>
         </form>

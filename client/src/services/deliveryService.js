@@ -48,20 +48,30 @@ export function calculateDeliveryEstimate(restaurant, customerLoc, subtotal = 0)
   const maxRadius = Number(restaurant?.deliveryRadiusKm) || 12;
   const isServiceable = distanceKm <= maxRadius;
 
-  // Pricing rules:
-  // Base fee: ₹30 for first 3 km
-  // ₹10 per km beyond 3 km
-  const baseFee = Number(restaurant?.baseDeliveryFee) || 30;
-  const baseKm = 3;
-  const perKmRate = Number(restaurant?.perKmDeliveryFee) || 10;
+  // Pricing rules configurable by restaurant admin:
+  // Modes: 'DISTANCE_BASED' | 'FIXED' | 'FREE'
+  const mode = restaurant?.deliveryFeeMode || 'DISTANCE_BASED';
+  const fixedFee = Number(restaurant?.fixedDeliveryFee !== undefined ? restaurant.fixedDeliveryFee : 30);
+  const baseFee = Number(restaurant?.baseDeliveryFee !== undefined ? restaurant.baseDeliveryFee : 30);
+  const baseKm = Number(restaurant?.baseDeliveryKm) || 3;
+  const perKmRate = Number(restaurant?.perKmDeliveryFee !== undefined ? restaurant.perKmDeliveryFee : 10);
   const freeAbove = Number(restaurant?.freeDeliveryAbove) || 500;
 
-  let fee = baseFee;
-  if (distanceKm > baseKm) {
-    fee += Math.ceil(distanceKm - baseKm) * perKmRate;
+  let fee = 0;
+  if (mode === 'FREE') {
+    fee = 0;
+  } else if (mode === 'FIXED') {
+    fee = fixedFee;
+  } else {
+    // DISTANCE_BASED (Default auto per-km calculation)
+    fee = baseFee;
+    if (distanceKm > baseKm) {
+      fee += Math.ceil(distanceKm - baseKm) * perKmRate;
+    }
   }
 
-  const isFree = subtotal >= freeAbove;
+  // Free delivery threshold check
+  const isFree = mode === 'FREE' || (freeAbove > 0 && subtotal >= freeAbove);
   if (isFree) {
     fee = 0;
   }
@@ -80,6 +90,7 @@ export function calculateDeliveryEstimate(restaurant, customerLoc, subtotal = 0)
     isServiceable,
     maxRadius,
     estimatedTimeMins,
+    mode,
   };
 }
 

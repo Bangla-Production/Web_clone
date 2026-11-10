@@ -5,6 +5,7 @@ import {
   onSnapshot,
   doc,
   updateDoc,
+  setDoc,
   serverTimestamp,
   getDoc,
   getDocs,
@@ -75,12 +76,13 @@ export function subscribeToRiderActiveOrder(riderId, callback) {
  * Rider accepts an order
  */
 export async function acceptDeliveryOrder(orderId, riderProfile) {
+  const riderId = riderProfile.uid || riderProfile.id;
   const orderRef = doc(db, 'onlineOrders', orderId);
   const trackingRef = doc(db, 'deliveryTracking', orderId);
-  const riderRef = doc(db, 'deliveryPartners', riderProfile.uid);
+  const riderRef = doc(db, 'deliveryPartners', riderId);
 
   const riderInfo = {
-    riderId: riderProfile.uid,
+    riderId: riderId,
     riderName: riderProfile.name,
     riderPhone: riderProfile.phone,
     riderVehicle: riderProfile.vehicleType || 'BIKE',
@@ -92,20 +94,20 @@ export async function acceptDeliveryOrder(orderId, riderProfile) {
 
   await updateDoc(orderRef, riderInfo);
 
-  await updateDoc(trackingRef, {
+  await setDoc(trackingRef, {
     status: DELIVERY_STATUS.RIDER_ASSIGNED,
-    riderId: riderProfile.uid,
+    riderId: riderId,
     riderName: riderProfile.name,
     riderPhone: riderProfile.phone,
     riderVehicle: `${riderProfile.vehicleType || 'BIKE'} (${riderProfile.vehicleNumber || 'Standard'})`,
     lastUpdatedAt: serverTimestamp(),
-  });
+  }, { merge: true });
 
-  await updateDoc(riderRef, {
+  await setDoc(riderRef, {
     isAvailable: false,
     currentOrderId: orderId,
     updatedAt: serverTimestamp(),
-  });
+  }, { merge: true });
 
   return true;
 }

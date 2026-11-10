@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useDeliveryPartnerAuth } from '../context/DeliveryPartnerAuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { validateIndianPhone } from '../utils/phoneValidation';
 
 export default function DeliveryPartnerAuthPage() {
   const navigate = useNavigate();
@@ -44,16 +45,39 @@ export default function DeliveryPartnerAuthPage() {
 
     try {
       if (isRegister) {
+        if (!name.trim()) {
+          setError('Please enter your full name');
+          setLoading(false);
+          return;
+        }
+
+        const phoneVal = validateIndianPhone(phone);
+        if (!phoneVal.isValid) {
+          setError(phoneVal.message);
+          setLoading(false);
+          return;
+        }
+
+        const riderEmail = email.trim() || `${phoneVal.cleaned}@rider.abarkhabo.local`;
+        const riderPassword = password || `${phoneVal.cleaned}@123`;
+
         await register({
-          name,
-          email,
-          phone,
+          name: name.trim(),
+          email: riderEmail,
+          phone: phoneVal.cleaned,
           vehicleType,
           vehicleNumber,
-          password,
+          password: riderPassword,
         });
       } else {
-        await login(email, password);
+        const cleanLogin = email.trim();
+        const isNumericPhone = /^[0-9]{10}$/.test(cleanLogin.replace(/\D/g, ''));
+        const targetEmail = isNumericPhone && !cleanLogin.includes('@')
+          ? `${cleanLogin.replace(/\D/g, '').slice(-10)}@rider.abarkhabo.local`
+          : cleanLogin;
+        const targetPass = password || `${cleanLogin.replace(/\D/g, '').slice(-10)}@123`;
+
+        await login(targetEmail, targetPass);
       }
       navigate('/rider');
     } catch (err) {
@@ -169,16 +193,16 @@ export default function DeliveryPartnerAuthPage() {
 
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Email Address *
+                {isRegister ? 'Email Address (Optional)' : 'Mobile Phone or Email *'}
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
-                  required
-                  type="email"
+                  required={!isRegister}
+                  type={isRegister ? 'email' : 'text'}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="rider@example.com"
+                  placeholder={isRegister ? 'Auto-generated from phone if left empty' : '9876543210 or email'}
                   className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 />
               </div>
@@ -186,16 +210,16 @@ export default function DeliveryPartnerAuthPage() {
 
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Password *
+                {isRegister ? 'Password / Security PIN (Optional)' : 'Password *'}
               </label>
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
-                  required
+                  required={!isRegister}
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
+                  placeholder={isRegister ? 'Default auto-pin if left empty' : '••••••••'}
                   className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 />
               </div>

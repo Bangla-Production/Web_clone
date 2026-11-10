@@ -32,6 +32,8 @@ export default function Sidebar({ isOpen, setIsOpen }) {
 
   const allRoles = ['super_admin', 'restaurant_admin', 'staff', 'waiter', 'cashier'];
   const adminRoles = ['super_admin', 'restaurant_admin'];
+  const posRoles = ['super_admin', 'restaurant_admin', 'staff', 'waiter'];
+  const kitchenRoles = ['super_admin', 'restaurant_admin', 'staff', 'kitchen'];
   const operationalRoles = ['super_admin', 'restaurant_admin', 'staff', 'waiter', 'cashier'];
 
   const navSections = [
@@ -42,7 +44,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
           label: 'POS & Waiter Terminal',
           path: '/pos',
           icon: UtensilsCrossed,
-          allowed: operationalRoles,
+          allowed: posRoles,
           badge: 'HOT',
           badgeColor: 'bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/40'
         },
@@ -50,7 +52,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
           label: 'Kitchen Display (KDS)',
           path: '/kitchen',
           icon: ChefHat,
-          allowed: ['super_admin', 'restaurant_admin', 'staff', 'kitchen', 'cashier'],
+          allowed: kitchenRoles,
           badge: 'LIVE',
           badgeColor: 'bg-sky-500/20 text-sky-600 dark:text-sky-300 border border-sky-500/40'
         },

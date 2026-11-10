@@ -14,7 +14,16 @@ import {
   AlertTriangle,
   Sparkles,
   UtensilsCrossed,
-  LogOut
+  LogOut,
+  ShoppingBag,
+  Bike,
+  Package,
+  CheckCircle2,
+  XCircle,
+  MapPin,
+  Phone,
+  User,
+  Check
 } from 'lucide-react';
 import {
   subscribeToKitchenKOTs,
@@ -23,6 +32,10 @@ import {
   updateKOTStatus,
   markKOTPrinted
 } from '../services/firestoreService';
+import {
+  subscribeToOnlineOrders,
+  updateOnlineOrderStatus
+} from '../services/onlineOrderService';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { kitchenAudio, dispatchThermalPrint } from '../services/thermalPrintService';
@@ -31,9 +44,11 @@ import InvoiceModal from '../components/invoice/InvoiceModal';
 export default function KitchenPage() {
   const [kots, setKots] = useState([]);
   const [activeOrders, setActiveOrders] = useState([]);
+  const [onlineOrders, setOnlineOrders] = useState([]);
+  const [onlineTab, setOnlineTab] = useState('ALL'); // 'ALL' | 'PLACED' | 'PREPARING' | 'READY'
   const [loading, setLoading] = useState(true);
   const [isSendingDemo, setIsSendingDemo] = useState(false);
-  const [viewMode, setViewMode] = useState('WHOLE_TABLE'); // 'WHOLE_TABLE' | 'KANBAN'
+  const [viewMode, setViewMode] = useState('WHOLE_TABLE'); // 'WHOLE_TABLE' | 'KANBAN' | 'ONLINE_ORDERS'
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [selectedKOTForPrint, setSelectedKOTForPrint] = useState(null);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
@@ -44,11 +59,11 @@ export default function KitchenPage() {
   const toast = useToast();
   const targetRestId = activeRestaurantId || user?.restaurantId || 'spice-haven';
 
-  // Waiter restriction: waiters cannot access kitchen display station
+  // Restrict waiters and cashiers from kitchen display station
   useEffect(() => {
-    if (user && user.role === 'waiter') {
-      toast.error('Waiters do not have access to the Kitchen Display System.');
-      navigate('/pos', { replace: true });
+    if (user && (user.role === 'waiter' || user.role === 'cashier')) {
+      toast.error('Access restricted for your role.');
+      navigate(user.role === 'cashier' ? '/cashier' : '/pos', { replace: true });
     }
   }, [user, navigate, toast]);
 
@@ -89,9 +104,19 @@ export default function KitchenPage() {
       setActiveOrders(liveOrders || []);
     });
 
+    const unsubscribeOnline = subscribeToOnlineOrders(targetRestId, (liveOnline) => {
+      const placedOrders = (liveOnline || []).filter(o => o.status === 'PLACED');
+      if (!isFirstLoadRef.current && placedOrders.length > 0 && !isAudioMuted) {
+        kitchenAudio.playOrderBell();
+        toast.info(`🔔 New Online Consumer Order #${placedOrders[0].id.slice(-5).toUpperCase()} received!`);
+      }
+      setOnlineOrders(liveOnline || []);
+    });
+
     return () => {
       unsubscribeKots();
       unsubscribeOrders();
+      unsubscribeOnline();
     };
   }, [targetRestId, isAudioMuted, toast]);
 
@@ -116,6 +141,38 @@ export default function KitchenPage() {
       toast.error(err?.code === 'permission-denied'
         ? 'Permission denied: this account cannot update kitchen tickets.'
         : 'Failed to update KOT status.');
+    }
+  };
+
+  const handleAcceptOnlineOrder = async (order) => {
+    try {
+      await updateOnlineOrderStatus(targetRestId, order.id, 'PREPARING');
+      toast.success(`Online Order #${order.id.slice(-5).toUpperCase()} accepted! Preparation started.`);
+    } catch (err) {
+      console.error('Accept online order failed:', err);
+      toast.error('Failed to accept online order.');
+    }
+  };
+
+  const handleRejectOnlineOrder = async (order) => {
+    const reason = window.prompt('Reason for rejecting this order (optional):', 'Kitchen at full capacity');
+    if (reason === null) return;
+    try {
+      await updateOnlineOrderStatus(targetRestId, order.id, 'CANCELLED', { rejectionReason: reason });
+      toast.info(`Online Order #${order.id.slice(-5).toUpperCase()} rejected.`);
+    } catch (err) {
+      console.error('Reject online order failed:', err);
+      toast.error('Failed to reject online order.');
+    }
+  };
+
+  const handleMarkOnlineReady = async (order) => {
+    try {
+      await updateOnlineOrderStatus(targetRestId, order.id, 'READY');
+      toast.success(`Online Order #${order.id.slice(-5).toUpperCase()} marked ready for pickup/delivery!`);
+    } catch (err) {
+      console.error('Mark online ready failed:', err);
+      toast.error('Failed to update status.');
     }
   };
 
@@ -213,6 +270,14 @@ export default function KitchenPage() {
     return diffMs > 15 * 60 * 1000; // > 15 minutes
   };
 
+  const activeOnlineOrders = useMemo(() => {
+    return onlineOrders.filter(o => ['PLACED', 'CONFIRMED', 'PREPARING', 'READY', 'READY_FOR_PICKUP'].includes(o.status));
+  }, [onlineOrders]);
+
+  const newOnlineOrders = useMemo(() => {
+    return onlineOrders.filter(o => o.status === 'PLACED');
+  }, [onlineOrders]);
+
   return (
     <div className="space-y-3 h-[calc(100vh-4.75rem)] flex flex-col select-none transition-colors duration-200">
       {/* 1. TOP HEADER & AUDIO CONTROLS */}
@@ -260,6 +325,23 @@ export default function KitchenPage() {
             >
               📋 KOT Pipeline
             </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('ONLINE_ORDERS')}
+              className={`px-3 py-1 rounded-lg font-bold text-xs transition-all pos-btn-touch flex items-center space-x-1.5 ${
+                viewMode === 'ONLINE_ORDERS'
+                  ? 'bg-gradient-to-r from-indigo-600 to-cyan-600 text-white shadow-pos-purple'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Bike className="w-3.5 h-3.5" />
+              <span>Online Orders ({activeOnlineOrders.length})</span>
+              {newOnlineOrders.length > 0 && (
+                <span className="bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full animate-pulse ml-1">
+                  {newOnlineOrders.length} NEW
+                </span>
+              )}
+            </button>
           </div>
 
           <button
@@ -304,6 +386,32 @@ export default function KitchenPage() {
           </button>
         </div>
       </div>
+
+      {/* INCOMING ONLINE CONSUMER ORDERS BANNER */}
+      {newOnlineOrders.length > 0 && viewMode !== 'ONLINE_ORDERS' && (
+        <div className="p-3 rounded-2xl bg-gradient-to-r from-amber-500/20 via-orange-500/15 to-rose-500/20 border-2 border-amber-500/60 shadow-pos-amber flex items-center justify-between gap-3 animate-pulse-subtle shrink-0">
+          <div className="flex items-center space-x-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-bold shadow shrink-0">
+              <Bell className="w-4 h-4 animate-bounce" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-extrabold text-xs text-slate-900 dark:text-white flex items-center space-x-2 truncate">
+                <span>🔔 {newOnlineOrders.length} New Online Order{newOnlineOrders.length > 1 ? 's' : ''} from Consumers Awaiting Kitchen Acceptance!</span>
+              </p>
+              <p className="text-[11px] text-amber-800 dark:text-amber-300 truncate">
+                Customer delivery / takeaway requests. Accept or reject now to notify the customer.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setViewMode('ONLINE_ORDERS')}
+            className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow flex items-center space-x-1 shrink-0 pos-btn-touch"
+          >
+            <span>Review & Accept →</span>
+          </button>
+        </div>
+      )}
 
       {listenError && (
         <div className="p-3 rounded-2xl border border-rose-300 dark:border-rose-700 bg-rose-50 dark:bg-rose-950/70 text-rose-800 dark:text-rose-200 text-xs font-semibold shrink-0">
@@ -774,7 +882,197 @@ export default function KitchenPage() {
       </div>
       )}
 
-      {/* 3. THERMAL KOT PRINT MODAL */}
+      {/* VIEW 3: ONLINE CONSUMER ORDERS (ACCEPT / REJECT / MARK READY) */}
+      {viewMode === 'ONLINE_ORDERS' && (
+        <div className="flex-1 overflow-y-auto min-h-0 space-y-4 pr-1 scrollbar-thin">
+          {/* Sub-header Filter Tabs */}
+          <div className="flex items-center justify-between gap-3 p-3 pos-surface-glass rounded-2xl flex-wrap">
+            <div className="flex items-center space-x-1.5 flex-wrap gap-1">
+              {[
+                { id: 'ALL', label: `All Active (${activeOnlineOrders.length})` },
+                { id: 'PLACED', label: `⚡ New Requests (${newOnlineOrders.length})`, alert: newOnlineOrders.length > 0 },
+                { id: 'PREPARING', label: `🍳 Cooking (${onlineOrders.filter(o => ['CONFIRMED', 'PREPARING'].includes(o.status)).length})` },
+                { id: 'READY', label: `🛵 Ready for Rider (${onlineOrders.filter(o => ['READY', 'READY_FOR_PICKUP'].includes(o.status)).length})` },
+              ].map(t => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setOnlineTab(t.id)}
+                  className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all pos-btn-touch ${
+                    onlineTab === t.id
+                      ? 'bg-gradient-to-r from-indigo-600 to-cyan-600 text-white shadow-md'
+                      : t.alert
+                      ? 'bg-amber-500/15 border border-amber-500/40 text-amber-500 animate-pulse'
+                      : 'bg-pos-dark border border-pos-border text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium hidden sm:inline">
+              Consumer online orders update in real-time
+            </span>
+          </div>
+
+          {/* Orders Grid */}
+          {(() => {
+            const filteredOnline = activeOnlineOrders.filter(o => {
+              if (onlineTab === 'PLACED') return o.status === 'PLACED';
+              if (onlineTab === 'PREPARING') return ['CONFIRMED', 'PREPARING'].includes(o.status);
+              if (onlineTab === 'READY') return ['READY', 'READY_FOR_PICKUP'].includes(o.status);
+              return true;
+            });
+
+            if (filteredOnline.length === 0) {
+              return (
+                <div className="flex flex-col items-center justify-center h-72 text-slate-400 text-xs pos-surface-glass rounded-3xl p-8 text-center max-w-md mx-auto mt-6 border border-pos-border shadow-xl">
+                  <div className="w-14 h-14 rounded-2xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center mb-3">
+                    <ShoppingBag className="w-7 h-7" />
+                  </div>
+                  <h4 className="font-extrabold text-sm text-slate-900 dark:text-white">No Online Orders in this Tab</h4>
+                  <p className="text-slate-500 mt-1">
+                    When customers place orders on Abar Khabo, they will appear here with sound chimes for instant kitchen acceptance.
+                  </p>
+                </div>
+              );
+            }
+
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
+                {filteredOnline.map((order) => {
+                  const isNew = order.status === 'PLACED';
+                  const isPreparing = ['CONFIRMED', 'PREPARING'].includes(order.status);
+                  const isReady = ['READY', 'READY_FOR_PICKUP'].includes(order.status);
+                  const isDelivery = order.orderType === 'DELIVERY';
+
+                  return (
+                    <div
+                      key={order.id}
+                      className={`p-4 rounded-3xl border pos-card-glass shadow-xl space-y-3 transition-all ${
+                        isNew
+                          ? 'border-amber-400 dark:border-amber-500 shadow-pos-amber ring-2 ring-amber-400/50'
+                          : isReady
+                          ? 'border-emerald-400 dark:border-emerald-500/80'
+                          : 'border-pos-border'
+                      }`}
+                    >
+                      {/* Card Header */}
+                      <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-pos-border">
+                        <div>
+                          <div className="flex items-center space-x-2">
+                            <span className="font-display font-black text-base text-slate-900 dark:text-white">
+                              #{order.id.slice(-5).toUpperCase()}
+                            </span>
+                            <span className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                              isDelivery
+                                ? 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30'
+                                : 'bg-teal-500/15 text-teal-600 dark:text-teal-400 border border-teal-500/30'
+                            }`}>
+                              {isDelivery ? <Bike className="w-2.5 h-2.5" /> : <Package className="w-2.5 h-2.5" />}
+                              <span>{isDelivery ? 'Delivery' : 'Takeaway'}</span>
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                            Customer: <strong className="text-slate-800 dark:text-slate-200">{order.customerName || 'Consumer'}</strong>
+                            {order.customerPhone ? ` • ${order.customerPhone}` : ''}
+                          </p>
+                        </div>
+
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-black tracking-wider uppercase shrink-0 ${
+                          isNew
+                            ? 'bg-amber-500 text-slate-950 animate-bounce'
+                            : isPreparing
+                            ? 'bg-orange-500/20 text-orange-600 dark:text-orange-400 border border-orange-500/40'
+                            : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40'
+                        }`}>
+                          {isNew ? '⚡ Action Needed' : isPreparing ? '🍳 Cooking' : '✓ Ready'}
+                        </span>
+                      </div>
+
+                      {/* Delivery Address if delivery */}
+                      {isDelivery && order.deliveryAddress && (
+                        <div className="p-2 rounded-xl bg-pos-dark border border-pos-border/60 text-[11px] text-slate-400 flex items-start space-x-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5" />
+                          <span className="truncate">{order.deliveryAddress}</span>
+                        </div>
+                      )}
+
+                      {/* Items List */}
+                      <div className="space-y-1.5 bg-pos-dark p-3 rounded-2xl border border-pos-border text-xs max-h-48 overflow-y-auto scrollbar-thin">
+                        {(order.items || []).map((it, idx) => (
+                          <div key={idx} className="flex items-start justify-between gap-2 text-slate-700 dark:text-slate-200">
+                            <span className="font-medium">
+                              <strong className="text-amber-500 font-num">{it.quantity}x</strong> {it.name}
+                              {it.notes ? <span className="block text-[10px] text-slate-400 italic">"{it.notes}"</span> : null}
+                            </span>
+                            {it.price && (
+                              <span className="font-num text-slate-500 shrink-0">
+                                ₹{(it.price * (it.quantity || 1)).toFixed(0)}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Total & Action Buttons */}
+                      <div className="pt-2 border-t border-pos-border flex flex-col gap-2">
+                        <div className="flex items-center justify-between text-xs text-slate-500">
+                          <span>Total Amount:</span>
+                          <span className="font-num font-black text-sm text-slate-900 dark:text-white">
+                            ₹{order.totalAmount || order.grandTotal || 0}
+                          </span>
+                        </div>
+
+                        {/* Actions */}
+                        {isNew && (
+                          <div className="grid grid-cols-2 gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => handleRejectOnlineOrder(order)}
+                              className="py-2 px-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-700 font-black text-xs transition-all pos-btn-touch flex items-center justify-center space-x-1"
+                            >
+                              <XCircle className="w-3.5 h-3.5" />
+                              <span>Reject</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleAcceptOnlineOrder(order)}
+                              className="py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs shadow-pos-glow transition-all pos-btn-touch flex items-center justify-center space-x-1"
+                            >
+                              <Check className="w-3.5 h-3.5 stroke-[3]" />
+                              <span>Accept & Cook</span>
+                            </button>
+                          </div>
+                        )}
+
+                        {isPreparing && (
+                          <button
+                            type="button"
+                            onClick={() => handleMarkOnlineReady(order)}
+                            className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs shadow-pos-glow transition-all pos-btn-touch flex items-center justify-center space-x-1.5"
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span>Mark Food Ready & Packed</span>
+                          </button>
+                        )}
+
+                        {isReady && (
+                          <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-center font-bold text-xs flex items-center justify-center space-x-1.5">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>{isDelivery ? 'Ready for Rider Pickup' : 'Ready for Customer Pickup'}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </div>
+      )}
       <InvoiceModal
         isOpen={isPrintModalOpen}
         onClose={() => setIsPrintModalOpen(false)}
