@@ -82,11 +82,13 @@ export async function acceptDeliveryOrder(orderId, riderProfile) {
   const riderRef = doc(db, 'deliveryPartners', riderId);
 
   const riderPhoto = riderProfile.photoUrl || riderProfile.photo || '';
+  const isAadhaarVerified = Boolean(riderProfile.isAadhaarVerified);
   const riderInfo = {
     riderId: riderId,
     riderName: riderProfile.name,
     riderPhone: riderProfile.phone,
     riderPhoto: riderPhoto,
+    isAadhaarVerified: isAadhaarVerified,
     riderVehicle: riderProfile.vehicleType || 'BIKE',
     riderVehicleNumber: riderProfile.vehicleNumber || '',
     deliveryStatus: DELIVERY_STATUS.RIDER_ASSIGNED,
@@ -102,6 +104,7 @@ export async function acceptDeliveryOrder(orderId, riderProfile) {
     riderName: riderProfile.name,
     riderPhone: riderProfile.phone,
     riderPhoto: riderPhoto,
+    isAadhaarVerified: isAadhaarVerified,
     riderVehicle: `${riderProfile.vehicleType || 'BIKE'} (${riderProfile.vehicleNumber || 'Standard'})`,
     lastUpdatedAt: serverTimestamp(),
   }, { merge: true });

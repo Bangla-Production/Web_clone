@@ -464,12 +464,15 @@ export default function LoginPage() {
               </button>
             </form>
 
-            {/* Quick Demo Shortcuts Banner */}
-            <div className="mt-5 pt-4 border-t border-pos-border flex items-center justify-between text-xs">
-              <div className="flex items-center space-x-2 text-slate-500 dark:text-slate-400">
-                <KeyRound className="w-4 h-4 text-amber-500" />
-                <span className="text-[11px]">Multi-branch POS Station Ready</span>
-              </div>
+            {/* Quick Shortcuts Banner */}
+            <div className="mt-5 pt-4 border-t border-pos-border flex items-center justify-between text-xs flex-wrap gap-2">
+              <Link
+                to="/rider/register"
+                className="text-cyan-600 dark:text-cyan-400 hover:underline font-bold text-[11px] flex items-center space-x-1"
+              >
+                <span>🛵 Delivery Partner Registration</span>
+                <span>↗</span>
+              </Link>
               <Link
                 to="/"
                 className="text-amber-600 dark:text-amber-400 hover:underline font-bold text-[11px] flex items-center space-x-1"

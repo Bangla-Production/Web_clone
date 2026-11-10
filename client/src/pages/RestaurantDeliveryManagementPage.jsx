@@ -22,6 +22,7 @@ import {
   Camera,
   Upload,
   XCircle,
+  ShieldCheck,
 } from 'lucide-react';
 import { collection, query, where, onSnapshot, getDocs, doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase/config';
@@ -32,6 +33,7 @@ import { acceptDeliveryOrder, updateDeliveryStep } from '../services/deliveryPar
 import { calculateDistanceKm } from '../services/locationService';
 import { validateIndianPhone } from '../utils/phoneValidation';
 import { compressImageToBase64 } from '../utils/imageHelper';
+import { validateIndianAadhaar, formatAadhaar } from '../utils/aadhaarValidation';
 import LiveTrackingMap from '../components/delivery/LiveTrackingMap';
 import Modal from '../components/common/Modal';
 
@@ -51,6 +53,7 @@ export default function RestaurantDeliveryManagementPage() {
   const [showQuickAddRider, setShowQuickAddRider] = useState(false);
   const [quickRiderName, setQuickRiderName] = useState('');
   const [quickRiderPhone, setQuickRiderPhone] = useState('');
+  const [quickAadhaar, setQuickAadhaar] = useState('');
   const [quickRiderPhoto, setQuickRiderPhoto] = useState('');
   const [quickPhotoLoading, setQuickPhotoLoading] = useState(false);
   const [quickVehicleType, setQuickVehicleType] = useState('BIKE');
@@ -161,6 +164,12 @@ export default function RestaurantDeliveryManagementPage() {
       return;
     }
 
+    const aadhaarVal = validateIndianAadhaar(quickAadhaar);
+    if (!aadhaarVal.isValid) {
+      toast.error(aadhaarVal.message);
+      return;
+    }
+
     try {
       setIsAddingRider(true);
       const riderRef = doc(collection(db, 'deliveryPartners'));
@@ -171,6 +180,8 @@ export default function RestaurantDeliveryManagementPage() {
         name: quickRiderName.trim(),
         phone: phoneVal.cleaned,
         photoUrl: quickRiderPhoto,
+        aadhaarNumber: aadhaarVal.cleaned,
+        isAadhaarVerified: true,
         vehicleType: quickVehicleType || 'BIKE',
         vehicleNumber: '',
         status: 'APPROVED',
@@ -182,7 +193,7 @@ export default function RestaurantDeliveryManagementPage() {
       };
 
       await setDoc(riderRef, newRider);
-      toast.success(`Rider "${quickRiderName}" registered successfully!`);
+      toast.success(`Rider "${quickRiderName}" registered & Aadhaar verified!`);
 
       // Immediately assign to current order
       await handleAssignRider({ id: riderRef.id, ...newRider });
@@ -190,6 +201,7 @@ export default function RestaurantDeliveryManagementPage() {
       // Reset form
       setQuickRiderName('');
       setQuickRiderPhone('');
+      setQuickAadhaar('');
       setQuickRiderPhoto('');
       setShowQuickAddRider(false);
     } catch (err) {
@@ -208,6 +220,7 @@ export default function RestaurantDeliveryManagementPage() {
         name: rider.name || 'Delivery Partner',
         phone: rider.phone || '',
         photoUrl: rider.photoUrl || rider.photo || '',
+        isAadhaarVerified: Boolean(rider.isAadhaarVerified || rider.aadhaarNumber),
         vehicleType: rider.vehicleType || 'BIKE',
         vehicleNumber: rider.vehicleNumber || '',
       });
@@ -490,14 +503,14 @@ export default function RestaurantDeliveryManagementPage() {
               <span className="text-slate-400 font-medium">Dispatch order to nearby rider:</span>
               <div className="flex items-center space-x-2">
                 <a
-                  href="/rider/login"
+                  href="/rider/register"
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 font-bold transition-all"
-                  title="Open Rider Registration & Portal"
+                  title="Open Rider Registration Portal"
                 >
                   <ExternalLink className="w-3 h-3" />
-                  <span>/rider/login</span>
+                  <span>Rider Registration Portal</span>
                 </a>
                 <button
                   type="button"
@@ -569,12 +582,32 @@ export default function RestaurantDeliveryManagementPage() {
                     <input
                       type="tel"
                       required
+                      maxLength={10}
                       value={quickRiderPhone}
-                      onChange={(e) => setQuickRiderPhone(e.target.value)}
+                      onChange={(e) => setQuickRiderPhone(e.target.value.replace(/\D/g, ''))}
                       placeholder="e.g. 9876543210"
                       className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs font-mono placeholder-slate-500 focus:outline-none focus:border-cyan-500"
                     />
                   </div>
+                </div>
+
+                {/* Aadhaar Verification Input */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 mb-1 flex items-center justify-between">
+                    <span>Aadhaar Number (12 Digits) *</span>
+                    <span className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
+                      <ShieldCheck className="w-3 h-3" /> Auto-Verified UIDAI
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={14}
+                    value={quickAadhaar}
+                    onChange={(e) => setQuickAadhaar(formatAadhaar(e.target.value))}
+                    placeholder="XXXX XXXX XXXX"
+                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs font-mono placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                  />
                 </div>
 
                 <div className="flex items-center justify-between gap-2 pt-1">
@@ -617,12 +650,12 @@ export default function RestaurantDeliveryManagementPage() {
                     + Register Rider Now
                   </button>
                   <a
-                    href="/rider/login"
+                    href="/rider/register"
                     target="_blank"
                     rel="noreferrer"
                     className="px-3.5 py-2 rounded-xl bg-cyan-600 text-white font-extrabold text-xs shadow hover:bg-cyan-500 flex items-center space-x-1"
                   >
-                    <span>Open /rider/login</span>
+                    <span>Rider Registration Portal</span>
                     <ExternalLink className="w-3 h-3" />
                   </a>
                 </div>
@@ -674,6 +707,9 @@ export default function RestaurantDeliveryManagementPage() {
                                 Nearest
                               </span>
                             )}
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-0.5">
+                              <ShieldCheck className="w-2.5 h-2.5" /> Aadhaar Verified
+                            </span>
                             <span className="text-[10px] font-mono text-cyan-400 font-bold">
                               📍 {r.distanceKm} km
                             </span>

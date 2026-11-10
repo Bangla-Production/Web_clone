@@ -55,7 +55,18 @@ export function DeliveryPartnerAuthProvider({ children }) {
     return cred.user;
   };
 
-  const register = async ({ name, email, phone, vehicleType, vehicleNumber, password, photoUrl }) => {
+  const register = async ({
+    name,
+    email,
+    phone,
+    vehicleType,
+    vehicleNumber,
+    password,
+    photoUrl,
+    aadhaarNumber,
+    aadhaarPhoto,
+    isAadhaarVerified
+  }) => {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     const partnerDoc = {
       uid: cred.user.uid,
@@ -63,6 +74,10 @@ export function DeliveryPartnerAuthProvider({ children }) {
       email,
       phone,
       photoUrl: photoUrl || '',
+      aadhaarNumber: aadhaarNumber || '',
+      aadhaarPhoto: aadhaarPhoto || '',
+      isAadhaarVerified: Boolean(isAadhaarVerified),
+      aadhaarVerifiedAt: isAadhaarVerified ? serverTimestamp() : null,
       vehicleType: vehicleType || 'BIKE',
       vehicleNumber: vehicleNumber || '',
       status: 'APPROVED', // Pre-approved for instant demo/testability

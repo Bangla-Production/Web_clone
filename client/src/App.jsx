@@ -108,7 +108,9 @@ export default function App() {
                     <Route path="/track/:orderId" element={<CustomerOrderTrackingPage />} />
 
                     {/* ── Delivery Partner (Rider) Routes ───────────────────────── */}
-                    <Route path="/rider/login" element={<DeliveryPartnerAuthPage />} />
+                    <Route path="/rider/login" element={<DeliveryPartnerAuthPage defaultMode="login" />} />
+                    <Route path="/rider/register" element={<DeliveryPartnerAuthPage defaultMode="register" />} />
+                    <Route path="/rider/signup" element={<DeliveryPartnerAuthPage defaultMode="register" />} />
                     <Route path="/rider" element={<DeliveryPartnerDashboardPage />} />
 
                     {/* ── Super Admin ──────────────────────────────────────────── */}
