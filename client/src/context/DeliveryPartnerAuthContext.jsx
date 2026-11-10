@@ -55,13 +55,14 @@ export function DeliveryPartnerAuthProvider({ children }) {
     return cred.user;
   };
 
-  const register = async ({ name, email, phone, vehicleType, vehicleNumber, password }) => {
+  const register = async ({ name, email, phone, vehicleType, vehicleNumber, password, photoUrl }) => {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     const partnerDoc = {
       uid: cred.user.uid,
       name,
       email,
       phone,
+      photoUrl: photoUrl || '',
       vehicleType: vehicleType || 'BIKE',
       vehicleNumber: vehicleNumber || '',
       status: 'APPROVED', // Pre-approved for instant demo/testability

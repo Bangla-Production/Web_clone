@@ -233,8 +233,12 @@ export default function CustomerOrderTrackingPage() {
           <section className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <div className="flex items-center gap-3.5">
-                <div className="w-13 h-13 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white shadow-md">
-                  <Bike className="w-7 h-7" />
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white shadow-md overflow-hidden border border-cyan-400/40">
+                  {order.riderPhoto ? (
+                    <img src={order.riderPhoto} alt={order.riderName} className="w-full h-full object-cover" />
+                  ) : (
+                    <Bike className="w-7 h-7" />
+                  )}
                 </div>
                 <div>
                   <div className="flex items-center gap-2">

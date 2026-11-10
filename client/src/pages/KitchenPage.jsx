@@ -36,6 +36,8 @@ import {
   subscribeToOnlineOrders,
   updateOnlineOrderStatus
 } from '../services/onlineOrderService';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../firebase/config';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { kitchenAudio, dispatchThermalPrint } from '../services/thermalPrintService';
@@ -146,8 +148,19 @@ export default function KitchenPage() {
 
   const handleAcceptOnlineOrder = async (order) => {
     try {
-      await updateOnlineOrderStatus(targetRestId, order.id, 'PREPARING');
-      toast.success(`Online Order #${order.id.slice(-5).toUpperCase()} accepted! Preparation started.`);
+      await updateOnlineOrderStatus(targetRestId, order.id, 'PREPARING', {
+        cookingStartedAt: serverTimestamp(),
+        deliveryStatus: 'PREPARING',
+      });
+      try {
+        const trackingRef = doc(db, 'deliveryTracking', order.id);
+        await updateDoc(trackingRef, {
+          status: 'PREPARING',
+          cookingStartedAt: serverTimestamp(),
+          lastUpdatedAt: serverTimestamp(),
+        });
+      } catch (e) {}
+      toast.success(`Online Order #${order.id.slice(-5).toUpperCase()} accepted! Cooking started.`);
     } catch (err) {
       console.error('Accept online order failed:', err);
       toast.error('Failed to accept online order.');
@@ -155,11 +168,22 @@ export default function KitchenPage() {
   };
 
   const handleRejectOnlineOrder = async (order) => {
-    const reason = window.prompt('Reason for rejecting this order (optional):', 'Kitchen at full capacity');
+    const reason = window.prompt('Reason for declining this order:', 'Kitchen at full capacity');
     if (reason === null) return;
     try {
-      await updateOnlineOrderStatus(targetRestId, order.id, 'CANCELLED', { rejectionReason: reason });
-      toast.info(`Online Order #${order.id.slice(-5).toUpperCase()} rejected.`);
+      await updateOnlineOrderStatus(targetRestId, order.id, 'CANCELLED', {
+        rejectionReason: reason,
+        deliveryStatus: 'CANCELLED',
+      });
+      try {
+        const trackingRef = doc(db, 'deliveryTracking', order.id);
+        await updateDoc(trackingRef, {
+          status: 'CANCELLED',
+          rejectionReason: reason,
+          lastUpdatedAt: serverTimestamp(),
+        });
+      } catch (e) {}
+      toast.info(`Online Order #${order.id.slice(-5).toUpperCase()} declined.`);
     } catch (err) {
       console.error('Reject online order failed:', err);
       toast.error('Failed to reject online order.');
@@ -168,8 +192,19 @@ export default function KitchenPage() {
 
   const handleMarkOnlineReady = async (order) => {
     try {
-      await updateOnlineOrderStatus(targetRestId, order.id, 'READY');
-      toast.success(`Online Order #${order.id.slice(-5).toUpperCase()} marked ready for pickup/delivery!`);
+      await updateOnlineOrderStatus(targetRestId, order.id, 'READY', {
+        deliveryStatus: 'READY_FOR_PICKUP',
+        foodReadyAt: serverTimestamp(),
+      });
+      try {
+        const trackingRef = doc(db, 'deliveryTracking', order.id);
+        await updateDoc(trackingRef, {
+          status: 'READY_FOR_PICKUP',
+          foodReadyAt: serverTimestamp(),
+          lastUpdatedAt: serverTimestamp(),
+        });
+      } catch (e) {}
+      toast.success(`Online Order #${order.id.slice(-5).toUpperCase()}: Food is Ready! Ready for Rider Pickup.`);
     } catch (err) {
       console.error('Mark online ready failed:', err);
       toast.error('Failed to update status.');
@@ -1051,10 +1086,10 @@ export default function KitchenPage() {
                           <button
                             type="button"
                             onClick={() => handleMarkOnlineReady(order)}
-                            className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs shadow-pos-glow transition-all pos-btn-touch flex items-center justify-center space-x-1.5"
+                            className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs shadow-pos-glow transition-all pos-btn-touch flex items-center justify-center space-x-1.5"
                           >
                             <CheckCircle2 className="w-4 h-4" />
-                            <span>Mark Food Ready & Packed</span>
+                            <span>Food is Ready (Cooked & Packed)</span>
                           </button>
                         )}
 

@@ -26,10 +26,10 @@ export function subscribeToAvailableOrders(callback) {
     const orders = [];
     snapshot.forEach((docSnap) => {
       const data = docSnap.data();
-      // Available orders: not yet assigned to a rider, confirmed or being prepared, and not cancelled/completed
+      // Available orders: not yet assigned to a rider, confirmed, preparing or ready, and not cancelled/completed
       if (
         !data.riderId &&
-        ['CONFIRMED', 'PREPARING', 'READY_FOR_PICKUP'].includes(data.status) &&
+        ['CONFIRMED', 'PREPARING', 'READY', 'READY_FOR_PICKUP'].includes(data.status) &&
         data.status !== 'CANCELLED' &&
         data.status !== 'COMPLETED'
       ) {
@@ -81,10 +81,12 @@ export async function acceptDeliveryOrder(orderId, riderProfile) {
   const trackingRef = doc(db, 'deliveryTracking', orderId);
   const riderRef = doc(db, 'deliveryPartners', riderId);
 
+  const riderPhoto = riderProfile.photoUrl || riderProfile.photo || '';
   const riderInfo = {
     riderId: riderId,
     riderName: riderProfile.name,
     riderPhone: riderProfile.phone,
+    riderPhoto: riderPhoto,
     riderVehicle: riderProfile.vehicleType || 'BIKE',
     riderVehicleNumber: riderProfile.vehicleNumber || '',
     deliveryStatus: DELIVERY_STATUS.RIDER_ASSIGNED,
@@ -99,6 +101,7 @@ export async function acceptDeliveryOrder(orderId, riderProfile) {
     riderId: riderId,
     riderName: riderProfile.name,
     riderPhone: riderProfile.phone,
+    riderPhoto: riderPhoto,
     riderVehicle: `${riderProfile.vehicleType || 'BIKE'} (${riderProfile.vehicleNumber || 'Standard'})`,
     lastUpdatedAt: serverTimestamp(),
   }, { merge: true });

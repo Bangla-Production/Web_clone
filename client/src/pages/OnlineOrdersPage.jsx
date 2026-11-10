@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import {
   ShoppingBag, Package, Bike, CheckCircle2, XCircle, Clock, ChevronDown,
   Truck, MapPin, Phone, User, AlertCircle, RefreshCw, Zap, Navigation2,
-  ArrowRight, Receipt
+  ArrowRight, Receipt, ChefHat
 } from 'lucide-react';
 import {
-  subscribeToOnlineOrders,
-  updateOnlineOrderStatus
+  subscribeToOnlineOrders
 } from '../services/onlineOrderService';
 import { useAuth } from '../context/AuthContext';
 import { useRestaurant } from '../context/RestaurantContext';
@@ -17,19 +17,12 @@ import { useToast } from '../context/ToastContext';
 const STATUS_CONFIG = {
   PLACED:            { label: 'New Order',      color: 'bg-blue-500',    text: 'text-blue-700 dark:text-blue-300',    bg: 'bg-blue-50 dark:bg-blue-950/40',    border: 'border-blue-200 dark:border-blue-700' },
   CONFIRMED:         { label: 'Confirmed',      color: 'bg-amber-400',   text: 'text-amber-700 dark:text-amber-300',  bg: 'bg-amber-50 dark:bg-amber-950/40',  border: 'border-amber-200 dark:border-amber-700' },
-  PREPARING:         { label: 'Preparing',      color: 'bg-orange-500',  text: 'text-orange-700 dark:text-orange-300', bg: 'bg-orange-50 dark:bg-orange-950/40', border: 'border-orange-200 dark:border-orange-700' },
-  READY:             { label: 'Ready',          color: 'bg-purple-500',  text: 'text-purple-700 dark:text-purple-300', bg: 'bg-purple-50 dark:bg-purple-950/40', border: 'border-purple-200 dark:border-purple-700' },
+  PREPARING:         { label: 'Cooking in Kitchen', color: 'bg-orange-500',  text: 'text-orange-700 dark:text-orange-300', bg: 'bg-orange-50 dark:bg-orange-950/40', border: 'border-orange-200 dark:border-orange-700' },
+  READY:             { label: 'Food is Ready',  color: 'bg-emerald-500', text: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-50 dark:bg-emerald-950/40', border: 'border-emerald-200 dark:border-emerald-700' },
+  READY_FOR_PICKUP:  { label: 'Food is Ready',  color: 'bg-emerald-500', text: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-50 dark:bg-emerald-950/40', border: 'border-emerald-200 dark:border-emerald-700' },
   OUT_FOR_DELIVERY:  { label: 'Out for Delivery', color: 'bg-cyan-500', text: 'text-cyan-700 dark:text-cyan-300',    bg: 'bg-cyan-50 dark:bg-cyan-950/40',    border: 'border-cyan-200 dark:border-cyan-700' },
-  COMPLETED:         { label: 'Completed',      color: 'bg-emerald-500', text: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-50 dark:bg-emerald-950/40', border: 'border-emerald-200 dark:border-emerald-700' },
+  COMPLETED:         { label: 'Delivered / Completed', color: 'bg-emerald-500', text: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-50 dark:bg-emerald-950/40', border: 'border-emerald-200 dark:border-emerald-700' },
   CANCELLED:         { label: 'Cancelled',      color: 'bg-red-500',     text: 'text-red-700 dark:text-red-300',     bg: 'bg-red-50 dark:bg-red-950/40',     border: 'border-red-200 dark:border-red-700' },
-};
-
-const NEXT_STATUS = {
-  PLACED:           'CONFIRMED',
-  CONFIRMED:        'PREPARING',
-  PREPARING:        null, // branching — READY or OUT_FOR_DELIVERY
-  READY:            'COMPLETED',
-  OUT_FOR_DELIVERY: 'COMPLETED',
 };
 
 function StatusBadge({ status }) {
@@ -56,36 +49,15 @@ function OrderTypeBadge({ type }) {
   );
 }
 
-// ─── Single Order Card ────────────────────────────────────────────────────────
+// ─── Single Order Card (History View) ─────────────────────────────────────────
 
-function OrderCard({ order, restaurantId, onUpdated }) {
-  const toast = useToast();
-  const [busy, setBusy] = useState(false);
+function OrderCard({ order }) {
   const [expanded, setExpanded] = useState(false);
-
-  const advanceStatus = async (toStatus) => {
-    setBusy(true);
-    try {
-      await updateOnlineOrderStatus(restaurantId, order.id, toStatus);
-      toast.success(`Order #${order.id.slice(-5).toUpperCase()} → ${STATUS_CONFIG[toStatus]?.label}`);
-      if (onUpdated) onUpdated();
-    } catch (err) {
-      toast.error('Could not update order status.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const cancelOrder = async () => {
-    if (!window.confirm('Cancel this order?')) return;
-    await advanceStatus('CANCELLED');
-  };
 
   const ts = order.createdAt?.toDate?.() || new Date();
   const timeStr = ts.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
   const dateStr = ts.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
   const isDelivery = order.orderType === 'DELIVERY';
-  const nextStatus = NEXT_STATUS[order.status];
   const cfg = STATUS_CONFIG[order.status] || STATUS_CONFIG.PLACED;
 
   return (
@@ -173,50 +145,41 @@ function OrderCard({ order, restaurantId, onUpdated }) {
         </div>
       )}
 
-      {/* Actions */}
-      {!['COMPLETED', 'CANCELLED'].includes(order.status) && (
-        <div className="flex items-center gap-2 px-4 pb-4 flex-wrap">
-          {/* Confirm / Preparing */}
-          {nextStatus && order.status !== 'PREPARING' && (
-            <button
-              onClick={() => advanceStatus(nextStatus)}
-              disabled={busy}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold shadow transition-all disabled:opacity-60"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5"/>
-              {STATUS_CONFIG[nextStatus]?.label}
-            </button>
+      {/* Order Status & Delivery Dispatch Info (History View) */}
+      <div className="flex items-center justify-between gap-2 px-4 pb-4 pt-1 flex-wrap border-t border-current/10">
+        <div className="flex items-center gap-2 text-xs">
+          {order.status === 'PLACED' && (
+            <span className="text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5 animate-pulse"/> Awaiting Kitchen Acceptance
+            </span>
           )}
-
-          {/* From PREPARING: branch to Ready (Takeaway) or Out for Delivery */}
-          {order.status === 'PREPARING' && !isDelivery && (
-            <button
-              onClick={() => advanceStatus('READY')}
-              disabled={busy}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-500 hover:bg-purple-600 text-white text-xs font-bold shadow transition-all disabled:opacity-60"
-            >
-              <Zap className="w-3.5 h-3.5"/> Mark Ready for Pickup
-            </button>
+          {['CONFIRMED', 'PREPARING'].includes(order.status) && (
+            <span className="text-sky-600 dark:text-sky-400 font-semibold flex items-center gap-1">
+              <ChefHat className="w-3.5 h-3.5 animate-bounce"/> Cooking in Kitchen
+            </span>
           )}
-          {order.status === 'PREPARING' && isDelivery && (
-            <button
-              onClick={() => advanceStatus('OUT_FOR_DELIVERY')}
-              disabled={busy}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow transition-all disabled:opacity-60"
-            >
-              <Bike className="w-3.5 h-3.5"/> Out for Delivery
-            </button>
+          {['READY', 'READY_FOR_PICKUP'].includes(order.status) && (
+            <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5"/> Food is Ready from Kitchen
+            </span>
           )}
-
-          <button
-            onClick={cancelOrder}
-            disabled={busy}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/60 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-700 text-xs font-bold transition-all disabled:opacity-60"
-          >
-            <XCircle className="w-3.5 h-3.5"/> Cancel
-          </button>
+          {order.riderName && (
+            <span className="text-cyan-700 dark:text-cyan-300 font-bold flex items-center gap-1 bg-cyan-50 dark:bg-cyan-950/40 px-2.5 py-1 rounded-lg border border-cyan-200 dark:border-cyan-800">
+              <Bike className="w-3.5 h-3.5"/> Rider: {order.riderName} ({order.riderPhone || 'Assigned'})
+            </span>
+          )}
         </div>
-      )}
+
+        {/* Link to Delivery Management for rider assignment */}
+        {isDelivery && !order.riderId && !['COMPLETED', 'CANCELLED'].includes(order.status) && (
+          <Link
+            to="/delivery-management"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow transition-all"
+          >
+            <Bike className="w-3.5 h-3.5"/> Assign Rider in Delivery Management →
+          </Link>
+        )}
+      </div>
     </div>
   );
 }

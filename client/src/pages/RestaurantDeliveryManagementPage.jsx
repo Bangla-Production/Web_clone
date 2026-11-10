@@ -18,7 +18,10 @@ import {
   Eye,
   Plus,
   Sparkles,
-  UserPlus
+  UserPlus,
+  Camera,
+  Upload,
+  XCircle,
 } from 'lucide-react';
 import { collection, query, where, onSnapshot, getDocs, doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase/config';
@@ -28,6 +31,7 @@ import { DELIVERY_STATUS, DELIVERY_STATUS_LABELS } from '../services/deliverySer
 import { acceptDeliveryOrder, updateDeliveryStep } from '../services/deliveryPartnerService';
 import { calculateDistanceKm } from '../services/locationService';
 import { validateIndianPhone } from '../utils/phoneValidation';
+import { compressImageToBase64 } from '../utils/imageHelper';
 import LiveTrackingMap from '../components/delivery/LiveTrackingMap';
 import Modal from '../components/common/Modal';
 
@@ -47,6 +51,8 @@ export default function RestaurantDeliveryManagementPage() {
   const [showQuickAddRider, setShowQuickAddRider] = useState(false);
   const [quickRiderName, setQuickRiderName] = useState('');
   const [quickRiderPhone, setQuickRiderPhone] = useState('');
+  const [quickRiderPhoto, setQuickRiderPhoto] = useState('');
+  const [quickPhotoLoading, setQuickPhotoLoading] = useState(false);
   const [quickVehicleType, setQuickVehicleType] = useState('BIKE');
   const [isAddingRider, setIsAddingRider] = useState(false);
 
@@ -123,6 +129,21 @@ export default function RestaurantDeliveryManagementPage() {
     }
   };
 
+  const handleQuickPhotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setQuickPhotoLoading(true);
+      const base64 = await compressImageToBase64(file, 300, 300, 0.8);
+      setQuickRiderPhoto(base64);
+      toast.success('Rider photo selected!');
+    } catch (err) {
+      toast.error(err.message || 'Failed to process rider photo');
+    } finally {
+      setQuickPhotoLoading(false);
+    }
+  };
+
   const handleQuickRegisterAndAssign = async (e) => {
     e.preventDefault();
     if (!quickRiderName.trim()) {
@@ -135,6 +156,11 @@ export default function RestaurantDeliveryManagementPage() {
       return;
     }
 
+    if (!quickRiderPhoto) {
+      toast.error('Rider profile picture is mandatory. Please upload a photo.');
+      return;
+    }
+
     try {
       setIsAddingRider(true);
       const riderRef = doc(collection(db, 'deliveryPartners'));
@@ -144,6 +170,7 @@ export default function RestaurantDeliveryManagementPage() {
       const newRider = {
         name: quickRiderName.trim(),
         phone: phoneVal.cleaned,
+        photoUrl: quickRiderPhoto,
         vehicleType: quickVehicleType || 'BIKE',
         vehicleNumber: '',
         status: 'APPROVED',
@@ -159,6 +186,12 @@ export default function RestaurantDeliveryManagementPage() {
 
       // Immediately assign to current order
       await handleAssignRider({ id: riderRef.id, ...newRider });
+
+      // Reset form
+      setQuickRiderName('');
+      setQuickRiderPhone('');
+      setQuickRiderPhoto('');
+      setShowQuickAddRider(false);
     } catch (err) {
       console.error(err);
       toast.error('Failed to register rider');
@@ -174,6 +207,7 @@ export default function RestaurantDeliveryManagementPage() {
         uid: rider.id,
         name: rider.name || 'Delivery Partner',
         phone: rider.phone || '',
+        photoUrl: rider.photoUrl || rider.photo || '',
         vehicleType: rider.vehicleType || 'BIKE',
         vehicleNumber: rider.vehicleNumber || '',
       });
@@ -182,30 +216,6 @@ export default function RestaurantDeliveryManagementPage() {
     } catch (err) {
       console.error(err);
       toast.error('Assignment failed');
-    }
-  };
-
-  const handleUpdateStatus = async (orderId, newStatus) => {
-    try {
-      const orderRef = doc(db, 'onlineOrders', orderId);
-      const updates = {
-        deliveryStatus: newStatus,
-        status: newStatus === 'READY_FOR_PICKUP' ? 'PREPARING' : newStatus,
-        updatedAt: serverTimestamp(),
-      };
-      await updateDoc(orderRef, updates);
-
-      // Also sync tracking doc
-      const trackingRef = doc(db, 'deliveryTracking', orderId);
-      await updateDoc(trackingRef, {
-        status: newStatus,
-        lastUpdatedAt: serverTimestamp(),
-      }).catch(() => {});
-
-      toast.success(`Order updated to: ${DELIVERY_STATUS_LABELS[newStatus] || newStatus}`);
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to update status');
     }
   };
 
@@ -367,8 +377,12 @@ export default function RestaurantDeliveryManagementPage() {
                   <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
                     {ord.riderName ? (
                       <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center font-bold text-xs">
-                          <Bike className="w-3.5 h-3.5" />
+                        <div className="w-8 h-8 rounded-full overflow-hidden bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center font-bold text-xs shrink-0 border border-cyan-500/30">
+                          {ord.riderPhoto ? (
+                            <img src={ord.riderPhoto} alt={ord.riderName} className="w-full h-full object-cover" />
+                          ) : (
+                            <Bike className="w-4 h-4" />
+                          )}
                         </div>
                         <div>
                           <p className="font-bold text-slate-900 dark:text-white text-[11px] leading-tight">
@@ -396,46 +410,66 @@ export default function RestaurantDeliveryManagementPage() {
                   </div>
                 </div>
 
-                {/* Bottom Action Buttons */}
-                {!isCompleted && (
-                  <div className="pt-2 flex flex-wrap gap-1.5 justify-end">
+                {/* Kitchen Food Readiness Status & Rider Assignment (Cashier cannot manually mark food ready) */}
+                <div className="pt-2 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center gap-1.5 text-xs">
                     {currentStatus === 'PLACED' && (
-                      <button
-                        onClick={() => handleUpdateStatus(ord.id, 'CONFIRMED')}
-                        className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow"
-                      >
-                        Accept & Confirm
-                      </button>
+                      <span className="px-2.5 py-1 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-500 font-bold flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5 animate-pulse" />
+                        <span>Awaiting Kitchen Acceptance</span>
+                      </span>
                     )}
 
-                    {currentStatus === 'CONFIRMED' && (
-                      <button
-                        onClick={() => handleUpdateStatus(ord.id, 'PREPARING')}
-                        className="px-3 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs shadow flex items-center gap-1"
-                      >
-                        <ChefHat className="w-3.5 h-3.5" /> Send to Kitchen
-                      </button>
+                    {['CONFIRMED', 'PREPARING'].includes(currentStatus) && (
+                      <span className="px-2.5 py-1 rounded-xl bg-sky-500/15 border border-sky-500/30 text-sky-400 font-bold flex items-center gap-1">
+                        <ChefHat className="w-3.5 h-3.5 animate-bounce" />
+                        <span>Cooking in Kitchen...</span>
+                      </span>
                     )}
 
-                    {currentStatus === 'PREPARING' && (
-                      <button
-                        onClick={() => handleUpdateStatus(ord.id, 'READY_FOR_PICKUP')}
-                        className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow"
-                      >
-                        Mark Ready for Pickup
-                      </button>
+                    {['READY', 'READY_FOR_PICKUP'].includes(currentStatus) && (
+                      <span className="px-2.5 py-1 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-bold flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>Food is Ready from Kitchen!</span>
+                      </span>
                     )}
 
-                    {!ord.riderId && (
-                      <button
-                        onClick={() => openAssignModal(ord)}
-                        className="px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shadow flex items-center gap-1"
-                      >
-                        <Bike className="w-3.5 h-3.5" /> Assign Rider
-                      </button>
+                    {currentStatus === 'OUT_FOR_DELIVERY' && (
+                      <span className="px-2.5 py-1 rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 font-bold flex items-center gap-1">
+                        <Bike className="w-3.5 h-3.5" />
+                        <span>Rider on Way to Customer</span>
+                      </span>
+                    )}
+
+                    {currentStatus === 'DELIVERED' && (
+                      <span className="px-2.5 py-1 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-bold flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>Order Delivered</span>
+                      </span>
+                    )}
+
+                    {currentStatus === 'CANCELLED' && (
+                      <span className="px-2.5 py-1 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-400 font-bold flex items-center gap-1">
+                        <XCircle className="w-3.5 h-3.5" />
+                        <span>Order Cancelled</span>
+                      </span>
                     )}
                   </div>
-                )}
+
+                  {!isCompleted && !ord.riderId && currentStatus !== 'CANCELLED' && (
+                    <button
+                      onClick={() => openAssignModal(ord)}
+                      className={`px-3.5 py-1.5 rounded-xl text-white font-black text-xs shadow flex items-center gap-1.5 transition-all ${
+                        ['READY', 'READY_FOR_PICKUP'].includes(currentStatus)
+                          ? 'bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 ring-2 ring-cyan-400/50 shadow-lg shadow-cyan-500/20'
+                          : 'bg-cyan-600 hover:bg-cyan-500'
+                      }`}
+                    >
+                      <Bike className="w-3.5 h-3.5" />
+                      <span>Assign Rider</span>
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -484,7 +518,38 @@ export default function RestaurantDeliveryManagementPage() {
                     <UserPlus className="w-3.5 h-3.5 text-amber-400" />
                     <span>Instant Rider Registration</span>
                   </h4>
-                  <span className="text-[10px] text-slate-400">Name & 10-digit phone</span>
+                  <span className="text-[10px] text-slate-400">Photo, Name & Phone</span>
+                </div>
+
+                {/* Mandatory Rider Photo Upload */}
+                <div className="flex items-center gap-3 p-2.5 bg-slate-900 rounded-xl border border-slate-700">
+                  <div className="relative w-12 h-12 rounded-full overflow-hidden bg-slate-800 border-2 border-amber-400 flex items-center justify-center shrink-0">
+                    {quickRiderPhoto ? (
+                      <img src={quickRiderPhoto} alt="Rider Preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <Camera className="w-5 h-5 text-slate-400" />
+                    )}
+                    {quickPhotoLoading && (
+                      <div className="absolute inset-0 bg-black/70 flex items-center justify-center text-[9px] text-white">
+                        ...
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <label className="cursor-pointer inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[11px] shadow transition-all">
+                      <Upload className="w-3 h-3" />
+                      <span>{quickRiderPhoto ? 'Change Photo' : 'Upload Rider Photo *'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleQuickPhotoUpload}
+                        className="hidden"
+                      />
+                    </label>
+                    <p className="text-[10px] text-slate-400 mt-0.5 truncate">
+                      {quickRiderPhoto ? '✓ Photo selected' : 'Profile photo is mandatory'}
+                    </p>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -592,10 +657,14 @@ export default function RestaurantDeliveryManagementPage() {
                       }`}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold shrink-0 ${
-                          idx === 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-cyan-500/20 text-cyan-400'
+                        <div className={`w-9 h-9 rounded-full overflow-hidden flex items-center justify-center font-bold shrink-0 border ${
+                          idx === 0 ? 'border-emerald-400 bg-emerald-500/20' : 'border-slate-600 bg-slate-700'
                         }`}>
-                          <Bike className="w-4 h-4" />
+                          {r.photoUrl ? (
+                            <img src={r.photoUrl} alt={r.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <Bike className={`w-4 h-4 ${idx === 0 ? 'text-emerald-400' : 'text-cyan-400'}`} />
+                          )}
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5 flex-wrap">

@@ -11,10 +11,13 @@ import {
   Sun,
   Moon,
   ArrowRight,
+  Camera,
+  Upload,
 } from 'lucide-react';
 import { useDeliveryPartnerAuth } from '../context/DeliveryPartnerAuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { validateIndianPhone } from '../utils/phoneValidation';
+import { compressImageToBase64 } from '../utils/imageHelper';
 
 export default function DeliveryPartnerAuthPage() {
   const navigate = useNavigate();
@@ -27,6 +30,8 @@ export default function DeliveryPartnerAuthPage() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [photoUrl, setPhotoUrl] = useState('');
+  const [photoLoading, setPhotoLoading] = useState(false);
   const [vehicleType, setVehicleType] = useState('BIKE');
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [error, setError] = useState('');
@@ -37,6 +42,21 @@ export default function DeliveryPartnerAuthPage() {
     navigate('/rider');
     return null;
   }
+
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setPhotoLoading(true);
+      setError('');
+      const base64 = await compressImageToBase64(file, 300, 300, 0.8);
+      setPhotoUrl(base64);
+    } catch (err) {
+      setError(err.message || 'Failed to process photo');
+    } finally {
+      setPhotoLoading(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -58,6 +78,12 @@ export default function DeliveryPartnerAuthPage() {
           return;
         }
 
+        if (!photoUrl) {
+          setError('Profile photo / picture is mandatory. Please upload a clear photo.');
+          setLoading(false);
+          return;
+        }
+
         const riderEmail = email.trim() || `${phoneVal.cleaned}@rider.abarkhabo.local`;
         const riderPassword = password || `${phoneVal.cleaned}@123`;
 
@@ -65,6 +91,7 @@ export default function DeliveryPartnerAuthPage() {
           name: name.trim(),
           email: riderEmail,
           phone: phoneVal.cleaned,
+          photoUrl,
           vehicleType,
           vehicleNumber,
           password: riderPassword,
@@ -124,6 +151,33 @@ export default function DeliveryPartnerAuthPage() {
           <form onSubmit={handleSubmit} className="space-y-3.5">
             {isRegister && (
               <>
+                {/* Mandatory Profile Photo */}
+                <div className="flex flex-col items-center justify-center p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border-2 border-dashed border-slate-300 dark:border-slate-700">
+                  <div className="relative w-20 h-20 rounded-full overflow-hidden bg-slate-200 dark:bg-slate-700 border-2 border-cyan-500 shadow-md flex items-center justify-center mb-2">
+                    {photoUrl ? (
+                      <img src={photoUrl} alt="Rider Preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <Camera className="w-8 h-8 text-slate-400" />
+                    )}
+                    {photoLoading && (
+                      <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-[10px] text-white font-bold">
+                        Resizing...
+                      </div>
+                    )}
+                  </div>
+                  <label className="cursor-pointer px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shadow flex items-center gap-1.5 transition-all">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>{photoUrl ? 'Change Photo' : 'Upload Rider Photo *'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePhotoUpload}
+                      className="hidden"
+                    />
+                  </label>
+                  <span className="text-[10px] text-slate-400 mt-1">Profile photo is mandatory</span>
+                </div>
+
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                     Full Name *
