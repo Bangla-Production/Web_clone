@@ -67,6 +67,7 @@ async function main() {
       email: 'admin_a@resta.com',
       role: 'restaurant_admin',
       restaurantId: 'rest_a',
+      allOutlets: true,
       status: 'active',
       authMethod: 'email',
     });
@@ -75,10 +76,11 @@ async function main() {
       email: 'admin_b@restb.com',
       role: 'restaurant_admin',
       restaurantId: 'rest_b',
+      allOutlets: true,
       status: 'active',
       authMethod: 'email',
     });
-    // Staff UID profile (Tenant A Waiter)
+    // Staff UID profile (Tenant A Waiter - Main Outlet)
     await db.doc('users/staff_uid_1').set({
       uid: 'staff_uid_1',
       email: 'waiter1@resta.com',
@@ -86,6 +88,18 @@ async function main() {
       role: 'waiter',
       restaurantId: 'rest_a',
       assignedOutletIds: ['rest_a_main'],
+      allOutlets: false,
+      status: 'active',
+      authMethod: 'email',
+    });
+    // Staff UID profile (Tenant A Waiter - Branch 2 Outlet)
+    await db.doc('users/staff_branch2_uid').set({
+      uid: 'staff_branch2_uid',
+      email: 'waiter_b2@resta.com',
+      name: 'Waiter Branch 2',
+      role: 'waiter',
+      restaurantId: 'rest_a',
+      assignedOutletIds: ['rest_a_branch2'],
       allOutlets: false,
       status: 'active',
       authMethod: 'email',
@@ -133,6 +147,30 @@ async function main() {
       name: 'Chili Chicken',
       basePrice: 380,
       restaurantId: 'rest_b'
+    });
+    // Authoritative Normalized Orders (aggregatorOrders)
+    await db.doc('aggregatorOrders/SWIGGY_rest_a_main_1001').set({
+      orderId: 'SWIGGY_rest_a_main_1001',
+      restaurantId: 'rest_a',
+      outletId: 'rest_a_main',
+      source: 'SWIGGY',
+      orderStatus: 'PLACED',
+      orderType: 'DELIVERY',
+      customer: { uid: 'cust_a', name: 'Alice Customer' },
+      items: [{ itemId: 'item_1', name: 'Biryani', price: 550, qty: 1 }],
+      pricing: { grandTotal: 550, itemTotal: 550, taxTotal: 0 },
+      delivery: { riderId: 'rider_1' }
+    });
+    await db.doc('aggregatorOrders/SWIGGY_rest_b_main_2001').set({
+      orderId: 'SWIGGY_rest_b_main_2001',
+      restaurantId: 'rest_b',
+      outletId: 'rest_b_main',
+      source: 'SWIGGY',
+      orderStatus: 'PLACED',
+      orderType: 'DELIVERY',
+      customer: { uid: 'cust_b', name: 'Bob Customer' },
+      items: [{ itemId: 'item_b1', name: 'Chili Chicken', price: 380, qty: 1 }],
+      pricing: { grandTotal: 380, itemTotal: 380, taxTotal: 0 }
     });
     // Aggregator Connection Tenant B
     await db.doc('restaurants/rest_b/aggregatorConnections/swiggy_cred').set({
@@ -194,6 +232,12 @@ async function main() {
     email_verified: true,
   });
   const dbStaffUid = staffUidContext.firestore();
+
+  const staffBranch2Context = testEnv.authenticatedContext('staff_branch2_uid', {
+    email: 'waiter_b2@resta.com',
+    email_verified: true,
+  });
+  const dbStaffBranch2 = staffBranch2Context.firestore();
 
   const managerAContext = testEnv.authenticatedContext('manager_uid_1', {
     email: 'manager@resta.com',
@@ -385,7 +429,7 @@ async function main() {
     await assertFails(dbStaffUid.doc('users/admin_b@restb.com').get());
   });
 
-  // Scenario 25: Super Admin reading any user profile across tenants (Allowed)
+  // Scenario 25: Super Admin reading user profiles across tenants (Allowed)
   await runTest('Super Admin reading user profiles across any tenant (Allowed)', async () => {
     await assertSucceeds(dbSuperAdmin.doc('users/staff_uid_1').get());
     await assertSucceeds(dbSuperAdmin.doc('users/admin_b@restb.com').get());
@@ -445,6 +489,66 @@ async function main() {
   await runTest('Public/Customer reading Master Menu Catalog & Overrides (Allowed)', async () => {
     await assertSucceeds(dbCustomerA.doc('restaurants/rest_a/menuCatalog/item_1').get());
     await assertSucceeds(dbCustomerA.doc('restaurants/rest_a/outlets/rest_a_main/menuOverrides/item_1').get());
+  });
+
+  // --- Step 4 Authoritative Normalized Orders (aggregatorOrders) Scenarios ---
+
+  // Scenario 33: Staff A reading authorized aggregator order in assigned outlet (Allowed)
+  await runTest('Staff A reading authorized aggregator order in assigned outlet (Allowed)', async () => {
+    await assertSucceeds(dbStaffUid.doc('aggregatorOrders/SWIGGY_rest_a_main_1001').get());
+  });
+
+  // Scenario 34: Staff A reading aggregator order of Tenant B (Cross-tenant blocked)
+  await runTest('Staff A reading aggregator order of Tenant B (Cross-tenant blocked)', async () => {
+    await assertFails(dbStaffUid.doc('aggregatorOrders/SWIGGY_rest_b_main_2001').get());
+  });
+
+  // Scenario 35: Staff A (assigned only to Branch 2) reading Branch 1 order (Cross-outlet blocked)
+  await runTest('Staff A (Branch 2 only) reading Branch 1 order (Cross-outlet blocked)', async () => {
+    await assertFails(dbStaffBranch2.doc('aggregatorOrders/SWIGGY_rest_a_main_1001').get());
+  });
+
+  // Scenario 36: Customer A reading own aggregator order (Allowed)
+  await runTest('Customer A reading own aggregator order (Allowed)', async () => {
+    await assertSucceeds(dbCustomerA.doc('aggregatorOrders/SWIGGY_rest_a_main_1001').get());
+  });
+
+  // Scenario 37: Customer B attempting to read Customer A aggregator order (Forbidden)
+  await runTest('Customer B reading Customer A aggregator order (Forbidden)', async () => {
+    await assertFails(dbCustomerB.doc('aggregatorOrders/SWIGGY_rest_a_main_1001').get());
+  });
+
+  // Scenario 38: Unauthenticated user attempting to read aggregator order (Forbidden)
+  await runTest('Unauthenticated user reading aggregator order (Forbidden)', async () => {
+    await assertFails(dbUnauth.doc('aggregatorOrders/SWIGGY_rest_a_main_1001').get());
+  });
+
+  // Scenario 39: Staff A updating orderStatus on authorized aggregator order (Allowed)
+  await runTest('Staff A updating orderStatus on authorized aggregator order (Allowed)', async () => {
+    await assertSucceeds(dbStaffUid.doc('aggregatorOrders/SWIGGY_rest_a_main_1001').update({
+      orderStatus: 'ACCEPTED'
+    }));
+  });
+
+  // Scenario 40: Staff A attempting to alter financial pricing on aggregator order (Forbidden - Price Immutability)
+  await runTest('Staff A altering financial pricing on aggregator order (Forbidden - Price Immutability)', async () => {
+    await assertFails(dbStaffUid.doc('aggregatorOrders/SWIGGY_rest_a_main_1001').update({
+      'pricing.grandTotal': 10
+    }));
+  });
+
+  // Scenario 41: Staff A attempting to alter items array on aggregator order (Forbidden - Item Immutability)
+  await runTest('Staff A altering items array on aggregator order (Forbidden - Item Immutability)', async () => {
+    await assertFails(dbStaffUid.doc('aggregatorOrders/SWIGGY_rest_a_main_1001').update({
+      items: [{ itemId: 'item_1', name: 'Biryani', price: 10, qty: 1 }]
+    }));
+  });
+
+  // Scenario 42: Staff A attempting to change restaurantId or outletId (Forbidden - Tenant Hopping)
+  await runTest('Staff A altering restaurantId or outletId on aggregator order (Forbidden)', async () => {
+    await assertFails(dbStaffUid.doc('aggregatorOrders/SWIGGY_rest_a_main_1001').update({
+      outletId: 'rest_a_branch2'
+    }));
   });
 
   await testEnv.cleanup();

@@ -326,7 +326,62 @@ service cloud.firestore {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 6. ONLINE ORDERS & FOOD DELIVERY (/onlineOrders/{orderId})
+    // 6. AUTHORITATIVE NORMALIZED ORDERS (/aggregatorOrders/{orderId})
+    // ─────────────────────────────────────────────────────────────────────────
+
+    match /aggregatorOrders/{orderId} {
+      // READ PERMISSIONS:
+      // 1. Super Admin
+      // 2. Staff of the specific restaurant with explicit outlet access
+      // 3. Authenticated Customer who owns the order
+      // 4. Assigned Rider
+      // Public users CANNOT read arbitrary aggregator orders!
+      allow read: if isSuperAdmin() ||
+        (isAuthenticated() && isRestaurantStaff(resource.data.restaurantId) &&
+         hasOutletAccess(resource.data.restaurantId, resource.data.outletId)) ||
+        (isAuthenticated() && (
+          resource.data.get('customer', {}).get('uid', '') == request.auth.uid ||
+          resource.data.get('customerId', '') == request.auth.uid ||
+          resource.data.get('delivery', {}).get('riderId', '') == request.auth.uid
+        ));
+
+      // CREATE PERMISSIONS:
+      // 1. Super Admin
+      // 2. Staff of the restaurant creating order with outlet access
+      // 3. Customer placing direct order: status must be PLACED, customer.uid matches auth.uid
+      allow create: if isSuperAdmin() ||
+        (isAuthenticated() && isRestaurantStaff(request.resource.data.restaurantId) &&
+         hasOutletAccess(request.resource.data.restaurantId, request.resource.data.outletId)) ||
+        (isAuthenticated() &&
+         request.resource.data.get('customer', {}).get('uid', '') == request.auth.uid &&
+         request.resource.data.get('orderStatus', 'PLACED') == 'PLACED' &&
+         request.resource.data.pricing.grandTotal >= 0);
+
+      // UPDATE PERMISSIONS:
+      // 1. Super Admin: full update access
+      // 2. Restaurant Staff: can update orderStatus, timestamps, mirrorStatus,
+      //    but CANNOT alter financial amounts (pricing), items, restaurantId, or outletId (Immutability enforced!)
+      // 3. Assigned Rider: can only update riderCoordinates and deliveryStatus / orderStatus (DISPATCHED/COMPLETED)
+      allow update: if isSuperAdmin() ||
+        (isAuthenticated() && isRestaurantStaff(resource.data.restaurantId) &&
+         hasOutletAccess(resource.data.restaurantId, resource.data.outletId) &&
+         request.resource.data.restaurantId == resource.data.restaurantId &&
+         request.resource.data.outletId == resource.data.outletId &&
+         request.resource.data.pricing == resource.data.pricing &&
+         request.resource.data.items == resource.data.items) ||
+        (isAuthenticated() &&
+         resource.data.get('delivery', {}).get('riderId', '') == request.auth.uid &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+           'orderStatus', 'delivery', 'timestamps', 'updatedAt'
+         ]));
+
+      // DELETE PERMISSIONS: Super Admin or Restaurant Admin of that tenant
+      allow delete: if isSuperAdmin() ||
+        (isAuthenticated() && isRestaurantAdmin(resource.data.restaurantId));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 7. ONLINE ORDERS & FOOD DELIVERY (/onlineOrders/{orderId})
     // ─────────────────────────────────────────────────────────────────────────
 
     match /onlineOrders/{orderId} {

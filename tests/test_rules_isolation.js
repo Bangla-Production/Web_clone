@@ -325,6 +325,67 @@ class SecurityContext {
       if (operation === 'delete') return this.isSuperAdmin();
     }
 
+    // 7. /aggregatorOrders/{orderId}
+    if (collection === 'aggregatorOrders') {
+      if (operation === 'read') {
+        const isStaffWithOutlet =
+          this.isAuthenticated() &&
+          this.isRestaurantStaff(existingResourceData?.restaurantId) &&
+          this.hasOutletAccess(existingResourceData?.restaurantId, existingResourceData?.outletId);
+
+        const isOwnerCustomer =
+          this.isAuthenticated() &&
+          (existingResourceData?.customer?.uid === this.auth.uid ||
+            existingResourceData?.customerId === this.auth.uid);
+
+        const isAssignedRider =
+          this.isAuthenticated() &&
+          existingResourceData?.delivery?.riderId === this.auth.uid;
+
+        return this.isSuperAdmin() || isStaffWithOutlet || isOwnerCustomer || isAssignedRider;
+      }
+
+      if (operation === 'create') {
+        const isStaffWithOutlet =
+          this.isAuthenticated() &&
+          this.isRestaurantStaff(requestResourceData?.restaurantId) &&
+          this.hasOutletAccess(requestResourceData?.restaurantId, requestResourceData?.outletId);
+
+        const isCustomerPlacingDirect =
+          this.isAuthenticated() &&
+          requestResourceData?.customer?.uid === this.auth.uid &&
+          (requestResourceData?.orderStatus || 'PLACED') === 'PLACED' &&
+          requestResourceData?.pricing?.grandTotal >= 0;
+
+        return this.isSuperAdmin() || isStaffWithOutlet || isCustomerPlacingDirect;
+      }
+
+      if (operation === 'update') {
+        if (this.isSuperAdmin()) return true;
+
+        const isStaffWithOutlet =
+          this.isAuthenticated() &&
+          this.isRestaurantStaff(existingResourceData?.restaurantId) &&
+          this.hasOutletAccess(existingResourceData?.restaurantId, existingResourceData?.outletId) &&
+          requestResourceData?.restaurantId === existingResourceData?.restaurantId &&
+          requestResourceData?.outletId === existingResourceData?.outletId &&
+          JSON.stringify(requestResourceData?.pricing) === JSON.stringify(existingResourceData?.pricing) &&
+          JSON.stringify(requestResourceData?.items) === JSON.stringify(existingResourceData?.items);
+
+        const isAssignedRider =
+          this.isAuthenticated() &&
+          existingResourceData?.delivery?.riderId === this.auth.uid &&
+          JSON.stringify(requestResourceData?.pricing) === JSON.stringify(existingResourceData?.pricing) &&
+          JSON.stringify(requestResourceData?.items) === JSON.stringify(existingResourceData?.items);
+
+        return isStaffWithOutlet || isAssignedRider;
+      }
+
+      if (operation === 'delete') {
+        return this.isSuperAdmin() || (this.isAuthenticated() && this.isRestaurantAdmin(existingResourceData?.restaurantId));
+      }
+    }
+
     return false;
   }
 }
@@ -780,6 +841,118 @@ assert(
   'Public user can read Outlet Menu Override',
   customerCtx.evaluate('restaurants/rest_a/outlets/rest_a_main/menuOverrides/biryani_awadhi', 'read'),
   true
+);
+
+console.log('\n9. STEP 4: NORMALIZED ONLINE ORDERS & AGGREGATOR ISOLATION');
+console.log('-'.repeat(60));
+
+const sampleOrderA = {
+  orderId: 'SWIGGY_rest_a_main_SW-101',
+  restaurantId: 'rest_a',
+  outletId: 'rest_a_main',
+  orderSource: 'SWIGGY',
+  orderStatus: 'PREPARING',
+  customer: { uid: 'cust_123', name: 'John Doe', phone: '+919876543210' },
+  items: [{ id: 'item_1', name: 'Biryani', price: 350, quantity: 2, subtotal: 700 }],
+  pricing: { subtotal: 700, taxAmount: 35, grandTotal: 735 }
+};
+
+// Test 56: Staff A with outlet access can read aggregator order in assigned outlet
+assert(
+  'Staff A with outlet access can read aggregator order in assigned outlet',
+  staffUidCtx.evaluate('aggregatorOrders/SWIGGY_rest_a_main_SW-101', 'read', null, sampleOrderA),
+  true
+);
+
+// Test 57: Staff A attempting to read aggregator order in unassigned outlet (Cross-outlet forbidden)
+assert(
+  'Staff A CANNOT read aggregator order in unassigned outlet (Cross-outlet forbidden)',
+  staffUidCtx.evaluate('aggregatorOrders/SWIGGY_rest_a_branch2_SW-102', 'read', null, {
+    ...sampleOrderA,
+    outletId: 'rest_a_branch2'
+  }),
+  false
+);
+
+// Test 58: Staff B attempting to read Restaurant A aggregator order (Cross-tenant forbidden)
+assert(
+  'Staff B CANNOT read Restaurant A aggregator order (Cross-tenant forbidden)',
+  adminBCtx.evaluate('aggregatorOrders/SWIGGY_rest_a_main_SW-101', 'read', null, sampleOrderA),
+  false
+);
+
+// Test 59: Customer reading their own aggregator order (Allowed)
+assert(
+  'Customer can read their own aggregator order',
+  customerCtx.evaluate('aggregatorOrders/SWIGGY_rest_a_main_SW-101', 'read', null, sampleOrderA),
+  true
+);
+
+// Test 60: Other customer attempting to read someone else aggregator order (Forbidden)
+assert(
+  'Other customer CANNOT read someone else aggregator order (Forbidden)',
+  otherCustomerCtx.evaluate('aggregatorOrders/SWIGGY_rest_a_main_SW-101', 'read', null, sampleOrderA),
+  false
+);
+
+// Test 61: Public unauthenticated user attempting to read aggregator order (Forbidden)
+assert(
+  'Public unauthenticated user CANNOT read aggregator order (Forbidden)',
+  unauthCtx.evaluate('aggregatorOrders/SWIGGY_rest_a_main_SW-101', 'read', null, sampleOrderA),
+  false
+);
+
+// Test 62: Staff A updating order status to READY (Allowed)
+assert(
+  'Staff A can update order status to READY',
+  staffUidCtx.evaluate(
+    'aggregatorOrders/SWIGGY_rest_a_main_SW-101',
+    'update',
+    { ...sampleOrderA, orderStatus: 'READY' },
+    sampleOrderA
+  ),
+  true
+);
+
+// Test 63: Staff attempting to tamper with financial pricing in aggregator order (Forbidden)
+assert(
+  'Staff CANNOT tamper with financial pricing in aggregator order (Immutability enforced)',
+  staffUidCtx.evaluate(
+    'aggregatorOrders/SWIGGY_rest_a_main_SW-101',
+    'update',
+    { ...sampleOrderA, pricing: { subtotal: 700, taxAmount: 35, grandTotal: 500 } },
+    sampleOrderA
+  ),
+  false
+);
+
+// Test 64: Staff attempting to tamper with order items in aggregator order (Forbidden)
+assert(
+  'Staff CANNOT tamper with order items in aggregator order (Immutability enforced)',
+  staffUidCtx.evaluate(
+    'aggregatorOrders/SWIGGY_rest_a_main_SW-101',
+    'update',
+    { ...sampleOrderA, items: [{ id: 'item_1', name: 'Biryani', price: 200, quantity: 1, subtotal: 200 }] },
+    sampleOrderA
+  ),
+  false
+);
+
+// Test 65: Customer attempting to create direct order for another UID (Forbidden)
+assert(
+  'Customer CANNOT create direct order for another UID (Identity spoofing blocked)',
+  customerCtx.evaluate(
+    'aggregatorOrders/DIRECT_rest_a_main_ord1',
+    'create',
+    {
+      restaurantId: 'rest_a',
+      outletId: 'rest_a_main',
+      customer: { uid: 'spoofed_uid_888' },
+      orderStatus: 'PLACED',
+      pricing: { grandTotal: 250 }
+    }
+  ),
+  false
 );
 
 console.log('\n' + '='.repeat(80));

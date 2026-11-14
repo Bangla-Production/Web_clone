@@ -1,7 +1,7 @@
 # Abar Khabo: Multi-Tenant Aggregator Platform — Project Progress Tracker
 
 ## Status Overview
-* **Current Stage:** STAGE 1 (Complete — Awaiting User Approval to Deploy or Begin Stage 2)
+* **Current Stage:** STAGE 2 PART B (Step 4 Complete — Awaiting User Approval to Begin Step 5)
 * **Target Platforms:** Swiggy, Zomato, Abar Khabo Direct Ordering
 * **Target Architecture:** Multi-Tenant SaaS, Outlet Hierarchy, Node.js + TypeScript Backend, Firestore Database, React + Vite Frontend.
 
@@ -13,7 +13,7 @@
 | :--- | :--- | :--- | :--- |
 | **STAGE 0** | Repository Inspection, Architecture Audit & Risk Analysis | **COMPLETE** | 2026-11-15 |
 | **STAGE 1** | Security & Strict Tenant Isolation | **COMPLETE** | 2026-11-15 |
-| **STAGE 2** | Database Schema & Outlets Model | **PART B IN PROGRESS** (Step 3 Complete; Awaiting Step 4 Approval) | 2026-11-15 |
+| **STAGE 2** | Database Schema & Outlets Model | **PART B IN PROGRESS** (Step 4 Complete; Awaiting Step 5 Approval) | 2026-11-15 |
 | **STAGE 3** | Backend Integration Infrastructure (`server/`) | QUEUED | - |
 | **STAGE 4** | Common Aggregator Adapter Framework | QUEUED | - |
 | **STAGE 5** | Mock Swiggy & Zomato Integration & Test Sandbox | QUEUED | - |
@@ -179,4 +179,42 @@
   * **Unit & AST Suites (`npm test`):** 170 / 170 tests passed (45 outlet model + 40 staff identity + 30 menu pricing + 55 security rules).
   * **Vite Production Build:** 1675 modules bundled cleanly in 4.61s with 0 errors.
 * **Next Authorized Step:**
-  * Awaiting user review and authorization to proceed to **Step 4 (Normalized Online Orders Schema & Dual-Mirroring Engine)**.
+  * Step 4 completed.
+
+---
+
+## Stage 2 Part B Summary (Step 4: Normalized Online Orders & Dual-Mirroring Engine)
+
+* **What was implemented:**
+  * **Authoritative Normalized Order Service (`client/src/services/normalizedOrderService.js`):**
+    * Authoritative schema: `aggregatorOrders/{orderId}` conforming to Stage 2 v2.0.0-PROPOSED.
+    * Deterministic idempotency keys: `${source}_${outletId}_${externalOrderId}` preventing duplicate webhook processing.
+    * Comprehensive financial calculation engine: item total, item discounts, packaging, 5% GST tax calculation with CGST/SGST split, round-off, 18% aggregator commission calculation, and net merchant payout.
+    * Item snapshot locking: complete freeze of variant, add-on, price, and instructions at order time.
+    * Formal lifecycle state machine: `PLACED` -> `ACCEPTED` -> `PREPARING` -> `READY` -> `DISPATCHED` -> `COMPLETED`, with explicit transitions for `CANCELLED` and `REJECTED`, and prevention of step-skipping and terminal-state mutation.
+    * Zero-downtime dual-mirroring engine: maps v2.0.0 normalized orders to legacy structure and writes atomically to `restaurants/{restaurantId}/onlineOrders/{orderId}` and root `onlineOrders/{orderId}`.
+    * Sync retry safety with `mirrorStatus: 'SYNCED' | 'FAILED' | 'PENDING'`.
+  * **Hardened Security Rules (`firestore.rules`):**
+    * Added `match /aggregatorOrders/{orderId}` with strict access controls.
+    * Closed to public reads; permitted only for Super Admin, verified restaurant staff with explicit outlet access (`hasOutletAccess`), owning customer, or assigned rider.
+    * Enforced client-side immutability: staff can update order status and timestamps, but cannot tamper with `pricing`, `items`, `restaurantId`, or `outletId`.
+    * Prohibited identity spoofing during customer direct order creation.
+  * **Re-exported in `client/src/services/firestoreService.js`:**
+    * Unified access to normalized order functions (`ingestNormalizedOrder`, `getNormalizedOrder`, `updateNormalizedOrderStatus`, `subscribeNormalizedOrdersByOutlet`, `mirrorOrderToLegacy`).
+* **Files Created:**
+  * `client/src/services/normalizedOrderService.js`
+  * `tests/test_normalized_orders.js`
+  * `STAGE2_STEP4_IMPLEMENTATION_REPORT.md`
+* **Files Modified:**
+  * `firestore.rules`
+  * `client/src/services/firestoreService.js`
+  * `package.json`
+  * `tests/emulator_rules_unit.test.js`
+  * `tests/test_rules_isolation.js`
+  * `PROJECT_PROGRESS.md`
+* **Test Verification Results:**
+  * **Live Firestore Emulator:** 42 / 42 scenarios passed (all 10 new order scenarios passed with gRPC `PERMISSION_DENIED` on price/item tampering, cross-tenant/cross-outlet reading, and customer isolation).
+  * **Unit & AST Suites (`npm test`):** 226 / 226 tests passed (45 outlet + 40 identity + 30 menu + 46 order + 65 security AST).
+  * **Vite Production Build:** 1676 modules bundled cleanly in 4.64s with 0 errors.
+* **Next Authorized Step:**
+  * Awaiting user review and authorization to proceed to **Step 5 (Aggregator Connection State & Webhook Ingestion Pipeline)**.

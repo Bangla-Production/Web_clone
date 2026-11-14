@@ -142,6 +142,27 @@ export {
 } from './menuService';
 
 // ----------------------------------------------------------------------
+// 1.4 NORMALIZED ONLINE ORDERS & DUAL-MIRRORING ENGINE
+// ----------------------------------------------------------------------
+export {
+  ORDER_SOURCES,
+  ORDER_TYPES,
+  ORDER_STATUS,
+  PAYMENT_STATUS,
+  MIRROR_STATUS,
+  VALID_STATUS_TRANSITIONS,
+  validateStatusTransition,
+  generateOrderIdempotencyKey,
+  normalizeOrderItemSnapshots,
+  calculateOrderPricing,
+  buildNormalizedOrderPayload,
+  ingestAuthoritativeOrder,
+  buildLegacyMirrorPayload,
+  mirrorOrderToLegacy,
+  transitionOrderStatus
+} from './normalizedOrderService';
+
+// ----------------------------------------------------------------------
 // 2. USERS & STAFF
 // ----------------------------------------------------------------------
 
