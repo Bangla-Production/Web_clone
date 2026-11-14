@@ -1580,6 +1580,12 @@ export async function settleAndReleaseTableAtomic(restaurantId, orderId, payment
 
     const outletId = order.outletId || paymentData.outletId || `${restaurantId}_main`;
 
+    const isAggregator = order.source === 'SWIGGY' || order.source === 'ZOMATO';
+    const resolvedMethod = isAggregator
+      ? (order.source === 'SWIGGY' ? 'SWIGGY_ONLINE' : 'ZOMATO_ONLINE')
+      : (paymentData.paymentMethod || 'CASH');
+    const collectionType = isAggregator ? 'AGGREGATOR_COLLECTED' : 'RESTAURANT_COLLECTED';
+
     const invoicePayload = {
       invoiceNumber,
       orderId,
@@ -1597,7 +1603,8 @@ export async function settleAndReleaseTableAtomic(restaurantId, orderId, payment
       discountAmount: parseFloat(paymentData.discountAmount) || 0,
       taxAmount: parseFloat(paymentData.taxAmount) || 0,
       totalAmount: parseFloat(paymentData.totalAmount) || order.totalAmount || 0,
-      paymentMethod: paymentData.paymentMethod || 'CASH', // CASH, CARD, UPI
+      paymentMethod: resolvedMethod,
+      collectionType,
       paymentStatus: 'PAID',
       items: order.items || [],
       issuedAt: new Date().toISOString(),
@@ -1611,7 +1618,8 @@ export async function settleAndReleaseTableAtomic(restaurantId, orderId, payment
     // Update order to PAID and CLOSED
     transaction.update(orderRef, {
       paymentStatus: 'PAID',
-      paymentMethod: paymentData.paymentMethod || 'CASH',
+      paymentMethod: resolvedMethod,
+      collectionType,
       orderStatus: 'CLOSED',
       invoiceId: invDocRef.id,
       invoiceNumber,
@@ -1623,7 +1631,7 @@ export async function settleAndReleaseTableAtomic(restaurantId, orderId, payment
     const normRef = doc(db, 'aggregatorOrders', orderId);
     transaction.update(normRef, {
       'payment.status': 'PAID',
-      'payment.method': paymentData.paymentMethod || 'CASH',
+      'payment.method': resolvedMethod,
       orderStatus: 'COMPLETED',
       invoiceId: invDocRef.id,
       invoiceNumber,
@@ -2014,3 +2022,10 @@ export async function updateReservationStatus(restaurantId, resId, status) {
     throw error;
   }
 }
+
+// Re-exports from paymentClientService
+export {
+  subscribePaymentTransactions,
+  subscribeSettlementBatches,
+  getSettlementBatches
+} from './paymentClientService';

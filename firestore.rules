@@ -317,6 +317,21 @@ service cloud.firestore {
         allow write: if isSuperAdmin();
       }
 
+      // Authoritative Payment Transactions
+      match /paymentTransactions/{transactionId} {
+        allow read: if isRestaurantStaff(restaurantId);
+        allow write: if isSuperAdmin();
+      }
+
+      // Aggregator Settlement & Bank Reconciliation Records
+      match /settlementRecords/{settlementId} {
+        allow read: if isRestaurantAdmin(restaurantId) || (
+          userProfile().role in ['owner', 'restaurant_admin', 'outlet_manager'] &&
+          userProfile().restaurantId == restaurantId
+        );
+        allow write: if isSuperAdmin();
+      }
+
       // Table Reservations: Public guest create; Staff manage
       match /reservations/{resId} {
         allow read: if isRestaurantStaff(restaurantId);

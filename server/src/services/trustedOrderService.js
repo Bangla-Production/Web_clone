@@ -11,6 +11,7 @@ import { generateDeterministicOrderId } from '../utils/cryptoUtils.js';
 import { resolveFinancialRules, calculateOrderPricing } from '../config/financialConfig.js';
 import logger from '../utils/logger.js';
 import { inventoryLedgerService } from './inventoryLedgerService.js';
+import { paymentTransactionService, PAYMENT_METHODS, PAYMENT_STATUSES, PAYMENT_SOURCES } from './paymentTransactionService.js';
 
 export const ORDER_SOURCES = {
   SWIGGY: 'SWIGGY',
@@ -303,6 +304,39 @@ class TrustedOrderService {
       // 7. Generate idempotent KOT for the kitchen
       const kotResult = await this.ensureOrderKOT(result.order);
       result.kot = kotResult.kot;
+
+      // 8. Record authoritative payment transaction
+      try {
+        const isAggregator = source === 'SWIGGY' || source === 'ZOMATO';
+        const method = isAggregator
+          ? (source === 'SWIGGY' ? PAYMENT_METHODS.SWIGGY_ONLINE : PAYMENT_METHODS.ZOMATO_ONLINE)
+          : (result.order.payment?.method || PAYMENT_METHODS.CASH);
+
+        const paymentStatus = (result.order.payment?.status === 'PAID' || isAggregator)
+          ? PAYMENT_STATUSES.CAPTURED
+          : PAYMENT_STATUSES.PENDING;
+
+        const txnResult = await paymentTransactionService.createPaymentTransaction({
+          restaurantId: result.order.restaurantId,
+          outletId: result.order.outletId,
+          orderId: result.order.orderId,
+          amount: result.order.pricing.grandTotal,
+          paymentMethod: method,
+          paymentSource: source,
+          providerTransactionRef: result.order.payment?.transactionId || null,
+          status: paymentStatus,
+          pricingBreakdown: result.order.pricing,
+          metadata: {
+            orderNumber: result.order.orderNumber,
+            customerName: result.order.customer?.name,
+            channel: source
+          }
+        }, { uid: 'ingestion_engine', role: 'system', name: 'Ingestion Engine' });
+
+        result.paymentTransaction = txnResult.transaction;
+      } catch (payErr) {
+        logger.error('Failed to create payment transaction on ingestion', { error: payErr.message, orderId });
+      }
     }
 
     return result;
@@ -712,6 +746,29 @@ class TrustedOrderService {
         updatePayload['inventorySnapshot.cancelledAt'] = now;
       } catch (invErr) {
         logger.error('Failed to handle inventory on order cancellation', { error: invErr.message, orderId });
+      }
+
+      // Handle payment refund or cancellation
+      try {
+        const txns = await paymentTransactionService.getTransactionsByOrder(orderData.restaurantId, orderId);
+        for (const txn of txns) {
+          if (txn.paymentStatus === PAYMENT_STATUSES.CAPTURED || txn.paymentStatus === PAYMENT_STATUSES.PARTIALLY_REFUNDED) {
+            const currentRefunded = txn.totalRefundedAmountMinor || 0;
+            const txnTotal = txn.amountMinor || 0;
+            const remainingToRefundPaise = txnTotal - currentRefunded;
+            if (remainingToRefundPaise > 0) {
+              await paymentTransactionService.processRefund(orderData.restaurantId, txn.transactionId, {
+                amount: remainingToRefundPaise / 100,
+                reason: reason || 'Order cancelled',
+                refundType: 'CANCELLATION'
+              }, { uid: actor, name: actor });
+            }
+          } else if (txn.paymentStatus === PAYMENT_STATUSES.AUTHORIZED || txn.paymentStatus === PAYMENT_STATUSES.PENDING) {
+            await paymentTransactionService.cancelPayment(orderData.restaurantId, txn.transactionId, reason || 'Order cancelled', actor);
+          }
+        }
+      } catch (payErr) {
+        logger.error('Failed to handle payment refund on order cancellation', { error: payErr.message, orderId });
       }
     }
 

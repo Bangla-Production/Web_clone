@@ -244,6 +244,22 @@ async function main() {
       eventType: 'DISPATCHED',
       createdAt: '2026-11-15T00:00:00.000Z'
     });
+    // Step 9: Payment Transactions & Settlement Records
+    await db.doc('restaurants/rest_a/paymentTransactions/TXN_seed_1').set({
+      transactionId: 'TXN_seed_1',
+      restaurantId: 'rest_a',
+      outletId: 'rest_a_main',
+      amount: 550,
+      paymentMethod: 'CASH',
+      collectionType: 'RESTAURANT_COLLECTED'
+    });
+    await db.doc('restaurants/rest_a/settlementRecords/SETTLE_seed_1').set({
+      settlementBatchId: 'SETTLE_seed_1',
+      restaurantId: 'rest_a',
+      outletId: 'rest_a_main',
+      providerName: 'SWIGGY',
+      payoutStatus: 'RECONCILED'
+    });
   });
 
   // Authenticated Contexts
@@ -691,6 +707,36 @@ async function main() {
   await runTest('Admin A updating Delivery Partner currentActiveOrders (Allowed)', async () => {
     await assertSucceeds(dbAdminA.doc('deliveryPartners/rider_1').update({
       currentActiveOrders: ['SWIGGY_rest_a_main_1001']
+    }));
+  });
+
+  // Scenario 60: Staff reading paymentTransactions in Restaurant A (Allowed)
+  await runTest('Staff reading paymentTransactions in Restaurant A (Allowed)', async () => {
+    await assertSucceeds(dbStaffUid.doc('restaurants/rest_a/paymentTransactions/TXN_seed_1').get());
+  });
+
+  // Scenario 61: Staff writing paymentTransactions directly (Blocked - Admin SDK only)
+  await runTest('Staff writing paymentTransactions directly (Blocked - Admin SDK only)', async () => {
+    await assertFails(dbStaffUid.doc('restaurants/rest_a/paymentTransactions/TXN_fake_client').set({
+      amount: 100,
+      paymentMethod: 'CASH'
+    }));
+  });
+
+  // Scenario 62: Admin reading settlementRecords in Restaurant A (Allowed)
+  await runTest('Admin reading settlementRecords in Restaurant A (Allowed)', async () => {
+    await assertSucceeds(dbAdminA.doc('restaurants/rest_a/settlementRecords/SETTLE_seed_1').get());
+  });
+
+  // Scenario 63: Waiter reading settlementRecords in Restaurant A (Blocked - Admin/Manager only)
+  await runTest('Waiter reading settlementRecords in Restaurant A (Blocked - Admin/Manager only)', async () => {
+    await assertFails(dbStaffUid.doc('restaurants/rest_a/settlementRecords/SETTLE_seed_1').get());
+  });
+
+  // Scenario 64: Admin writing settlementRecords directly (Blocked - Admin SDK only)
+  await runTest('Admin writing settlementRecords directly (Blocked - Admin SDK only)', async () => {
+    await assertFails(dbAdminA.doc('restaurants/rest_a/settlementRecords/SETTLE_fake_client').set({
+      payoutStatus: 'RECONCILED'
     }));
   });
 

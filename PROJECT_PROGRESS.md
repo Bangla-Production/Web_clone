@@ -1,7 +1,7 @@
 # Abar Khabo: Multi-Tenant Aggregator Platform — Project Progress Tracker
 
 ## Status Overview
-* **Current Stage:** STAGE 2 PART B (Step 8 Complete — Awaiting User Approval to Begin Step 9)
+* **Current Stage:** STAGE 2 PART B (Step 9 Complete — Awaiting User Approval to Begin Step 10)
 * **Target Platforms:** Swiggy, Zomato, Abar Khabo Direct Ordering
 * **Target Architecture:** Multi-Tenant SaaS, Outlet Hierarchy, Node.js + TypeScript Backend, Firestore Database, React + Vite Frontend.
 
@@ -13,7 +13,7 @@
 | :--- | :--- | :--- | :--- |
 | **STAGE 0** | Repository Inspection, Architecture Audit & Risk Analysis | **COMPLETE** | 2026-11-15 |
 | **STAGE 1** | Security & Strict Tenant Isolation | **COMPLETE** | 2026-11-15 |
-| **STAGE 2** | Database Schema & Outlets Model | **PART B IN PROGRESS** (Step 8 Complete; Awaiting Step 9 Approval) | 2026-11-15 |
+| **STAGE 2** | Database Schema & Outlets Model | **PART B IN PROGRESS** (Step 9 Complete; Awaiting Step 10 Approval) | 2026-11-15 |
 | **STAGE 3** | Backend Integration Infrastructure (`server/`) | QUEUED | - |
 | **STAGE 4** | Common Aggregator Adapter Framework | QUEUED | - |
 | **STAGE 5** | Mock Swiggy & Zomato Integration & Test Sandbox | QUEUED | - |
@@ -440,4 +440,56 @@
   * **Live Firestore Emulator (`tests/emulator_rules_unit.test.js`):** 59 / 59 scenarios passed.
   * **Vite Production Build:** 1,681 modules transformed cleanly in 4.62s with 0 errors.
 * **Next Authorized Step:**
-  * Awaiting user review and authorization to proceed to **Step 9**.
+  * Step 9 completed.
+
+---
+
+## Stage 2 Part B Summary (Step 9: Payment, Settlement & Financial Reconciliation Engine)
+
+* **What was implemented:**
+  * **Unified Payment Transaction Model (`paymentTransactions`):**
+    * Authoritative backend payment records stored at `restaurants/{restaurantId}/paymentTransactions/{transactionId}`.
+    * 7-state payment lifecycle machine: `PENDING`, `AUTHORIZED`, `CAPTURED`, `FAILED`, `CANCELLED`, `PARTIALLY_REFUNDED`, `REFUNDED`.
+    * Enforces strict payment collection separation: `RESTAURANT_COLLECTED` (POS Cash, UPI, Card, Direct Online) vs `AGGREGATOR_COLLECTED` (Swiggy Online, Zomato Online).
+    * Never misclassifies aggregator orders as POS cash or card tenders.
+  * **Deterministic SHA-256 Idempotency:**
+    * Eliminates double-charging and duplicate refund processing on retry requests.
+  * **Precision Monetary Arithmetic (`monetaryUtils.js`):**
+    * Conducts calculations in integer minor units (paise: ₹1 = 100 paise) to eliminate IEEE-754 floating-point inaccuracies.
+    * Exact CGST / SGST component splits and largest-remainder pro-rata allocation.
+  * **Aggregator Settlement & Bank Reconciliation Engine (`settlementReconciliationService.js`):**
+    * Ingests settlement batches via standardized JSON payloads and CSV statement files.
+    * Evaluates orders across 6 reconciliation outcomes: `MATCHED`, `PARTIALLY_MATCHED`, `MISMATCHED`, `MISSING_ORDER`, `DUPLICATE_ENTRY`, `PENDING_REVIEW`.
+    * Configurable tolerance thresholds (default ₹2.00 or 0.5%).
+  * **Refund & Cancellation Engine:**
+    * Supports full, partial, item-level, and cancellation refunds without altering historical order snapshots.
+    * Seamlessly integrates with Step 7 inventory cancellation policies without duplicate deductions.
+  * **Restaurant Financial Dashboard (`FinancialDashboardPage.jsx`):**
+    * Multi-tenant, outlet-aware UI displaying Gross Sales, POS Collections, Direct Online Collections, Swiggy/Zomato Gross & Net Payouts, Commissions, Refunds, and Outstanding Settlements.
+    * Registered `/financials` and `/settlements` routes in React router.
+  * **Security Hardening (`firestore.rules`):**
+    * `paymentTransactions` and `settlementRecords`: read allowed for authenticated restaurant staff / admins; writes strictly restricted to trusted backend Admin SDK (`isSuperAdmin()`).
+* **Files Created:**
+  * `server/src/utils/monetaryUtils.js`
+  * `server/src/services/paymentTransactionService.js`
+  * `server/src/services/settlementReconciliationService.js`
+  * `client/src/services/paymentClientService.js`
+  * `client/src/pages/FinancialDashboardPage.jsx`
+  * `tests/test_payment_settlement_engine.js`
+  * `STAGE2_STEP9_IMPLEMENTATION_REPORT.md`
+* **Files Modified:**
+  * `server/src/services/trustedOrderService.js`
+  * `client/src/services/firestoreService.js`
+  * `client/src/App.jsx`
+  * `firestore.rules`
+  * `tests/test_rules_isolation.js`
+  * `tests/emulator_rules_unit.test.js`
+  * `package.json`
+  * `PROJECT_PROGRESS.md`
+* **Test Verification Results:**
+  * **Step 9 Unit Suite (`tests/test_payment_settlement_engine.js`):** 63 / 63 tests passed covering all 27 categories.
+  * **Complete Regression Suite (`npm test`):** 633 / 633 assertions passed across all 10 test suites.
+  * **Live Firestore Emulator (`tests/emulator_rules_unit.test.js`):** 64 / 64 scenarios passed.
+  * **Vite Production Build:** 1,683 modules transformed cleanly in 4.52s with 0 errors.
+* **Next Authorized Step:**
+  * Awaiting user review and authorization to proceed to **Step 10**.

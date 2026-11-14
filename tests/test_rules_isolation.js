@@ -227,8 +227,18 @@ class SecurityContext {
         );
       }
 
-      if (sub === 'inventoryLedger' || sub === 'deliveryEvents') {
+      if (sub === 'inventoryLedger' || sub === 'deliveryEvents' || sub === 'paymentTransactions') {
         if (operation === 'read') return this.isRestaurantStaff(restId);
+        return this.isSuperAdmin();
+      }
+
+      if (sub === 'settlementRecords') {
+        if (operation === 'read') {
+          return this.isRestaurantAdmin(restId) || (
+            ['owner', 'restaurant_admin', 'outlet_manager'].includes(this.userProfile()?.role) &&
+            this.userProfile()?.restaurantId === restId
+          );
+        }
         return this.isSuperAdmin();
       }
 
@@ -1184,6 +1194,52 @@ assert(
   'Restaurant Admin A updating Delivery Partner currentActiveOrders',
   adminACtx.evaluate('deliveryPartners/rider_456', 'update', { currentActiveOrders: ['ord_01'] }, riderDoc),
   true
+);
+
+// 12. STEP 9: PAYMENT TRANSACTIONS & SETTLEMENT RECONCILIATION SECURITY
+console.log('\n12. STEP 9: PAYMENT TRANSACTIONS & SETTLEMENT RECONCILIATION SECURITY');
+console.log('-'.repeat(60));
+
+// Test 90: Restaurant Staff can read paymentTransactions in Restaurant A (Allowed)
+assert(
+  'Restaurant Staff can read paymentTransactions in Restaurant A (Allowed)',
+  waiterACtx.evaluate('restaurants/rest_a/paymentTransactions/TXN_001', 'read'),
+  true
+);
+
+// Test 91: Restaurant Staff CANNOT write paymentTransactions directly (Admin SDK only)
+assert(
+  'Restaurant Staff CANNOT write paymentTransactions directly (Admin SDK only)',
+  adminACtx.evaluate('restaurants/rest_a/paymentTransactions/TXN_001', 'create', { amount: 500 }),
+  false
+);
+
+// Test 92: Staff A CANNOT read Tenant B paymentTransactions (Cross-tenant blocked)
+assert(
+  'Staff A CANNOT read Tenant B paymentTransactions (Cross-tenant blocked)',
+  adminACtx.evaluate('restaurants/rest_b/paymentTransactions/TXN_002', 'read'),
+  false
+);
+
+// Test 93: Restaurant Admin can read settlementRecords in Restaurant A (Allowed)
+assert(
+  'Restaurant Admin can read settlementRecords in Restaurant A (Allowed)',
+  adminACtx.evaluate('restaurants/rest_a/settlementRecords/SETTLE_001', 'read'),
+  true
+);
+
+// Test 94: Waiter CANNOT read settlementRecords in Restaurant A (Admin/Manager only)
+assert(
+  'Waiter CANNOT read settlementRecords in Restaurant A (Admin/Manager only)',
+  waiterACtx.evaluate('restaurants/rest_a/settlementRecords/SETTLE_001', 'read'),
+  false
+);
+
+// Test 95: Restaurant Admin CANNOT write settlementRecords directly (Admin SDK only)
+assert(
+  'Restaurant Admin CANNOT write settlementRecords directly (Admin SDK only)',
+  adminACtx.evaluate('restaurants/rest_a/settlementRecords/SETTLE_001', 'create', { netPayout: 1000 }),
+  false
 );
 
 console.log('\n' + '='.repeat(80));

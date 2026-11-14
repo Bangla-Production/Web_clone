@@ -33,6 +33,7 @@ import CustomerOrderTrackingPage from './pages/CustomerOrderTrackingPage';
 import DeliveryPartnerAuthPage from './pages/DeliveryPartnerAuthPage';
 import DeliveryPartnerDashboardPage from './pages/DeliveryPartnerDashboardPage';
 import RestaurantDeliveryManagementPage from './pages/RestaurantDeliveryManagementPage';
+import FinancialDashboardPage from './pages/FinancialDashboardPage';
 
 // Root redirect handler
 function RootRedirect() {
@@ -152,6 +153,8 @@ export default function App() {
                         {/* Menu, Inventory & Analytics Admin routes */}
                         <Route element={<ProtectedRoute allowedRoles={adminOnly} />}>
                           <Route path="/dashboard" element={<DashboardPage />} />
+                          <Route path="/financials" element={<FinancialDashboardPage />} />
+                          <Route path="/settlements" element={<FinancialDashboardPage />} />
                           <Route path="/menu-admin" element={<MenuAdminPage />} />
                           <Route path="/inventory" element={<InventoryPage />} />
                           <Route path="/reports" element={<ReportsPage />} />
