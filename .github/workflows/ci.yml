@@ -59,8 +59,14 @@ jobs:
           node-version: 20
           cache: 'npm'
 
-      - name: Install Dependencies
+      - name: Install Root Dependencies
         run: npm ci
+
+      - name: Install Client Dependencies
+        run: npm --prefix client ci
+
+      - name: Build Client Assets
+        run: npm --prefix client run build
 
       - name: Execute Master Test Suites
         run: npm test
@@ -88,8 +94,11 @@ jobs:
           node-version: 20
           cache: 'npm'
 
-      - name: Install Dependencies
+      - name: Install Root Dependencies
         run: npm ci
+
+      - name: Install Client Dependencies
+        run: npm --prefix client ci
 
       - name: Execute Live Emulator Scenarios
         run: npm run test:emulator
