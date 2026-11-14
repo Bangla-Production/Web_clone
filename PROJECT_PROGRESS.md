@@ -13,7 +13,7 @@
 | :--- | :--- | :--- | :--- |
 | **STAGE 0** | Repository Inspection, Architecture Audit & Risk Analysis | **COMPLETE** | 2026-11-15 |
 | **STAGE 1** | Security & Strict Tenant Isolation | **COMPLETE** | 2026-11-15 |
-| **STAGE 2** | Database Schema & Outlets Model | QUEUED (Awaiting Approval) | - |
+| **STAGE 2** | Database Schema & Outlets Model | **PART A COMPLETE** (Awaiting Approval for Part B) | 2026-11-15 |
 | **STAGE 3** | Backend Integration Infrastructure (`server/`) | QUEUED | - |
 | **STAGE 4** | Common Aggregator Adapter Framework | QUEUED | - |
 | **STAGE 5** | Mock Swiggy & Zomato Integration & Test Sandbox | QUEUED | - |
@@ -51,20 +51,20 @@
 
 ---
 
-## Stage 0 Summary
+## Stage 2 Summary (Database Schema & Outlets Model — Part A: Design)
 
 * **What was implemented:**
-  * Completed exhaustive technical inspection of all 21 frontend pages, 13 service files, context providers, routing structure, and Firestore security rules.
-  * Authored comprehensive `ARCHITECTURE_AUDIT.md` highlighting existing workflows, data schemas, security vulnerabilities, and integration prerequisites.
-  * Established the multi-tenant outlet hierarchy design and Node.js + TypeScript backend architecture.
+  * Completed full architectural design for the multi-tenant SaaS restaurant data model.
+  * Designed the corporate Tenant vs. physical Outlet entity hierarchy.
+  * Specified aggregator connections (`swiggy`, `zomato`, `urbanpiper`) bound at the outlet level.
+  * Designed master menu catalog and branch-specific price/availability overrides.
+  * Designed the unified normalized order schema (`aggregatorOrders`) accommodating Swiggy, Zomato, Direct Online, and POS.
+  * Authored immutable webhook audit logging, operational diagnostics, atomic inventory ledger, and settlement models.
+  * Designed non-destructive migration strategy auto-provisioning default outlets (`${restaurantId}_main`) with zero downtime.
+  * Defined Firestore composite indexes in `STAGE2_DATABASE_SCHEMA.md`.
 * **Files Created:**
-  * `ARCHITECTURE_AUDIT.md`
-  * `PROJECT_PROGRESS.md`
+  * `STAGE2_DATABASE_SCHEMA.md`
 * **Files Modified:**
-  * None (Zero destructive modifications in Stage 0).
-* **Database Changes:**
-  * None in Stage 0 (Schema extensions designed for Stage 2).
-* **Build / Health Verification:**
-  * Existing React 18 + Vite frontend build verified functional with 0 errors.
+  * `PROJECT_PROGRESS.md`
 * **Next Steps:**
-  * Obtain user approval to initiate **Stage 1 (Security & Strict Tenant Isolation)**.
+  * Obtain user approval on Part A design before proceeding to **Part B (Implementation)**.
