@@ -332,6 +332,12 @@ service cloud.firestore {
         allow write: if isSuperAdmin();
       }
 
+      // SaaS Subscription & Entitlement Overrides
+      match /subscription/{subDoc} {
+        allow read: if isRestaurantStaff(restaurantId);
+        allow write: if isSuperAdmin();
+      }
+
       // Table Reservations: Public guest create; Staff manage
       match /reservations/{resId} {
         allow read: if isRestaurantStaff(restaurantId);
@@ -612,6 +618,26 @@ service cloud.firestore {
     match /email_notifications/{notificationId} {
       allow create: if isAuthenticated();
       allow read, update, delete: if isSuperAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 10. SAAS SUBSCRIPTION PLANS & INVOICES
+    // ─────────────────────────────────────────────────────────────────────────
+
+    match /subscriptionPlans/{planId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
+    match /subscriptionInvoices/{invoiceId} {
+      allow read: if isSuperAdmin() || (
+        isAuthenticated() && isRestaurantStaff(resource.data.restaurantId)
+      );
+      allow write: if isSuperAdmin();
+    }
+
+    match /platformAuditLogs/{logId} {
+      allow read, write: if isSuperAdmin();
     }
   }
 }

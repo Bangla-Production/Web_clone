@@ -260,6 +260,34 @@ async function main() {
       providerName: 'SWIGGY',
       payoutStatus: 'RECONCILED'
     });
+    // Step 10: SaaS Subscription Plans, Invoices & Audit Logs
+    await db.doc('subscriptionPlans/STARTER').set({
+      planId: 'STARTER',
+      name: 'Starter Plan',
+      monthlyPrice: 999
+    });
+    await db.doc('restaurants/rest_a/subscription/current').set({
+      planId: 'STARTER',
+      status: 'ACTIVE',
+      restaurantId: 'rest_a'
+    });
+    await db.doc('subscriptionInvoices/SAAS_INV_rest_a_001').set({
+      invoiceId: 'SAAS_INV_rest_a_001',
+      restaurantId: 'rest_a',
+      planId: 'STARTER',
+      totalAmount: 1178.82
+    });
+    await db.doc('subscriptionInvoices/SAAS_INV_rest_b_002').set({
+      invoiceId: 'SAAS_INV_rest_b_002',
+      restaurantId: 'rest_b',
+      planId: 'PROFESSIONAL',
+      totalAmount: 2948.82
+    });
+    await db.doc('platformAuditLogs/AUDIT_LOG_001').set({
+      logId: 'AUDIT_LOG_001',
+      action: 'TENANT_ONBOARDED',
+      actor: 'altcafe2026@gmail.com'
+    });
   });
 
   // Authenticated Contexts
@@ -738,6 +766,50 @@ async function main() {
     await assertFails(dbAdminA.doc('restaurants/rest_a/settlementRecords/SETTLE_fake_client').set({
       payoutStatus: 'RECONCILED'
     }));
+  });
+
+  // Scenario 65: Staff reading subscription in Restaurant A (Allowed)
+  await runTest('Staff reading subscription in Restaurant A (Allowed)', async () => {
+    await assertSucceeds(dbStaffUid.doc('restaurants/rest_a/subscription/current').get());
+  });
+
+  // Scenario 66: Staff writing subscription directly (Blocked - Super Admin only)
+  await runTest('Staff writing subscription directly (Blocked - Super Admin only)', async () => {
+    await assertFails(dbStaffUid.doc('restaurants/rest_a/subscription/current').update({
+      planId: 'ENTERPRISE'
+    }));
+  });
+
+  // Scenario 67: Public reading subscriptionPlans (Allowed)
+  await runTest('Public reading subscriptionPlans (Allowed)', async () => {
+    await assertSucceeds(dbUnauth.doc('subscriptionPlans/STARTER').get());
+  });
+
+  // Scenario 68: Non-Super-Admin writing subscriptionPlans (Blocked)
+  await runTest('Non-Super-Admin writing subscriptionPlans (Blocked)', async () => {
+    await assertFails(dbAdminA.doc('subscriptionPlans/STARTER').update({
+      monthlyPrice: 0
+    }));
+  });
+
+  // Scenario 69: Admin A reading own SaaS invoice (Allowed)
+  await runTest('Admin A reading own SaaS invoice (Allowed)', async () => {
+    await assertSucceeds(dbAdminA.doc('subscriptionInvoices/SAAS_INV_rest_a_001').get());
+  });
+
+  // Scenario 70: Admin A reading Tenant B SaaS invoice (Cross-tenant blocked)
+  await runTest('Admin A reading Tenant B SaaS invoice (Cross-tenant blocked)', async () => {
+    await assertFails(dbAdminA.doc('subscriptionInvoices/SAAS_INV_rest_b_002').get());
+  });
+
+  // Scenario 71: Non-Super-Admin reading platformAuditLogs (Blocked)
+  await runTest('Non-Super-Admin reading platformAuditLogs (Blocked)', async () => {
+    await assertFails(dbAdminA.doc('platformAuditLogs/AUDIT_LOG_001').get());
+  });
+
+  // Scenario 72: Super Admin reading platformAuditLogs (Allowed)
+  await runTest('Super Admin reading platformAuditLogs (Allowed)', async () => {
+    await assertSucceeds(dbSuperAdmin.doc('platformAuditLogs/AUDIT_LOG_001').get());
   });
 
   await testEnv.cleanup();

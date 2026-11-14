@@ -1,7 +1,7 @@
 # Abar Khabo: Multi-Tenant Aggregator Platform — Project Progress Tracker
 
 ## Status Overview
-* **Current Stage:** STAGE 2 PART B (Step 9 Complete — Awaiting User Approval to Begin Step 10)
+* **Current Stage:** STAGE 2 PART B (Step 10 Complete — Awaiting User Approval to Begin Step 11)
 * **Target Platforms:** Swiggy, Zomato, Abar Khabo Direct Ordering
 * **Target Architecture:** Multi-Tenant SaaS, Outlet Hierarchy, Node.js + TypeScript Backend, Firestore Database, React + Vite Frontend.
 
@@ -13,7 +13,7 @@
 | :--- | :--- | :--- | :--- |
 | **STAGE 0** | Repository Inspection, Architecture Audit & Risk Analysis | **COMPLETE** | 2026-11-15 |
 | **STAGE 1** | Security & Strict Tenant Isolation | **COMPLETE** | 2026-11-15 |
-| **STAGE 2** | Database Schema & Outlets Model | **PART B IN PROGRESS** (Step 9 Complete; Awaiting Step 10 Approval) | 2026-11-15 |
+| **STAGE 2** | Database Schema & Outlets Model | **PART B IN PROGRESS** (Step 10 Complete; Awaiting Step 11 Approval) | 2026-11-15 |
 | **STAGE 3** | Backend Integration Infrastructure (`server/`) | QUEUED | - |
 | **STAGE 4** | Common Aggregator Adapter Framework | QUEUED | - |
 | **STAGE 5** | Mock Swiggy & Zomato Integration & Test Sandbox | QUEUED | - |
@@ -492,4 +492,55 @@
   * **Live Firestore Emulator (`tests/emulator_rules_unit.test.js`):** 64 / 64 scenarios passed.
   * **Vite Production Build:** 1,683 modules transformed cleanly in 4.52s with 0 errors.
 * **Next Authorized Step:**
-  * Awaiting user review and authorization to proceed to **Step 10**.
+  * Step 9 completed.
+
+---
+
+## Stage 2 Part B Summary (Step 10: Platform Analytics, Super Admin Control Center & SaaS Subscription Management)
+
+* **What was implemented:**
+  * **SaaS Subscription Lifecycle & Plan Management (`subscriptionService.js`):**
+    * Standardized platform tiers: `TRIAL` (Free 14 days), `STARTER` (₹999/mo), `PROFESSIONAL` (₹2,499/mo), `ENTERPRISE` (₹5,999/mo).
+    * Comprehensive state machine: `TRIAL`, `ACTIVE`, `PAST_DUE`, `EXPIRED`, `SUSPENDED`, `CANCELLED`.
+    * Lifecycle operations: automated trial creation, renewals, upgrades, downgrades, cancellations, and 7-day grace period enforcement.
+    * Minor-unit SaaS subscription invoices (`subscriptionInvoices/{invoiceId}`) with itemized 18% GST calculation in integer paise.
+    * Idempotent scheduled expiry processing.
+  * **Central SaaS Entitlement & Grandfathering Engine (`entitlementService.js`):**
+    * Authoritative enforcement of maximum outlet quotas, staff limits, and monthly order volumes per tier.
+    * Modular feature gate checks for POS, KDS, Cashier, Inventory, Dedicated Delivery Fleet, Aggregator Integrations, and Advanced Analytics.
+    * **Strict Grandfathering Invariant:** Plan downgrades block provisioning of additional outlets or staff beyond lower plan caps, but **NEVER** delete existing outlets, staff accounts, or historical order data.
+    * Super Admin entitlement overrides support.
+  * **Controlled Restaurant Tenant Lifecycle (`tenantLifecycleService.js`):**
+    * Authoritative onboarding pipeline: `registerRestaurant` (`PENDING_APPROVAL`), `approveRestaurant` (`ACTIVE` + auto default outlet `${restaurantId}_main` + initial evaluation subscription), `rejectRestaurant`, `suspendRestaurant`, and `reactivateRestaurant`.
+    * Immutable audit trail writing all tenant operations to `platformAuditLogs/{logId}`.
+  * **Platform-Wide Analytics Engine (`platformAnalyticsService.js`):**
+    * Computes real MRR (Monthly Recurring Revenue) and ARR (Annual Recurring Revenue) strictly from stored documents using integer minor-unit arithmetic.
+    * Zero fabricated revenue or order numbers; resilient sparse/empty data handling.
+    * Scoped single-tenant metrics preventing cross-tenant analytics data leakage.
+  * **Multi-Tab Super Admin Control Center UI (`SuperAdminPage.jsx`):**
+    * Upgraded with comprehensive 7-tab platform portal: Overview, Tenants & Admins, Outlets Directory, Tenant Subscriptions, Plans Catalog, SaaS Billing Invoices, and System Health.
+    * Interactive plan adjustment modal with grandfathering protection notices.
+  * **Security Hardening (`firestore.rules`):**
+    * Added explicit access control rules for `restaurants/{restaurantId}/subscription/{subDoc}`, `subscriptionPlans/{planId}`, `subscriptionInvoices/{invoiceId}`, and `platformAuditLogs/{logId}`.
+* **Files Created:**
+  * `server/src/services/subscriptionService.js`
+  * `server/src/services/entitlementService.js`
+  * `server/src/services/tenantLifecycleService.js`
+  * `server/src/services/platformAnalyticsService.js`
+  * `client/src/services/superAdminClientService.js`
+  * `tests/test_super_admin_saas_engine.js`
+  * `STAGE2_STEP10_IMPLEMENTATION_REPORT.md`
+* **Files Modified:**
+  * `client/src/pages/SuperAdminPage.jsx`
+  * `firestore.rules`
+  * `tests/test_rules_isolation.js`
+  * `tests/emulator_rules_unit.test.js`
+  * `package.json`
+  * `PROJECT_PROGRESS.md`
+* **Test Verification Results:**
+  * **Step 10 Automated Suite (`tests/test_super_admin_saas_engine.js`):** 58 / 58 assertions passed across all 30 categories.
+  * **Complete Regression Suite (`npm test`):** 694 / 694 assertions passed across all 11 test suites with 0 failures.
+  * **Live Firestore Emulator Suite (`tests/emulator_rules_unit.test.js`):** 72 / 72 scenarios passed with 0 failures.
+  * **Vite Production Build:** 1,684 modules transformed cleanly in 4.89s with 0 errors.
+* **Next Authorized Step:**
+  * Awaiting user review and explicit authorization to proceed to **Step 11**.

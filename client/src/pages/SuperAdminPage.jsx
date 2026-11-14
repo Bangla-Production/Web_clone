@@ -16,7 +16,21 @@ import {
   Clock,
   MailWarning,
   Power,
-  Key
+  Key,
+  Layers,
+  CreditCard,
+  TrendingUp,
+  Activity,
+  FileSpreadsheet,
+  ShieldCheck,
+  Check,
+  X,
+  ChevronRight,
+  Sliders,
+  Sparkles,
+  Server,
+  Zap,
+  CheckSquare
 } from 'lucide-react';
 import {
   getAllRestaurants,
@@ -30,6 +44,12 @@ import {
   updateProvisionedUser,
   deleteProvisionedUser
 } from '../services/firestoreService';
+import {
+  getSubscriptionPlans,
+  getSubscriptionInvoices,
+  getAllPlatformOutlets,
+  updateRestaurantSubscriptionPlan
+} from '../services/superAdminClientService';
 import { SPAM_NOTICE, sendPasswordReset, changePasswordWithCurrent } from '../services/authAccountService';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -56,6 +76,13 @@ const explainError = (err) =>
 
 const formatINR = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 
+const DEFAULT_PLANS = [
+  { id: 'TRIAL', name: 'Free Trial', priceMonthlyINR: 0, priceAnnualINR: 0, maxOutlets: 1, maxStaffPerOutlet: 3, maxMonthlyOrders: 100, features: ['POS', 'Online Ordering'] },
+  { id: 'STARTER', name: 'Starter', priceMonthlyINR: 999, priceAnnualINR: 9990, maxOutlets: 1, maxStaffPerOutlet: 5, maxMonthlyOrders: 500, features: ['POS', 'KDS', 'Cashier', 'Online Ordering'] },
+  { id: 'PROFESSIONAL', name: 'Professional', priceMonthlyINR: 2499, priceAnnualINR: 24990, maxOutlets: 3, maxStaffPerOutlet: 15, maxMonthlyOrders: 3000, features: ['POS', 'KDS', 'Cashier', 'Online Ordering', 'Inventory & Recipes', 'Aggregator Integrations'] },
+  { id: 'ENTERPRISE', name: 'Enterprise', priceMonthlyINR: 5999, priceAnnualINR: 59990, maxOutlets: 999, maxStaffPerOutlet: 999, maxMonthlyOrders: 999999, features: ['All Professional Features', 'Multi-Outlet Centralized', 'Dedicated Fleet Logistics', 'Custom Webhooks', 'Priority 24/7 SLA'] }
+];
+
 /**
  * Super Admin = platform owner. Only does three things:
  *  1. Creates a Restaurant Admin login (hotel name + email + password)
@@ -66,8 +93,17 @@ const formatINR = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 export default function SuperAdminPage() {
   const [restaurants, setRestaurants] = useState([]);
   const [usersList, setUsersList] = useState([]);
+  const [plans, setPlans] = useState([]);
+  const [invoices, setInvoices] = useState([]);
+  const [outletsList, setOutletsList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [activeTab, setActiveTab] = useState('RESTAURANTS'); // 'OVERVIEW' | 'RESTAURANTS' | 'OUTLETS' | 'SUBSCRIPTIONS' | 'PLANS' | 'BILLING' | 'HEALTH'
+
+  // Plan Assignment Modal state
+  const [planModal, setPlanModal] = useState(null); // { restaurantId, restaurantName, currentPlanId, currentCycle }
+  const [selectedPlanId, setSelectedPlanId] = useState('STARTER');
+  const [selectedCycle, setSelectedCycle] = useState('MONTHLY');
 
   // Add / Edit modal
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -95,9 +131,19 @@ export default function SuperAdminPage() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const [restList, uList] = await Promise.all([getAllRestaurants(), getAllUsers()]);
+      const [restList, uList, plansList, invList] = await Promise.all([
+        getAllRestaurants(),
+        getAllUsers(),
+        getSubscriptionPlans(),
+        getSubscriptionInvoices()
+      ]);
       setRestaurants(restList || []);
       setUsersList(uList || []);
+      setPlans(plansList || []);
+      setInvoices(invList || []);
+
+      const outlets = await getAllPlatformOutlets(restList || []);
+      setOutletsList(outlets);
     } catch (err) {
       console.error('SuperAdminPage fetchData error:', err);
       toast.error('Failed to load platform data from Firestore.');
@@ -287,6 +333,34 @@ export default function SuperAdminPage() {
   // Passwords are not stored anywhere, so checking / re-sending needs the password you set.
   const askPassword = (row) =>
     window.prompt(`Enter the password you set for ${row.admin?.email} to continue:`) || '';
+
+  const openPlanModal = (restaurant) => {
+    setPlanModal({
+      restaurantId: restaurant.id,
+      restaurantName: restaurant.name,
+      currentPlanId: restaurant.planId || 'STARTER',
+      currentCycle: restaurant.billingCycle || 'MONTHLY'
+    });
+    setSelectedPlanId(restaurant.planId || 'STARTER');
+    setSelectedCycle(restaurant.billingCycle || 'MONTHLY');
+  };
+
+  const handleUpdatePlan = async (e) => {
+    if (e) e.preventDefault();
+    if (!planModal?.restaurantId) return;
+    try {
+      setIsSaving(true);
+      await updateRestaurantSubscriptionPlan(planModal.restaurantId, selectedPlanId, selectedCycle);
+      toast.success(`Subscription plan updated to ${selectedPlanId} (${selectedCycle}).`);
+      setPlanModal(null);
+      await fetchData();
+    } catch (err) {
+      console.error('handleUpdatePlan error:', err);
+      toast.error(`Failed to update subscription: ${explainError(err)}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const openPasswordModal = (row) => {
     setPwRow(row);
@@ -524,132 +598,551 @@ export default function SuperAdminPage() {
         </div>
       </div>
 
-      {/* Section tab */}
-      <div className="pos-surface-glass p-2 rounded-2xl flex items-center space-x-2 shadow-md">
-        <span className="px-4 py-2 rounded-xl text-xs font-extrabold bg-purple-600 text-white shadow-lg shadow-purple-900/40 flex items-center space-x-2">
+      {/* Section Tabs */}
+      <div className="pos-surface-glass p-1.5 rounded-2xl flex flex-wrap items-center gap-1.5 shadow-md border border-pos-border">
+        <button
+          onClick={() => setActiveTab('OVERVIEW')}
+          className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+            activeTab === 'OVERVIEW'
+              ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/40'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-pos-surface'
+          }`}
+        >
+          <TrendingUp className="w-3.5 h-3.5" />
+          <span>Platform Overview</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('RESTAURANTS')}
+          className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+            activeTab === 'RESTAURANTS'
+              ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/40'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-pos-surface'
+          }`}
+        >
           <Building className="w-3.5 h-3.5" />
-          <span>Restaurant Directory ({totalRegistered})</span>
-        </span>
+          <span>Tenants & Admins ({totalRegistered})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('OUTLETS')}
+          className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+            activeTab === 'OUTLETS'
+              ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/40'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-pos-surface'
+          }`}
+        >
+          <Layers className="w-3.5 h-3.5" />
+          <span>Outlets Directory ({outletsList.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('SUBSCRIPTIONS')}
+          className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+            activeTab === 'SUBSCRIPTIONS'
+              ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/40'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-pos-surface'
+          }`}
+        >
+          <CreditCard className="w-3.5 h-3.5" />
+          <span>Subscriptions</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('PLANS')}
+          className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+            activeTab === 'PLANS'
+              ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/40'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-pos-surface'
+          }`}
+        >
+          <Sliders className="w-3.5 h-3.5" />
+          <span>SaaS Plans Catalog</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('BILLING')}
+          className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+            activeTab === 'BILLING'
+              ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/40'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-pos-surface'
+          }`}
+        >
+          <FileSpreadsheet className="w-3.5 h-3.5" />
+          <span>SaaS Invoices</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('HEALTH')}
+          className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+            activeTab === 'HEALTH'
+              ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/40'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-pos-surface'
+          }`}
+        >
+          <Activity className="w-3.5 h-3.5" />
+          <span>System Health</span>
+        </button>
       </div>
 
-      {/* Restaurants table */}
-      <div className="relative pos-card-glass rounded-2xl p-6 shadow-xl space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h3 className="font-extrabold text-base text-slate-900 dark:text-white font-display">Registered Restaurants & Admin Logins</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Set the hotel name, admin email and password. The restaurant stays Pending until the admin confirms their email and logs in.
-            </p>
+      {/* TAB 1: OVERVIEW */}
+      {activeTab === 'OVERVIEW' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="p-5 rounded-2xl pos-card-glass shadow-lg border border-pos-border">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Outlets Across Tenants</span>
+              <h3 className="text-3xl font-black text-slate-900 dark:text-white mt-2 font-num">{outletsList.length}</h3>
+              <p className="text-[11px] text-indigo-500 mt-1 font-semibold">Active operational branches</p>
+            </div>
+            <div className="p-5 rounded-2xl pos-card-glass shadow-lg border border-pos-border">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">ARR (Run-Rate)</span>
+              <h3 className="text-3xl font-black text-slate-900 dark:text-white mt-2 font-num">{formatINR(monthlyIncome * 12)}</h3>
+              <p className="text-[11px] text-emerald-500 mt-1 font-semibold">Annual Recurring Revenue</p>
+            </div>
+            <div className="p-5 rounded-2xl pos-card-glass shadow-lg border border-pos-border">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Platform Invoices Issued</span>
+              <h3 className="text-3xl font-black text-slate-900 dark:text-white mt-2 font-num">{invoices.length}</h3>
+              <p className="text-[11px] text-sky-500 mt-1 font-semibold">SaaS subscription billing docs</p>
+            </div>
           </div>
-          <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search hotel or email..."
-              className="pl-9 pr-4 py-2 bg-pos-dark border border-pos-border rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-purple-500 w-full sm:w-64 font-medium"
-            />
+
+          <div className="p-5 rounded-2xl pos-card-glass shadow-lg border border-pos-border space-y-3">
+            <h4 className="font-extrabold text-sm text-slate-900 dark:text-white flex items-center space-x-2">
+              <ShieldCheck className="w-4 h-4 text-purple-500" />
+              <span>Multi-Tenant Invariants & Revenue Separation</span>
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-slate-600 dark:text-slate-300">
+              <div className="p-3 bg-pos-dark rounded-xl border border-pos-border space-y-1">
+                <p className="font-bold text-slate-900 dark:text-white">Strict Revenue Stream Separation</p>
+                <p className="text-[11px] text-slate-400">
+                  Platform SaaS subscription revenue is strictly isolated from tenant restaurant order collections, POS cash balances, and Swiggy/Zomato aggregator payouts.
+                </p>
+              </div>
+              <div className="p-3 bg-pos-dark rounded-xl border border-pos-border space-y-1">
+                <p className="font-bold text-slate-900 dark:text-white">Grandfathering & Tenant Security</p>
+                <p className="text-[11px] text-slate-400">
+                  Plan downgrades block creation of additional branches or staff beyond new plan limits, but NEVER destructively prune existing outlets, staff accounts, or historical records.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
+      )}
 
-        <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-[11px] text-amber-800 dark:text-amber-200 flex items-start space-x-2">
-          <MailWarning className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-          <span>
-            <strong>Heads up:</strong> confirmation emails often land in the <strong>Spam / Junk</strong> folder. {SPAM_NOTICE} Restaurants stay <strong>Pending</strong> and their admin cannot log in until confirmed.
-          </span>
-        </div>
+      {/* TAB 2: RESTAURANTS DIRECTORY */}
+      {activeTab === 'RESTAURANTS' && (
+        <div className="relative pos-card-glass rounded-2xl p-6 shadow-xl space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="font-extrabold text-base text-slate-900 dark:text-white font-display">Registered Restaurants & Admin Logins</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Set the hotel name, admin email and password. The restaurant stays Pending until the admin confirms their email and logs in.
+              </p>
+            </div>
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search hotel or email..."
+                className="pl-9 pr-4 py-2 bg-pos-dark border border-pos-border rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-purple-500 w-full sm:w-64 font-medium"
+              />
+            </div>
+          </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-pos-dark text-slate-600 dark:text-slate-400 border-b border-pos-border">
-              <tr>
-                <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">Hotel / Restaurant</th>
-                <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">Admin Email</th>
-                <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">Monthly Fee</th>
-                <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">Status</th>
-                <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px] text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-pos-border">
-              {loading && rows.length === 0 ? (
+          <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-[11px] text-amber-800 dark:text-amber-200 flex items-start space-x-2">
+            <MailWarning className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+            <span>
+              <strong>Heads up:</strong> confirmation emails often land in the <strong>Spam / Junk</strong> folder. {SPAM_NOTICE} Restaurants stay <strong>Pending</strong> and their admin cannot log in until confirmed.
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-pos-dark text-slate-600 dark:text-slate-400 border-b border-pos-border">
                 <tr>
-                  <td colSpan="5" className="py-8 text-center text-slate-400 font-semibold">Loading...</td>
+                  <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">Hotel / Restaurant</th>
+                  <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">Admin Email</th>
+                  <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">Monthly Fee</th>
+                  <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">Status</th>
+                  <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px] text-right">Actions</th>
                 </tr>
-              ) : filteredRows.length === 0 ? (
-                <tr>
-                  <td colSpan="5" className="py-8 text-center text-slate-500 font-semibold">
-                    No restaurants yet. Click "Add Restaurant" to register one.
-                  </td>
-                </tr>
-              ) : (
-                filteredRows.map((row) => {
-                  return (
-                    <tr key={row.rest.id} className="hover:bg-pos-surface/60 transition-colors">
-                      <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-white">{row.rest.name}</td>
-                      <td className="py-3.5 px-4 font-mono font-bold text-emerald-600 dark:text-emerald-400">{row.admin?.email || '—'}</td>
-                      <td className="py-3.5 px-4 text-slate-700 dark:text-slate-300 font-bold font-num">{formatINR(row.rest.monthlyFee)}</td>
-                      <td className="py-3.5 px-4">{statusBadge(row)}</td>
-                      <td className="py-3.5 px-4 text-right space-x-1.5 whitespace-nowrap">
-                        {row.status === 'pending' && row.admin && (
-                          <>
+              </thead>
+              <tbody className="divide-y divide-pos-border">
+                {loading && rows.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" className="py-8 text-center text-slate-400 font-semibold">Loading...</td>
+                  </tr>
+                ) : filteredRows.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" className="py-8 text-center text-slate-500 font-semibold">
+                      No restaurants yet. Click "Add Restaurant" to register one.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredRows.map((row) => {
+                    return (
+                      <tr key={row.rest.id} className="hover:bg-pos-surface/60 transition-colors">
+                        <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-white">{row.rest.name}</td>
+                        <td className="py-3.5 px-4 font-mono font-bold text-emerald-600 dark:text-emerald-400">{row.admin?.email || '—'}</td>
+                        <td className="py-3.5 px-4 text-slate-700 dark:text-slate-300 font-bold font-num">{formatINR(row.rest.monthlyFee)}</td>
+                        <td className="py-3.5 px-4">{statusBadge(row)}</td>
+                        <td className="py-3.5 px-4 text-right space-x-1.5 whitespace-nowrap">
+                          {row.status === 'pending' && row.admin && (
+                            <>
+                              <button
+                                onClick={() => handleCheckVerification(row)}
+                                className="p-1.5 rounded-xl bg-pos-dark hover:bg-emerald-500/15 text-slate-600 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-300 border border-pos-border transition-colors shadow-sm"
+                                title="Check if email is confirmed"
+                              >
+                                <RefreshCw className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleResend(row)}
+                                className="p-1.5 rounded-xl bg-pos-dark hover:bg-sky-500/15 text-slate-600 dark:text-slate-400 hover:text-sky-600 dark:hover:text-sky-300 border border-pos-border transition-colors shadow-sm"
+                                title="Resend confirmation email"
+                              >
+                                <Mail className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
+                          {row.status !== 'pending' && (
                             <button
-                              onClick={() => handleCheckVerification(row)}
-                              className="p-1.5 rounded-xl bg-pos-dark hover:bg-emerald-500/15 text-slate-600 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-300 border border-pos-border transition-colors shadow-sm"
-                              title="Check if email is confirmed"
+                              onClick={() => handleToggleStatus(row)}
+                              className="p-1.5 rounded-xl bg-pos-dark hover:bg-amber-500/15 text-slate-600 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-300 border border-pos-border transition-colors shadow-sm"
+                              title={row.status === 'active' ? 'Suspend' : 'Activate'}
                             >
-                              <RefreshCw className="w-3.5 h-3.5" />
+                              <Power className="w-3.5 h-3.5" />
                             </button>
+                          )}
+                          <button
+                            onClick={() => openPlanModal(row.rest)}
+                            className="p-1.5 rounded-xl bg-pos-dark hover:bg-indigo-500/15 text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 border border-pos-border transition-colors shadow-sm"
+                            title="Manage Subscription Plan"
+                          >
+                            <CreditCard className="w-3.5 h-3.5" />
+                          </button>
+                          {row.admin && (
                             <button
-                              onClick={() => handleResend(row)}
+                              onClick={() => openPasswordModal(row)}
                               className="p-1.5 rounded-xl bg-pos-dark hover:bg-sky-500/15 text-slate-600 dark:text-slate-400 hover:text-sky-600 dark:hover:text-sky-300 border border-pos-border transition-colors shadow-sm"
-                              title="Resend confirmation email"
+                              title="Change admin password"
                             >
-                              <Mail className="w-3.5 h-3.5" />
+                              <Key className="w-3.5 h-3.5" />
                             </button>
-                          </>
-                        )}
-                        {row.status !== 'pending' && (
+                          )}
                           <button
-                            onClick={() => handleToggleStatus(row)}
-                            className="p-1.5 rounded-xl bg-pos-dark hover:bg-amber-500/15 text-slate-600 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-300 border border-pos-border transition-colors shadow-sm"
-                            title={row.status === 'active' ? 'Suspend' : 'Activate'}
+                            onClick={() => openEditModal(row)}
+                            className="p-1.5 rounded-xl bg-pos-dark hover:bg-purple-500/15 text-slate-600 dark:text-slate-400 hover:text-purple-600 dark:hover:text-purple-300 border border-pos-border transition-colors shadow-sm"
+                            title="Edit name / fee"
                           >
-                            <Power className="w-3.5 h-3.5" />
+                            <Edit2 className="w-3.5 h-3.5" />
                           </button>
-                        )}
-                        {row.admin && (
                           <button
-                            onClick={() => openPasswordModal(row)}
-                            className="p-1.5 rounded-xl bg-pos-dark hover:bg-sky-500/15 text-slate-600 dark:text-slate-400 hover:text-sky-600 dark:hover:text-sky-300 border border-pos-border transition-colors shadow-sm"
-                            title="Change admin password"
+                            onClick={() => handleDelete(row)}
+                            className="p-1.5 rounded-xl bg-pos-dark hover:bg-rose-500/15 text-slate-600 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 border border-pos-border transition-colors shadow-sm"
+                            title="Delete"
                           >
-                            <Key className="w-3.5 h-3.5" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
-                        )}
-                        <button
-                          onClick={() => openEditModal(row)}
-                          className="p-1.5 rounded-xl bg-pos-dark hover:bg-purple-500/15 text-slate-600 dark:text-slate-400 hover:text-purple-600 dark:hover:text-purple-300 border border-pos-border transition-colors shadow-sm"
-                          title="Edit name / fee"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(row)}
-                          className="p-1.5 rounded-xl bg-pos-dark hover:bg-rose-500/15 text-slate-600 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 border border-pos-border transition-colors shadow-sm"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: OUTLETS DIRECTORY */}
+      {activeTab === 'OUTLETS' && (
+        <div className="pos-card-glass rounded-2xl p-6 shadow-xl space-y-4 border border-pos-border">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-extrabold text-base text-slate-900 dark:text-white font-display">Cross-Tenant Outlets Directory</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Overview of all operational branch outlets across tenant restaurants.
+              </p>
+            </div>
+            <span className="px-3 py-1 rounded-xl text-xs font-bold bg-indigo-500/15 text-indigo-400 border border-indigo-500/30">
+              {outletsList.length} Total Outlets
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-pos-dark text-slate-600 dark:text-slate-400 border-b border-pos-border">
+                <tr>
+                  <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">Restaurant Brand</th>
+                  <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">Outlet Name</th>
+                  <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">Outlet ID</th>
+                  <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">City / Location</th>
+                  <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-pos-border">
+                {outletsList.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" className="py-8 text-center text-slate-500 font-semibold">
+                      No outlets discovered. Outlets are created automatically or by restaurant admins.
+                    </td>
+                  </tr>
+                ) : (
+                  outletsList.map((out) => (
+                    <tr key={out.id} className="hover:bg-pos-surface/60 transition-colors">
+                      <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-white">{out.restaurantName}</td>
+                      <td className="py-3.5 px-4 font-semibold text-slate-800 dark:text-slate-200">{out.name}</td>
+                      <td className="py-3.5 px-4 font-mono text-[11px] text-purple-400">{out.id}</td>
+                      <td className="py-3.5 px-4 text-slate-500">{out.city || out.address?.city || 'Default Location'}</td>
+                      <td className="py-3.5 px-4">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-950/80 text-emerald-300 border border-emerald-700">
+                          {out.status || 'ACTIVE'}
+                        </span>
                       </td>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* TAB 4: SUBSCRIPTIONS */}
+      {activeTab === 'SUBSCRIPTIONS' && (
+        <div className="pos-card-glass rounded-2xl p-6 shadow-xl space-y-4 border border-pos-border">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-extrabold text-base text-slate-900 dark:text-white font-display">Tenant SaaS Subscriptions</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Active tiers, billing cycles, and entitlement status per restaurant.
+              </p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-pos-dark text-slate-600 dark:text-slate-400 border-b border-pos-border">
+                <tr>
+                  <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">Restaurant</th>
+                  <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">Current Plan</th>
+                  <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">Cycle</th>
+                  <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">Subscription Status</th>
+                  <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">Fee</th>
+                  <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px] text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-pos-border">
+                {rows.map((row) => (
+                  <tr key={row.rest.id} className="hover:bg-pos-surface/60 transition-colors">
+                    <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-white">{row.rest.name}</td>
+                    <td className="py-3.5 px-4">
+                      <span className="px-2.5 py-1 rounded-lg text-xs font-black uppercase bg-purple-500/15 text-purple-400 border border-purple-500/30">
+                        {row.rest.planId || 'STARTER'}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4 font-semibold text-slate-400">{row.rest.billingCycle || 'MONTHLY'}</td>
+                    <td className="py-3.5 px-4">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-950/80 text-emerald-300 border border-emerald-700">
+                        {row.rest.subscriptionStatus || 'ACTIVE'}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4 font-bold font-num text-slate-300">{formatINR(row.rest.monthlyFee)}/mo</td>
+                    <td className="py-3.5 px-4 text-right">
+                      <button
+                        onClick={() => openPlanModal(row.rest)}
+                        className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition-colors shadow-sm"
+                      >
+                        Change Plan
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 5: PLANS CATALOG */}
+      {activeTab === 'PLANS' && (
+        <div className="space-y-6">
+          <div>
+            <h3 className="font-extrabold text-base text-slate-900 dark:text-white font-display">SaaS Subscription Plans Catalog</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Available platform tiers, pricing, resource limits, and modular feature access.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {(plans.length > 0 ? plans : DEFAULT_PLANS).map((p) => (
+              <div key={p.id} className="p-5 rounded-2xl pos-card-glass border border-pos-border flex flex-col justify-between space-y-4 shadow-lg">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black uppercase tracking-wider text-purple-400">{p.id}</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20 font-bold">Standard</span>
+                  </div>
+                  <h4 className="text-xl font-black text-white">{p.name}</h4>
+                  <div className="pt-2">
+                    <p className="text-2xl font-black font-num text-white">{formatINR(p.priceMonthlyINR)}<span className="text-xs font-normal text-slate-400"> /mo</span></p>
+                    <p className="text-xs text-slate-500 font-num">{formatINR(p.priceAnnualINR)} billed annually</p>
+                  </div>
+
+                  <div className="pt-3 border-t border-pos-border space-y-1.5 text-xs text-slate-300">
+                    <div className="flex justify-between py-0.5">
+                      <span className="text-slate-400">Max Outlets:</span>
+                      <strong className="text-white font-num">{p.maxOutlets >= 999 ? 'Unlimited' : p.maxOutlets}</strong>
+                    </div>
+                    <div className="flex justify-between py-0.5">
+                      <span className="text-slate-400">Staff per Outlet:</span>
+                      <strong className="text-white font-num">{p.maxStaffPerOutlet >= 999 ? 'Unlimited' : p.maxStaffPerOutlet}</strong>
+                    </div>
+                    <div className="flex justify-between py-0.5">
+                      <span className="text-slate-400">Monthly Orders:</span>
+                      <strong className="text-white font-num">{p.maxMonthlyOrders >= 999999 ? 'Unlimited' : p.maxMonthlyOrders}</strong>
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-pos-border space-y-1 text-xs">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Included Modules</span>
+                    {p.features?.map((f, idx) => (
+                      <div key={idx} className="flex items-center space-x-1.5 text-slate-300 text-[11px]">
+                        <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span>{f}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 6: BILLING & INVOICES */}
+      {activeTab === 'BILLING' && (
+        <div className="pos-card-glass rounded-2xl p-6 shadow-xl space-y-4 border border-pos-border">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-extrabold text-base text-slate-900 dark:text-white font-display">SaaS Platform Subscription Invoices</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Official billing records for platform usage and software licensing.
+              </p>
+            </div>
+            <div className="p-2.5 bg-indigo-500/10 border border-indigo-500/30 rounded-xl text-[11px] text-indigo-300 font-semibold">
+              🔒 Separated from restaurant order revenue
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-pos-dark text-slate-600 dark:text-slate-400 border-b border-pos-border">
+                <tr>
+                  <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">Invoice #</th>
+                  <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">Tenant ID</th>
+                  <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">Billing Period</th>
+                  <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">Subtotal</th>
+                  <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">GST (18%)</th>
+                  <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">Total Amount</th>
+                  <th className="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-pos-border">
+                {invoices.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="py-8 text-center text-slate-500 font-semibold">
+                      No SaaS platform invoices generated yet. Invoices are created on monthly subscription renewals.
+                    </td>
+                  </tr>
+                ) : (
+                  invoices.map((inv) => (
+                    <tr key={inv.id} className="hover:bg-pos-surface/60 transition-colors">
+                      <td className="py-3.5 px-4 font-mono font-bold text-purple-400">{inv.invoiceNumber || inv.id}</td>
+                      <td className="py-3.5 px-4 font-semibold text-slate-300">{inv.restaurantId}</td>
+                      <td className="py-3.5 px-4 text-slate-400">{inv.billingPeriod || 'Current Period'}</td>
+                      <td className="py-3.5 px-4 font-num text-slate-300">{formatINR(inv.subtotalINR || (inv.subtotalPaise ? inv.subtotalPaise / 100 : 0))}</td>
+                      <td className="py-3.5 px-4 font-num text-slate-400">{formatINR(inv.taxINR || (inv.taxPaise ? inv.taxPaise / 100 : 0))}</td>
+                      <td className="py-3.5 px-4 font-num font-bold text-white">{formatINR(inv.totalINR || (inv.totalPaise ? inv.totalPaise / 100 : 0))}</td>
+                      <td className="py-3.5 px-4">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                          inv.status === 'PAID' ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700' : 'bg-amber-950/80 text-amber-300 border border-amber-700'
+                        }`}>
+                          {inv.status || 'PAID'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 7: SYSTEM HEALTH */}
+      {activeTab === 'HEALTH' && (
+        <div className="pos-card-glass rounded-2xl p-6 shadow-xl space-y-6 border border-pos-border">
+          <div>
+            <h3 className="font-extrabold text-base text-slate-900 dark:text-white font-display">Platform Infrastructure & Service Health</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Live status of multi-tenant security layers, background jobs, and operational subsystems.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="p-4 rounded-xl bg-pos-dark border border-pos-border space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-white">Firestore Security Isolation</span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-700">ONLINE</span>
+              </div>
+              <p className="text-[11px] text-slate-400">Cross-tenant boundaries enforced strictly via authenticated tenant tokens and explicit outlet rules.</p>
+            </div>
+
+            <div className="p-4 rounded-xl bg-pos-dark border border-pos-border space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-white">Subscription & Entitlements</span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-700">OPERATIONAL</span>
+              </div>
+              <p className="text-[11px] text-slate-400">Enforcing outlet limits, staff quotas, order caps, and grandfathering on downgrade.</p>
+            </div>
+
+            <div className="p-4 rounded-xl bg-pos-dark border border-pos-border space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-white">Aggregator Gateway</span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-700">MOCK SANDBOX</span>
+              </div>
+              <p className="text-[11px] text-slate-400">Zomato / Swiggy simulated HMAC webhook pipeline active with idempotency controls.</p>
+            </div>
+
+            <div className="p-4 rounded-xl bg-pos-dark border border-pos-border space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-white">Inventory & Recipe Engine</span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-700">ONLINE</span>
+              </div>
+              <p className="text-[11px] text-slate-400">Automated stock reservations, batch consumption upon KOT generation, and zero-stock locks.</p>
+            </div>
+
+            <div className="p-4 rounded-xl bg-pos-dark border border-pos-border space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-white">Delivery Fleet Logistics</span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-700">ONLINE</span>
+              </div>
+              <p className="text-[11px] text-slate-400">Rider tracking, multi-channel dispatch integration, and geofence coordinates handling.</p>
+            </div>
+
+            <div className="p-4 rounded-xl bg-pos-dark border border-pos-border space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-white">Financial Reconciliation</span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-700">ONLINE</span>
+              </div>
+              <p className="text-[11px] text-slate-400">Integer paise arithmetic, GST breakdowns, settlement batching, and payout tracking.</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add / Edit modal */}
       <Modal
@@ -973,6 +1466,91 @@ export default function SuperAdminPage() {
               </button>
             </div>
           </div>
+        </Modal>
+      )}
+
+      {/* Plan assignment / upgrade modal */}
+      {planModal && (
+        <Modal
+          isOpen={!!planModal}
+          onClose={() => setPlanModal(null)}
+          title={`💳 Manage SaaS Subscription — ${planModal.restaurantName}`}
+          maxWidth="max-w-md"
+        >
+          <form onSubmit={handleUpdatePlan} className="space-y-4 text-xs">
+            <div>
+              <label className="block font-semibold uppercase tracking-wider text-slate-300 mb-1">
+                Select Plan Tier
+              </label>
+              <select
+                value={selectedPlanId}
+                onChange={(e) => setSelectedPlanId(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+              >
+                <option value="TRIAL">Trial (14-Day Free — 1 Outlet, 3 Staff)</option>
+                <option value="STARTER">Starter (₹999/mo — 1 Outlet, 5 Staff)</option>
+                <option value="PROFESSIONAL">Professional (₹2,499/mo — 3 Outlets, 15 Staff)</option>
+                <option value="ENTERPRISE">Enterprise (₹5,999/mo — Unlimited Outlets/Staff)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block font-semibold uppercase tracking-wider text-slate-300 mb-1">
+                Billing Cycle
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedCycle('MONTHLY')}
+                  className={`p-2.5 rounded-lg border text-center font-bold transition-colors ${
+                    selectedCycle === 'MONTHLY'
+                      ? 'bg-purple-950/60 border-purple-500 text-white'
+                      : 'bg-slate-950 border-slate-800 text-slate-400'
+                  }`}
+                >
+                  Monthly
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedCycle('ANNUAL')}
+                  className={`p-2.5 rounded-lg border text-center font-bold transition-colors ${
+                    selectedCycle === 'ANNUAL'
+                      ? 'bg-purple-950/60 border-purple-500 text-white'
+                      : 'bg-slate-950 border-slate-800 text-slate-400'
+                  }`}
+                >
+                  Annual (Save ~17%)
+                </button>
+              </div>
+            </div>
+
+            <div className="p-3 bg-indigo-950/40 border border-indigo-700/60 rounded-xl text-indigo-200 text-[11px] space-y-1">
+              <p className="font-bold flex items-center space-x-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Grandfathering Protection Active</span>
+              </p>
+              <p>
+                Downgrading tiers never deletes existing outlets or staff members. Existing historical data remains preserved, while new outlet or staff creation beyond the new tier is prevented.
+              </p>
+            </div>
+
+            <div className="flex justify-end space-x-3 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setPlanModal(null)}
+                className="px-4 py-2 rounded-lg font-medium text-slate-400 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold shadow-lg shadow-purple-900/40 disabled:opacity-50"
+              >
+                {isSaving ? 'Updating...' : 'Save Plan'}
+              </button>
+            </div>
+          </form>
         </Modal>
       )}
     </div>

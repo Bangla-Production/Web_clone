@@ -227,7 +227,7 @@ class SecurityContext {
         );
       }
 
-      if (sub === 'inventoryLedger' || sub === 'deliveryEvents' || sub === 'paymentTransactions') {
+      if (sub === 'inventoryLedger' || sub === 'deliveryEvents' || sub === 'paymentTransactions' || sub === 'subscription') {
         if (operation === 'read') return this.isRestaurantStaff(restId);
         return this.isSuperAdmin();
       }
@@ -435,6 +435,25 @@ class SecurityContext {
       }
     }
 
+    // 9. /subscriptionPlans/{planId}
+    if (collection === 'subscriptionPlans') {
+      if (operation === 'read') return true;
+      return this.isSuperAdmin();
+    }
+
+    // 10. /subscriptionInvoices/{invoiceId}
+    if (collection === 'subscriptionInvoices') {
+      if (operation === 'read') {
+        return this.isSuperAdmin() || (this.isAuthenticated() && this.isRestaurantStaff(existingResourceData?.restaurantId));
+      }
+      return this.isSuperAdmin();
+    }
+
+    // 11. /platformAuditLogs/{logId}
+    if (collection === 'platformAuditLogs') {
+      return this.isSuperAdmin();
+    }
+
     return false;
   }
 }
@@ -508,6 +527,26 @@ const mockDb = {
     status: 'APPROVED',
     aadhaarMasked: '•••• •••• 1234',
   },
+  // Step 10: SaaS Plans, Invoices & Audit Logs
+  'subscriptionPlans/STARTER': {
+    planId: 'STARTER',
+    name: 'Starter Plan',
+    monthlyPrice: 999
+  },
+  'subscriptionInvoices/SAAS_INV_A': {
+    restaurantId: 'rest_a',
+    planId: 'STARTER',
+    totalAmount: 1178.82
+  },
+  'subscriptionInvoices/SAAS_INV_B': {
+    restaurantId: 'rest_b',
+    planId: 'PROFESSIONAL',
+    totalAmount: 2948.82
+  },
+  'platformAuditLogs/LOG_001': {
+    action: 'PLAN_CHANGED',
+    actor: 'altcafe2026@gmail.com'
+  }
 };
 
 // Test Contexts
@@ -1240,6 +1279,65 @@ assert(
   'Restaurant Admin CANNOT write settlementRecords directly (Admin SDK only)',
   adminACtx.evaluate('restaurants/rest_a/settlementRecords/SETTLE_001', 'create', { netPayout: 1000 }),
   false
+);
+
+console.log('\n13. STEP 10: PLATFORM SAAS SUBSCRIPTIONS, INVOICES & AUDIT LOGS');
+console.log('-'.repeat(60));
+
+// Test 96: Restaurant Staff can read own subscription doc in Restaurant A (Allowed)
+assert(
+  'Restaurant Staff can read own subscription doc in Restaurant A (Allowed)',
+  waiterACtx.evaluate('restaurants/rest_a/subscription/current', 'read'),
+  true
+);
+
+// Test 97: Restaurant Staff CANNOT write subscription doc directly (Super Admin only)
+assert(
+  'Restaurant Staff CANNOT write subscription doc directly (Super Admin only)',
+  adminACtx.evaluate('restaurants/rest_a/subscription/current', 'update', { planId: 'ENTERPRISE' }),
+  false
+);
+
+// Test 98: Public user can read subscriptionPlans (Allowed)
+assert(
+  'Public user can read subscriptionPlans (Allowed)',
+  unauthCtx.evaluate('subscriptionPlans/STARTER', 'read'),
+  true
+);
+
+// Test 99: Non-Super-Admin CANNOT modify subscriptionPlans (Blocked)
+assert(
+  'Restaurant Admin CANNOT modify subscriptionPlans (Blocked)',
+  adminACtx.evaluate('subscriptionPlans/STARTER', 'update', { monthlyPrice: 0 }),
+  false
+);
+
+// Test 100: Restaurant Admin A can read own SaaS subscription invoice (Allowed)
+assert(
+  'Restaurant Admin A can read own SaaS subscription invoice (Allowed)',
+  adminACtx.evaluate('subscriptionInvoices/SAAS_INV_A', 'read', null, mockDb['subscriptionInvoices/SAAS_INV_A']),
+  true
+);
+
+// Test 101: Restaurant Admin A CANNOT read Restaurant B SaaS invoice (Cross-tenant blocked)
+assert(
+  'Restaurant Admin A CANNOT read Restaurant B SaaS invoice (Cross-tenant blocked)',
+  adminACtx.evaluate('subscriptionInvoices/SAAS_INV_B', 'read', null, mockDb['subscriptionInvoices/SAAS_INV_B']),
+  false
+);
+
+// Test 102: Non-Super-Admin CANNOT read platformAuditLogs (Blocked)
+assert(
+  'Restaurant Admin CANNOT read platformAuditLogs (Blocked)',
+  adminACtx.evaluate('platformAuditLogs/LOG_001', 'read'),
+  false
+);
+
+// Test 103: Super Admin can read and write platformAuditLogs (Allowed)
+assert(
+  'Super Admin can read platformAuditLogs (Allowed)',
+  superAdminCtx.evaluate('platformAuditLogs/LOG_001', 'read'),
+  true
 );
 
 console.log('\n' + '='.repeat(80));
