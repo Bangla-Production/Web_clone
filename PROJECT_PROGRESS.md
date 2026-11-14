@@ -1,7 +1,7 @@
 # Abar Khabo: Multi-Tenant Aggregator Platform — Project Progress Tracker
 
 ## Status Overview
-* **Current Stage:** STAGE 2 PART B (Step 4 Complete — Awaiting User Approval to Begin Step 5)
+* **Current Stage:** STAGE 2 PART B (Step 5 Complete — Awaiting User Approval to Begin Step 6)
 * **Target Platforms:** Swiggy, Zomato, Abar Khabo Direct Ordering
 * **Target Architecture:** Multi-Tenant SaaS, Outlet Hierarchy, Node.js + TypeScript Backend, Firestore Database, React + Vite Frontend.
 
@@ -13,7 +13,7 @@
 | :--- | :--- | :--- | :--- |
 | **STAGE 0** | Repository Inspection, Architecture Audit & Risk Analysis | **COMPLETE** | 2026-11-15 |
 | **STAGE 1** | Security & Strict Tenant Isolation | **COMPLETE** | 2026-11-15 |
-| **STAGE 2** | Database Schema & Outlets Model | **PART B IN PROGRESS** (Step 4 Complete; Awaiting Step 5 Approval) | 2026-11-15 |
+| **STAGE 2** | Database Schema & Outlets Model | **PART B IN PROGRESS** (Step 5 Complete; Awaiting Step 6 Approval) | 2026-11-15 |
 | **STAGE 3** | Backend Integration Infrastructure (`server/`) | QUEUED | - |
 | **STAGE 4** | Common Aggregator Adapter Framework | QUEUED | - |
 | **STAGE 5** | Mock Swiggy & Zomato Integration & Test Sandbox | QUEUED | - |
@@ -217,4 +217,56 @@
   * **Unit & AST Suites (`npm test`):** 226 / 226 tests passed (45 outlet + 40 identity + 30 menu + 46 order + 65 security AST).
   * **Vite Production Build:** 1676 modules bundled cleanly in 4.64s with 0 errors.
 * **Next Authorized Step:**
-  * Awaiting user review and authorization to proceed to **Step 5 (Aggregator Connection State & Webhook Ingestion Pipeline)**.
+  * Step 5 completed.
+
+---
+
+## Stage 2 Part B Summary (Step 5: Aggregator Connection State & Webhook Ingestion Pipeline)
+
+* **What was implemented:**
+  * **Mandatory Step 4 Architectural Corrections:**
+    * Shifted authoritative order ingestion, idempotency hashing, and financial logic from React client into trusted Node.js backend using Firebase Admin SDK (`server/src/services/trustedOrderService.js`).
+    * Replaced hardcoded 5% GST and 18% commission with dynamic financial configuration engine (`server/src/config/financialConfig.js`) resolving outlet and connection overrides while preserving historical snapshots.
+    * Replaced string concatenation with canonical tuple encoding `(provider:restaurantId:outletId:externalOrderId)` and SHA-256 cryptographic hashing (`server/src/utils/cryptoUtils.js`).
+    * Structured legacy mirroring into independent per-destination targets (`tenantSubcollection`, `rootCollection`) with independent attempt tracking and selective retry capabilities.
+  * **Aggregator Connection Model (`server/src/services/connectionService.js`):**
+    * Document path: `restaurants/{restaurantId}/outlets/{outletId}/aggregatorConnections/{connectionId}`.
+    * Supported providers: `SWIGGY`, `ZOMATO`.
+    * Six operational states: `NOT_CONNECTED`, `PENDING_AUTHORIZATION`, `CONNECTED`, `DISCONNECTED`, `ERROR`, `SUSPENDED`.
+    * Strict Secret Security: Zero plaintext secrets stored in Firestore. All credentials resolved via Google Cloud Secret Manager resource strings (`secretReference`).
+  * **Enterprise Secret Manager Service (`server/src/services/secretManagerService.js`):**
+    * Production GCP Secret Manager client abstraction with in-memory sandbox mock vault for local offline test execution.
+  * **Secure Webhook Ingestion Pipeline (`server/src/services/webhookIngestionService.js`):**
+    * Processes Swiggy and Zomato payloads with HMAC-SHA256 signature verification using constant-time comparison (`crypto.timingSafeEqual`).
+    * Mitigates replay attacks via timestamp drift validation (< 300 seconds).
+    * Deduplicates events via deterministic event hashing into `integrationWebhooks/{webhookId}`.
+    * Automatic PII redaction (phones, customer names, cards) before recording audit logs.
+    * Exponential backoff and dead-letter queue (DLQ) after 3 consecutive failures.
+  * **Security Rules Hardening (`firestore.rules`):**
+    * Added `match /integrationWebhooks/{webhookId}`: Public & client writes blocked (Backend Admin SDK only); read restricted to Super Admin or Brand Admin of that restaurant.
+    * `aggregatorConnections` read/write restricted strictly to Brand Admin (`isRestaurantAdmin`).
+* **Files Created:**
+  * `server/src/config/firebaseAdmin.js`
+  * `server/src/config/financialConfig.js`
+  * `server/src/utils/logger.js`
+  * `server/src/utils/cryptoUtils.js`
+  * `server/src/services/secretManagerService.js`
+  * `server/src/services/connectionService.js`
+  * `server/src/services/trustedOrderService.js`
+  * `server/src/services/webhookIngestionService.js`
+  * `client/src/services/aggregatorConnectionService.js`
+  * `tests/test_aggregator_webhooks.js`
+  * `STAGE2_STEP5_IMPLEMENTATION_REPORT.md`
+* **Files Modified:**
+  * `firestore.rules`
+  * `client/src/services/firestoreService.js`
+  * `package.json`
+  * `tests/emulator_rules_unit.test.js`
+  * `tests/test_rules_isolation.js`
+  * `PROJECT_PROGRESS.md`
+* **Test Verification Results:**
+  * **Live Firestore Emulator:** 48 / 48 scenarios passed (including all 6 new aggregator connection & webhook audit security scenarios).
+  * **Unit & AST Suites (`npm test`):** 289 / 289 tests passed (45 outlet + 40 identity + 30 menu + 46 order + 53 webhook + 75 security AST).
+  * **Vite Production Build:** 1,677 modules bundled cleanly in 4.52s with 0 errors.
+* **Next Authorized Step:**
+  * Awaiting user review and authorization to proceed to **Step 6 (Unified Order Management Engine — POS, KDS & Aggregators)**.

@@ -212,6 +212,30 @@ async function main() {
       isOnline: true,
       isAvailable: false,
     });
+    // Aggregator Connection for rest_a_main
+    await db.doc('restaurants/rest_a/outlets/rest_a_main/aggregatorConnections/swiggy').set({
+      provider: 'SWIGGY',
+      connectionStatus: 'CONNECTED',
+      externalRestaurantId: 'SW_REST_1001',
+      secretReference: 'projects/demo-abar-khabo/secrets/swiggy_rest_a/versions/1',
+      restaurantId: 'rest_a',
+      outletId: 'rest_a_main'
+    });
+    // Integration Webhooks
+    await db.doc('integrationWebhooks/WH_SWIGGY_emu_101').set({
+      webhookId: 'WH_SWIGGY_emu_101',
+      provider: 'SWIGGY',
+      restaurantId: 'rest_a',
+      outletId: 'rest_a_main',
+      processingStatus: 'PROCESSED'
+    });
+    await db.doc('integrationWebhooks/WH_ZOMATO_emu_202').set({
+      webhookId: 'WH_ZOMATO_emu_202',
+      provider: 'ZOMATO',
+      restaurantId: 'rest_b',
+      outletId: 'rest_b_main',
+      processingStatus: 'PROCESSED'
+    });
   });
 
   // Authenticated Contexts
@@ -548,6 +572,39 @@ async function main() {
   await runTest('Staff A altering restaurantId or outletId on aggregator order (Forbidden)', async () => {
     await assertFails(dbStaffUid.doc('aggregatorOrders/SWIGGY_rest_a_main_1001').update({
       outletId: 'rest_a_branch2'
+    }));
+  });
+
+  // Scenario 43: Admin A reading own outlet aggregator connection (Allowed)
+  await runTest('Admin A reading own outlet aggregator connection (Allowed)', async () => {
+    await assertSucceeds(dbAdminA.doc('restaurants/rest_a/outlets/rest_a_main/aggregatorConnections/swiggy').get());
+  });
+
+  // Scenario 44: Staff A reading aggregator connection (Forbidden - Admin only)
+  await runTest('Staff A reading aggregator connection (Forbidden - Admin only)', async () => {
+    await assertFails(dbStaffUid.doc('restaurants/rest_a/outlets/rest_a_main/aggregatorConnections/swiggy').get());
+  });
+
+  // Scenario 45: Admin A reading Tenant A integration webhook (Allowed)
+  await runTest('Admin A reading Tenant A integration webhook (Allowed)', async () => {
+    await assertSucceeds(dbAdminA.doc('integrationWebhooks/WH_SWIGGY_emu_101').get());
+  });
+
+  // Scenario 46: Admin A reading Tenant B integration webhook (Cross-tenant blocked)
+  await runTest('Admin A reading Tenant B integration webhook (Cross-tenant blocked)', async () => {
+    await assertFails(dbAdminA.doc('integrationWebhooks/WH_ZOMATO_emu_202').get());
+  });
+
+  // Scenario 47: Staff A reading integration webhook (Forbidden - Admin only)
+  await runTest('Staff A reading integration webhook (Forbidden - Admin only)', async () => {
+    await assertFails(dbStaffUid.doc('integrationWebhooks/WH_SWIGGY_emu_101').get());
+  });
+
+  // Scenario 48: Client attempting to create integration webhook (Blocked - Backend only)
+  await runTest('Client attempting to create integration webhook (Blocked - Backend only)', async () => {
+    await assertFails(dbAdminA.doc('integrationWebhooks/WH_FAKE_CLIENT').set({
+      provider: 'SWIGGY',
+      restaurantId: 'rest_a'
     }));
   });
 

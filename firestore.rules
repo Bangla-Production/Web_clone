@@ -381,7 +381,21 @@ service cloud.firestore {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 7. ONLINE ORDERS & FOOD DELIVERY (/onlineOrders/{orderId})
+    // 7. INTEGRATION WEBHOOK AUDIT LOGS (/integrationWebhooks/{webhookId})
+    // ─────────────────────────────────────────────────────────────────────────
+
+    match /integrationWebhooks/{webhookId} {
+      // READ PERMISSIONS: Super Admin or Brand Admin of the matching restaurant
+      allow read: if isSuperAdmin() ||
+        (isAuthenticated() && isRestaurantAdmin(resource.data.restaurantId));
+
+      // WRITE PERMISSIONS: Client-side writes strictly blocked! (Trusted Backend Admin SDK only)
+      allow create, update: if isSuperAdmin();
+      allow delete: if isSuperAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 8. ONLINE ORDERS & FOOD DELIVERY (/onlineOrders/{orderId})
     // ─────────────────────────────────────────────────────────────────────────
 
     match /onlineOrders/{orderId} {

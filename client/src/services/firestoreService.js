@@ -162,6 +162,13 @@ export {
   transitionOrderStatus
 } from './normalizedOrderService';
 
+export {
+  getAggregatorConnection,
+  listOutletAggregatorConnections,
+  updateAggregatorConnectionStatus,
+  getAggregatorConnectionDocPath
+} from './aggregatorConnectionService';
+
 // ----------------------------------------------------------------------
 // 2. USERS & STAFF
 // ----------------------------------------------------------------------

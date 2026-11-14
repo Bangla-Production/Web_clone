@@ -386,6 +386,16 @@ class SecurityContext {
       }
     }
 
+    // 8. /integrationWebhooks/{webhookId}
+    if (collection === 'integrationWebhooks') {
+      if (operation === 'read') {
+        return this.isSuperAdmin() || (this.hasActiveProfile() && this.isRestaurantAdmin(existingResourceData?.restaurantId));
+      }
+      if (operation === 'create' || operation === 'update' || operation === 'delete') {
+        return this.isSuperAdmin();
+      }
+    }
+
     return false;
   }
 }
@@ -952,6 +962,97 @@ assert(
       pricing: { grandTotal: 250 }
     }
   ),
+  false
+);
+
+console.log('\n10. STEP 5: AGGREGATOR CONNECTIONS & WEBHOOK AUDIT SECURITY');
+console.log('-'.repeat(60));
+
+const sampleWebhookA = {
+  webhookId: 'WH_SWIGGY_test_101',
+  provider: 'SWIGGY',
+  restaurantId: 'rest_a',
+  outletId: 'rest_a_main',
+  externalOrderId: 'SW-991',
+  processingStatus: 'PROCESSED'
+};
+
+const sampleWebhookB = {
+  webhookId: 'WH_ZOMATO_test_202',
+  provider: 'ZOMATO',
+  restaurantId: 'rest_b',
+  outletId: 'rest_b_main',
+  externalOrderId: 'ZOM-882',
+  processingStatus: 'PROCESSED'
+};
+
+// Test 66: Super Admin reading integration webhook (Allowed)
+assert(
+  'Super Admin can read integration webhook',
+  superAdminCtx.evaluate('integrationWebhooks/WH_SWIGGY_test_101', 'read', null, sampleWebhookA),
+  true
+);
+
+// Test 67: Restaurant Admin A reading Tenant A webhook (Allowed)
+assert(
+  'Restaurant Admin A can read Tenant A webhook',
+  adminACtx.evaluate('integrationWebhooks/WH_SWIGGY_test_101', 'read', null, sampleWebhookA),
+  true
+);
+
+// Test 68: Restaurant Admin A reading Tenant B webhook (Cross-tenant blocked)
+assert(
+  'Restaurant Admin A CANNOT read Tenant B webhook (Cross-tenant blocked)',
+  adminACtx.evaluate('integrationWebhooks/WH_ZOMATO_test_202', 'read', null, sampleWebhookB),
+  false
+);
+
+// Test 69: Waiter A reading Tenant A webhook (Forbidden - Admin only)
+assert(
+  'Waiter A CANNOT read Tenant A webhook (Admin only)',
+  waiterACtx.evaluate('integrationWebhooks/WH_SWIGGY_test_101', 'read', null, sampleWebhookA),
+  false
+);
+
+// Test 70: Customer reading integration webhook (Forbidden)
+assert(
+  'Customer CANNOT read integration webhook (Forbidden)',
+  customerCtx.evaluate('integrationWebhooks/WH_SWIGGY_test_101', 'read', null, sampleWebhookA),
+  false
+);
+
+// Test 71: Public user reading integration webhook (Forbidden)
+assert(
+  'Public user CANNOT read integration webhook (Forbidden)',
+  unauthCtx.evaluate('integrationWebhooks/WH_SWIGGY_test_101', 'read', null, sampleWebhookA),
+  false
+);
+
+// Test 72: Client attempting to create integration webhook (Blocked - Backend only)
+assert(
+  'Client CANNOT create integration webhook (Blocked - Backend Admin SDK only)',
+  adminACtx.evaluate('integrationWebhooks/WH_SWIGGY_client_fake', 'create', sampleWebhookA),
+  false
+);
+
+// Test 73: Restaurant Admin A reading own aggregatorConnections (Allowed)
+assert(
+  'Restaurant Admin A can read own aggregatorConnections',
+  adminACtx.evaluate('restaurants/rest_a/outlets/rest_a_main/aggregatorConnections/swiggy', 'read'),
+  true
+);
+
+// Test 74: Waiter A attempting to read aggregatorConnections (Forbidden - Admin only)
+assert(
+  'Waiter A CANNOT read aggregatorConnections (Admin only)',
+  waiterACtx.evaluate('restaurants/rest_a/outlets/rest_a_main/aggregatorConnections/swiggy', 'read'),
+  false
+);
+
+// Test 75: Public user attempting to read aggregatorConnections (Forbidden)
+assert(
+  'Public user CANNOT read aggregatorConnections (Forbidden)',
+  unauthCtx.evaluate('restaurants/rest_a/outlets/rest_a_main/aggregatorConnections/swiggy', 'read'),
   false
 );
 
