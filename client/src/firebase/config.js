@@ -29,6 +29,7 @@ import {
   runTransaction,
   writeBatch
 } from 'firebase/firestore';
+import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 
 const env = (typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env : (typeof process !== 'undefined' ? process.env : {});
 
@@ -46,11 +47,34 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+// Initialize Firebase App Check with local dev/emulator debug token safety
+let appCheck = null;
+if (typeof window !== 'undefined') {
+  if (env.VITE_APP_CHECK_DEBUG_TOKEN || env.DEV || !env.PROD) {
+    try {
+      window.FIREBASE_APPCHECK_DEBUG_TOKEN = env.VITE_APP_CHECK_DEBUG_TOKEN || true;
+    } catch (e) {
+      // Non-blocking
+    }
+  }
+  if (env.VITE_RECAPTCHA_SITE_KEY) {
+    try {
+      appCheck = initializeAppCheck(app, {
+        provider: new ReCaptchaV3Provider(env.VITE_RECAPTCHA_SITE_KEY),
+        isTokenAutoRefreshEnabled: true
+      });
+    } catch (e) {
+      console.warn('Firebase App Check initialization skipped:', e.message);
+    }
+  }
+}
+
 export {
   firebaseConfig,
   app,
   auth,
   db,
+  appCheck,
   // Auth methods
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,

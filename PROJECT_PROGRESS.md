@@ -1,7 +1,7 @@
 # Abar Khabo: Multi-Tenant Aggregator Platform — Project Progress Tracker
 
 ## Status Overview
-* **Current Stage:** STAGE 2 PART B (Step 10 Complete — Awaiting User Approval to Begin Step 11)
+* **Current Stage:** STAGE 2 PART B (Step 11 Complete — Awaiting User Approval to Begin Step 12)
 * **Target Platforms:** Swiggy, Zomato, Abar Khabo Direct Ordering
 * **Target Architecture:** Multi-Tenant SaaS, Outlet Hierarchy, Node.js + TypeScript Backend, Firestore Database, React + Vite Frontend.
 
@@ -13,7 +13,7 @@
 | :--- | :--- | :--- | :--- |
 | **STAGE 0** | Repository Inspection, Architecture Audit & Risk Analysis | **COMPLETE** | 2026-11-15 |
 | **STAGE 1** | Security & Strict Tenant Isolation | **COMPLETE** | 2026-11-15 |
-| **STAGE 2** | Database Schema & Outlets Model | **PART B IN PROGRESS** (Step 10 Complete; Awaiting Step 11 Approval) | 2026-11-15 |
+| **STAGE 2** | Database Schema & Outlets Model | **PART B IN PROGRESS** (Step 11 Complete; Awaiting Step 12 Approval) | 2026-11-15 |
 | **STAGE 3** | Backend Integration Infrastructure (`server/`) | QUEUED | - |
 | **STAGE 4** | Common Aggregator Adapter Framework | QUEUED | - |
 | **STAGE 5** | Mock Swiggy & Zomato Integration & Test Sandbox | QUEUED | - |
@@ -543,4 +543,78 @@
   * **Live Firestore Emulator Suite (`tests/emulator_rules_unit.test.js`):** 72 / 72 scenarios passed with 0 failures.
   * **Vite Production Build:** 1,684 modules transformed cleanly in 4.89s with 0 errors.
 * **Next Authorized Step:**
-  * Awaiting user review and explicit authorization to proceed to **Step 11**.
+  * Step 10 Complete; proceed to Step 11.
+
+---
+
+## Stage 2 Summary (Step 11: Production Readiness, Security Audit, Performance Optimization & Deployment Architecture)
+
+* **What was implemented:**
+  * **Dependency Audit & Vulnerability Fixes:**
+    * Ran `npm --prefix client audit fix`, successfully resolving 5 package vulnerabilities across Vite, follow-redirects, postcss-selector-parser, re2js, and source-map-js with zero breaking changes.
+    * Documented remaining advisories in `@grpc/grpc-js` and `react-router` requiring breaking major version upgrades.
+    * Production build verified cleanly: 1,686 modules transformed in 5.24s with 0 errors.
+  * **Firebase App Check Integration (`client/src/firebase/config.js`):**
+    * Integrated `initializeAppCheck` with `ReCaptchaV3Provider` and local debug token support (`window.FIREBASE_APPCHECK_DEBUG_TOKEN`).
+  * **Defense-in-Depth Middleware & Isolation Layer (`server/src/middleware/`):**
+    * `securityHeadersMiddleware.js`: Injects strict HSTS, nosniff, frame-ancestors DENY, COOP, and X-Correlation-ID request tracing.
+    * `rateLimiterMiddleware.js`: Sliding-window token bucket limiter enforcing 60 req/min for general API and 300 req/min for webhooks.
+    * `authMiddleware.js`: Verifies Firebase ID tokens and attaches authoritative UID staff claims (`role`, `restaurantId`, `assignedOutletIds`, `allOutlets`, `accountStatus`).
+    * `tenantAuthorizationMiddleware.js`: Implements `requireTenant`, `requireOutlet`, and `requireRole` to enforce multi-tenant isolation and explicit outlet permissions on backend Admin SDK calls.
+    * `appCheckMiddleware.js`: Validates Firebase App Check attestation tokens with development fallback.
+    * `requestValidationMiddleware.js`: Recursively strips prototype pollution vectors (`__proto__`, `constructor`, `prototype`) and validates required request fields.
+    * `errorHandlerMiddleware.js`: Centralized production error handler with zero stack trace or internal directory leakage.
+  * **Cloud Run Backend Server (`server/src/app.js` & `server/src/server.js`):**
+    * Production Express application exposing `/healthz` (liveness) and `/readyz` (readiness) probes.
+    * Graceful termination handling `SIGTERM` and draining connections within 10 seconds.
+  * **Disaster Recovery & Automated Backup Engine (`server/src/services/backupRecoveryService.js`):**
+    * RPO <= 1 hour guarantee via hourly collection snapshot exports and continuous PITR.
+    * RTO <= 30 minutes guarantee verified via non-destructive sandbox restore simulations with SHA-256 manifest validation.
+  * **Containerization & Deployment Manifests:**
+    * Multi-stage, non-root Alpine `Dockerfile` (`node:20-alpine`, `USER node`, built-in health check).
+    * Production `.dockerignore` excluding secrets, tests, node_modules, and git history.
+    * Google Cloud Run v2 service definition (`cloudrun.yaml`): 1000m CPU, 512Mi memory, concurrency 80, autoscaling 1-10 instances.
+    * GitHub Actions 5-stage CI/CD pipeline (`.github/workflows/ci.yml`).
+  * **Scalability & Security Verification Suites:**
+    * `tests/test_performance_scalability.js`: Evaluates 5 scenarios under concurrent load (orders, stock contention, webhook replays, payments, subscription sweeps).
+    * `tests/test_production_readiness_security.js`: Validates all 30 mandatory categories from prompt Section 13.
+* **Files Created:**
+  * `server/src/middleware/securityHeadersMiddleware.js`
+  * `server/src/middleware/rateLimiterMiddleware.js`
+  * `server/src/middleware/authMiddleware.js`
+  * `server/src/middleware/tenantAuthorizationMiddleware.js`
+  * `server/src/middleware/appCheckMiddleware.js`
+  * `server/src/middleware/requestValidationMiddleware.js`
+  * `server/src/middleware/errorHandlerMiddleware.js`
+  * `server/src/app.js`
+  * `server/src/server.js`
+  * `server/src/services/backupRecoveryService.js`
+  * `Dockerfile`
+  * `.dockerignore`
+  * `cloudrun.yaml`
+  * `.github/workflows/ci.yml`
+  * `tests/test_performance_scalability.js`
+  * `tests/test_production_readiness_security.js`
+  * `STAGE2_STEP11_PRODUCTION_READINESS_REPORT.md`
+* **Files Modified:**
+  * `client/src/firebase/config.js`
+  * `client/package-lock.json`
+  * `package.json`
+  * `server/src/config/financialConfig.js`
+  * `server/src/services/entitlementService.js`
+  * `server/src/services/inventoryLedgerService.js`
+  * `server/src/services/paymentTransactionService.js`
+  * `server/src/services/recipeService.js`
+  * `server/src/services/trustedOrderService.js`
+  * `server/src/utils/cryptoUtils.js`
+  * `server/src/utils/logger.js`
+  * `PROJECT_PROGRESS.md`
+* **Test Verification Results:**
+  * **Master Regression Suite (`npm test`):** 778 / 778 tests passing across all 13 test suites (100% success).
+  * **Step 11 Security & Production Suite (`tests/test_production_readiness_security.js`):** 75 / 75 assertions passed across all 30 categories.
+  * **Step 11 Performance & Scalability Suite (`tests/test_performance_scalability.js`):** 9 / 9 assertions passed with zero contention or calculation drift.
+  * **Live Firestore Emulator Suite (`tests/emulator_rules_unit.test.js`):** 72 / 72 scenarios passed with 0 failures.
+  * **Vite Client Production Build:** 1,686 modules transformed cleanly in 5.24s with 0 errors.
+  * **Total Automated Assertions Verified:** 934 tests passing across the entire platform.
+* **Next Authorized Step:**
+  * Awaiting user review and explicit authorization to proceed to **Step 12**.

@@ -127,6 +127,13 @@ export class PaymentTransactionService {
     return sanitized;
   }
 
+  /**
+   * Convenience alias for createPaymentTransaction.
+   */
+  async recordPayment(restaurantId, payload, actor = { uid: 'system', role: 'system', name: 'System' }) {
+    return this.createPaymentTransaction({ ...payload, restaurantId }, actor);
+  }
+
   async createPaymentTransaction(payload, actor = { uid: 'system', role: 'system', name: 'System' }) {
     const {
       restaurantId,
@@ -245,6 +252,7 @@ export class PaymentTransactionService {
     return {
       success: true,
       idempotent: false,
+      transactionId,
       transaction: transactionData
     };
   }
@@ -367,14 +375,22 @@ export class PaymentTransactionService {
   }
 
   async processRefund(restaurantId, transactionId, refundInput, actor = { uid: 'system', name: 'System' }) {
+    let actualTxnId = transactionId;
+    let actualInput = refundInput;
+    if (typeof transactionId === 'object' && (!refundInput || refundInput.uid)) {
+      if (refundInput && refundInput.uid) actor = refundInput;
+      actualInput = transactionId;
+      actualTxnId = transactionId.transactionId;
+    }
+
     const {
-      amount,
+      amount = actualInput?.refundAmount,
       reason = 'Customer request',
       refundType = 'PARTIAL',
       items = null,
       externalRefundRef = null,
       idempotencyKey: customRefundKey = null
-    } = refundInput;
+    } = actualInput || {};
 
     const numRefundAmount = Number(amount);
     if (isNaN(numRefundAmount) || numRefundAmount <= 0) {
@@ -383,11 +399,11 @@ export class PaymentTransactionService {
 
     const refundPaise = toPaise(numRefundAmount);
     const db = this._getDb();
-    const txnRef = db.doc(`restaurants/${restaurantId}/paymentTransactions/${transactionId}`);
+    const txnRef = db.doc(`restaurants/${restaurantId}/paymentTransactions/${actualTxnId}`);
     const snap = await txnRef.get();
 
     if (!snap.exists) {
-      throw new Error(`Transaction ${transactionId} not found in restaurant ${restaurantId}`);
+      throw new Error(`Transaction ${actualTxnId} not found in restaurant ${restaurantId}`);
     }
 
     const txn = snap.data();
@@ -402,13 +418,13 @@ export class PaymentTransactionService {
     }
 
     const refundIdempotencyKey = customRefundKey || generateSha256(
-      `REFUND:${transactionId}:${refundPaise}:${reason}:${externalRefundRef || ''}`
+      `REFUND:${actualTxnId}:${refundPaise}:${reason}:${externalRefundRef || ''}`
     );
 
     const existingRefund = (txn.refunds || []).find(r => r.idempotencyKey === refundIdempotencyKey);
     if (existingRefund) {
       logger.info('Duplicate refund request prevented via idempotency key', {
-        transactionId,
+        transactionId: actualTxnId,
         refundId: existingRefund.refundId
       });
       return {
@@ -471,7 +487,7 @@ export class PaymentTransactionService {
     await txnRef.update(updatePayload);
 
     logger.info('Refund successfully recorded on payment transaction', {
-      transactionId,
+      transactionId: actualTxnId,
       refundId,
       refundAmount: refundRecord.amount,
       targetStatus

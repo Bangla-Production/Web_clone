@@ -84,7 +84,12 @@ class Logger {
       console.log(this._format('DEBUG', message, metadata));
     }
   }
+
+  sanitize(obj) {
+    return maskSensitiveData(obj);
+  }
 }
 
+export { maskSensitiveData };
 export const logger = new Logger('aggregator-webhook-service');
 export default logger;

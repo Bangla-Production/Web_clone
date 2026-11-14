@@ -216,6 +216,13 @@ export class EntitlementService {
   }
 
   /**
+   * Convenience alias for checkModuleAccess.
+   */
+  async canAccessFeature(restaurantId, featureName) {
+    return this.checkModuleAccess(restaurantId, featureName);
+  }
+
+  /**
    * Sets explicit Super Admin entitlement overrides.
    */
   async setSuperAdminOverride(restaurantId, overrides, actor = { uid: 'super_admin', name: 'Super Admin' }) {

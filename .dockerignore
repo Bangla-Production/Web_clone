@@ -1,0 +1,47 @@
+# ==============================================================================
+# ABAR KHABO: DOCKERIGNORE (SECURITY & BUILD OPTIMIZATION)
+# ==============================================================================
+
+# Git & VCS
+.git
+.gitignore
+.github
+
+# Local dependencies & caches
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.cache
+
+# Client bundle (Frontend deployed separately to Firebase Hosting / CDN)
+client
+dist
+
+# Test artifacts & emulator logs
+tests
+coverage
+firestore-debug.log
+ui-debug.log
+*.test.js
+*.spec.js
+
+# Environment secrets & credentials (NEVER package secrets into images)
+.env*
+*.pem
+*.key
+*.cert
+serviceAccountKey*.json
+
+# Backups & archives
+*.zip
+*.tar
+*.gz
+*.bak
+*.backup
+STAGE*.md
+PROJECT*.md
+ARCHITECTURE*.md
+README.md
+START_HERE.md

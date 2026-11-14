@@ -148,7 +148,7 @@ export class RecipeService {
     let anyRecipeFound = false;
 
     for (const item of orderItems) {
-      const itemId = item.id;
+      const itemId = item.id || item.itemId;
       if (!itemId) continue;
 
       let recipe = null;

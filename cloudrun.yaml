@@ -1,0 +1,57 @@
+# ==============================================================================
+# ABAR KHABO: GOOGLE CLOUD RUN SERVICE SPECIFICATION (v2 API)
+# Enterprise multi-tenant configuration with secret injection & health probes
+# ==============================================================================
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: abar-khabo-backend
+  labels:
+    cloud.googleapis.com/location: asia-south1 # Mumbai region
+    app.kubernetes.io/name: abar-khabo-backend
+    app.kubernetes.io/part-of: abar-khabo-platform
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "1"
+        autoscaling.knative.dev/maxScale: "10"
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/cpu-throttling: "true"
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 300
+      serviceAccountName: abar-khabo-backend-sa@demo-abar-khabo.iam.gserviceaccount.com
+      containers:
+        - image: asia-south1-docker.pkg.dev/demo-abar-khabo/abar-khabo-repo/backend:latest
+          resources:
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+          ports:
+            - name: http1
+              containerPort: 8080
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: GCLOUD_PROJECT
+              value: "demo-abar-khabo"
+            - name: FIREBASE_PROJECT_ID
+              value: "demo-abar-khabo"
+          # Liveness & Readiness Probes
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3

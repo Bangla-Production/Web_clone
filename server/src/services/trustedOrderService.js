@@ -70,6 +70,22 @@ class TrustedOrderService {
   }
 
   /**
+   * Validates and calculates order financials synchronously using dynamic financial rules.
+   */
+  validateOrderFinancials(orderPayload, restaurantSettings = {}, outletConfig = {}, connectionConfig = {}) {
+    const rules = resolveFinancialRules(restaurantSettings, outletConfig, connectionConfig);
+    const items = orderPayload.items || [];
+    const charges = {
+      discountAmount: orderPayload.discountAmount || 0,
+      packagingCharge: orderPayload.packagingCharge || 0,
+      deliveryCharge: orderPayload.deliveryCharge || 0,
+      tipAmount: orderPayload.tipAmount || 0,
+      couponCode: orderPayload.couponCode || null
+    };
+    return calculateOrderPricing(items, charges, rules);
+  }
+
+  /**
    * Ingests an order authoritatively inside a Firestore transaction.
    * Guarantees that duplicate submissions are deduplicated without duplicate KOTs or stock deductions.
    */
@@ -304,6 +320,7 @@ class TrustedOrderService {
       // 7. Generate idempotent KOT for the kitchen
       const kotResult = await this.ensureOrderKOT(result.order);
       result.kot = kotResult.kot;
+      result.kotId = kotResult.kotId;
 
       // 8. Record authoritative payment transaction
       try {

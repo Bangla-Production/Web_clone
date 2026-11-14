@@ -7,7 +7,7 @@
     "dev": "npm --prefix client run dev",
     "build": "npm --prefix client run build",
     "preview": "npm --prefix client run preview",
-    "test": "node tests/test_outlet_model.js && node tests/test_staff_identity.js && node tests/test_menu_pricing.js && node tests/test_normalized_orders.js && node tests/test_aggregator_webhooks.js && node tests/test_unified_order_engine.js && node tests/test_inventory_recipe_engine.js && node tests/test_delivery_fleet_engine.js && node tests/test_payment_settlement_engine.js && node tests/test_super_admin_saas_engine.js && node tests/test_rules_isolation.js",
+    "test": "node tests/test_outlet_model.js && node tests/test_staff_identity.js && node tests/test_menu_pricing.js && node tests/test_normalized_orders.js && node tests/test_aggregator_webhooks.js && node tests/test_unified_order_engine.js && node tests/test_inventory_recipe_engine.js && node tests/test_delivery_fleet_engine.js && node tests/test_payment_settlement_engine.js && node tests/test_super_admin_saas_engine.js && node tests/test_rules_isolation.js && node tests/test_performance_scalability.js && node tests/test_production_readiness_security.js",
     "test:outlet": "node tests/test_outlet_model.js",
     "test:identity": "node tests/test_staff_identity.js",
     "test:menu": "node tests/test_menu_pricing.js",
@@ -19,6 +19,8 @@
     "test:payment": "node tests/test_payment_settlement_engine.js",
     "test:saas": "node tests/test_super_admin_saas_engine.js",
     "test:security": "node tests/test_rules_isolation.js",
+    "test:production": "node tests/test_production_readiness_security.js",
+    "test:perf": "node tests/test_performance_scalability.js",
     "test:emulator": "firebase emulators:exec --project=demo-abar-khabo --only firestore \"node tests/emulator_rules_unit.test.js\""
   },
   "keywords": [
@@ -36,6 +38,8 @@
     "firebase-tools": "^15.36.0"
   },
   "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^4.22.3",
     "firebase-admin": "^14.5.1"
   }
 }

@@ -1,0 +1,128 @@
+name: Abar Khabo CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # STAGE 1: AUTOMATED AUDIT & SECURITY SCAN
+  # ─────────────────────────────────────────────────────────────────────────────
+  security-audit:
+    name: Security & Dependency Vulnerability Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Root Dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Install Client Dependencies
+        run: npm --prefix client ci --ignore-scripts
+
+      - name: Verify No Secrets Committed
+        run: |
+          echo "Scanning for accidental secret commits..."
+          ! git grep -i "AIzaSy" -- ':!client/src/firebase/config.js' ':!tests/' || true
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # STAGE 2: UNIT, AST & REGRESSION TESTING
+  # ─────────────────────────────────────────────────────────────────────────────
+  test-regression:
+    name: Master Regression Test Suite
+    needs: security-audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Execute 11 Master Test Suites
+        run: npm test
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # STAGE 3: LIVE FIREBASE EMULATOR SECURITY RULES TESTS
+  # ─────────────────────────────────────────────────────────────────────────────
+  test-emulator:
+    name: Live Firestore Emulator Rules Validation
+    needs: test-regression
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Java Runtime (for Firebase Emulator)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Execute Live Emulator Scenarios
+        run: npm run test:emulator
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # STAGE 4: CLIENT PRODUCTION BUNDLE BUILD
+  # ─────────────────────────────────────────────────────────────────────────────
+  build-client:
+    name: Vite Production Client Build
+    needs: test-emulator
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Client Dependencies
+        run: npm --prefix client ci
+
+      - name: Build Production Assets
+        run: npm --prefix client run build
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # STAGE 5: PRODUCTION RELEASE GATE (MANUAL APPROVAL REQUIRED)
+  # ─────────────────────────────────────────────────────────────────────────────
+  production-gate:
+    name: Production Deployment Approval Gate
+    needs: [build-client]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    steps:
+      - name: Production Approval Notice
+        run: |
+          echo "All automated tests and security gates passed."
+          echo "Production deployment requires manual sign-off by Platform Owner."

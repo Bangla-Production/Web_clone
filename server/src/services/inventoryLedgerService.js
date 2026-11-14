@@ -66,6 +66,13 @@ export class InventoryLedgerService {
   }
 
   /**
+   * Convenience alias for reserveOrderStock.
+   */
+  async reserveStockForOrder(restaurantId, outletId, orderId, items, actor = null) {
+    return this.reserveOrderStock(restaurantId, outletId, { orderId, id: orderId, items }, actor);
+  }
+
+  /**
    * Atomically reserves stock for an order based on required ingredients.
    * 
    * @param {string} restaurantId 

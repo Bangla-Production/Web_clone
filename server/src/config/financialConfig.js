@@ -65,7 +65,7 @@ export function calculateOrderPricing(items = [], charges = {}, rules = DEFAULT_
   // 1. Calculate items subtotal
   let itemTotal = 0;
   for (const item of items) {
-    const unitPrice = Number(item.unitPrice || item.price || 0);
+    const unitPrice = Number(item.unitPrice ?? item.price ?? item.basePrice ?? 0);
     const qty = Number(item.quantity || 1);
     const itemSubtotal = Number(item.subtotal ?? (unitPrice * qty));
     itemTotal += itemSubtotal;

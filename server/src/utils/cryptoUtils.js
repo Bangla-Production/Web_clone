@@ -44,6 +44,8 @@ export function computeHmacSha256(rawBody, secret) {
   return crypto.createHmac('sha256', secret).update(bodyString, 'utf8').digest('hex');
 }
 
+export const generateHmacSha256 = computeHmacSha256;
+
 /**
  * Verifies an HMAC SHA-256 signature using timing-safe constant-time equality.
  * Protects against timing side-channel attacks.
