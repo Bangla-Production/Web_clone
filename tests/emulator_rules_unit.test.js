@@ -608,6 +608,59 @@ async function main() {
     }));
   });
 
+  // Scenario 49: Admin A creating Master Ingredient in Restaurant A (Allowed)
+  await runTest('Admin A creating Master Ingredient in Restaurant A (Allowed)', async () => {
+    await assertSucceeds(dbAdminA.doc('restaurants/rest_a/ingredients/ing_basmati').set({
+      name: 'Basmati Rice',
+      unit: 'kg'
+    }));
+  });
+
+  // Scenario 50: Admin A creating Master Ingredient in Restaurant B (Cross-tenant blocked)
+  await runTest('Admin A creating Master Ingredient in Restaurant B (Cross-tenant blocked)', async () => {
+    await assertFails(dbAdminA.doc('restaurants/rest_b/ingredients/ing_basmati').set({
+      name: 'Basmati Rice',
+      unit: 'kg'
+    }));
+  });
+
+  // Scenario 51: Waiter A creating Master Ingredient in Restaurant A (Forbidden)
+  await runTest('Waiter A creating Master Ingredient in Restaurant A (Forbidden)', async () => {
+    await assertFails(dbStaffUid.doc('restaurants/rest_a/ingredients/ing_basmati').set({
+      name: 'Basmati Rice',
+      unit: 'kg'
+    }));
+  });
+
+  // Scenario 52: Manager A updating outlet stock in assigned outlet rest_a_main (Allowed)
+  await runTest('Manager A updating outlet stock in assigned outlet rest_a_main (Allowed)', async () => {
+    await assertSucceeds(dbManagerA.doc('restaurants/rest_a/outlets/rest_a_main/inventoryStock/ing_basmati').set({
+      currentStock: 45,
+      unit: 'kg'
+    }));
+  });
+
+  // Scenario 53: Manager A updating outlet stock in unassigned outlet rest_a_branch2 (Cross-outlet blocked)
+  await runTest('Manager A updating outlet stock in unassigned outlet rest_a_branch2 (Cross-outlet blocked)', async () => {
+    await assertFails(dbManagerA.doc('restaurants/rest_a/outlets/rest_a_branch2/inventoryStock/ing_basmati').set({
+      currentStock: 45,
+      unit: 'kg'
+    }));
+  });
+
+  // Scenario 54: Client-side write to inventoryLedger (Blocked - Admin SDK only)
+  await runTest('Client-side write to inventoryLedger (Blocked - Admin SDK only)', async () => {
+    await assertFails(dbAdminA.doc('restaurants/rest_a/inventoryLedger/LEDGER_FAKE_CLIENT').set({
+      movementType: 'CONSUMPTION',
+      quantityChange: -10
+    }));
+  });
+
+  // Scenario 55: Unauthenticated reading inventoryStock (Forbidden)
+  await runTest('Unauthenticated reading inventoryStock (Forbidden)', async () => {
+    await assertFails(dbUnauth.doc('restaurants/rest_a/outlets/rest_a_main/inventoryStock/ing_basmati').get());
+  });
+
   await testEnv.cleanup();
 
   console.log('\n' + '='.repeat(80));

@@ -10,6 +10,7 @@ import { getDb } from '../config/firebaseAdmin.js';
 import { generateDeterministicOrderId } from '../utils/cryptoUtils.js';
 import { resolveFinancialRules, calculateOrderPricing } from '../config/financialConfig.js';
 import logger from '../utils/logger.js';
+import { inventoryLedgerService } from './inventoryLedgerService.js';
 
 export const ORDER_SOURCES = {
   SWIGGY: 'SWIGGY',
@@ -109,6 +110,51 @@ class TrustedOrderService {
     );
 
     const now = new Date().toISOString();
+
+    // 4b. Pre-transaction check for duplicate order delivery
+    const existingCheck = await orderDocRef.get();
+    if (existingCheck.exists) {
+      const existingData = existingCheck.data();
+      logger.info('Duplicate order delivery detected — returning existing record', {
+        orderId,
+        canonicalKey: idGen.canonicalKey,
+        existingStatus: existingData.orderStatus
+      });
+      return {
+        success: true,
+        status: 'DUPLICATE_IGNORED',
+        orderId,
+        order: existingData,
+        isDuplicate: true
+      };
+    }
+
+    // 4c. Inventory stock reservation check
+    let reservationResult = { success: true, reserved: false, requiredIngredients: [] };
+    try {
+      reservationResult = await inventoryLedgerService.reserveOrderStock(
+        restaurantId,
+        outletId,
+        { ...orderPayload, orderId },
+        { uid: source, role: 'order_source', name: source }
+      );
+    } catch (invErr) {
+      logger.error('Inventory reservation error during order ingestion', { error: invErr.message, orderId });
+    }
+
+    if (!reservationResult.success && reservationResult.reason === 'INSUFFICIENT_STOCK') {
+      logger.warn('Order rejected due to insufficient stock', {
+        orderId,
+        details: reservationResult.details
+      });
+      return {
+        success: false,
+        status: 'INSUFFICIENT_STOCK',
+        orderId,
+        reason: `Insufficient stock for ingredient: ${reservationResult.details?.ingredientName || reservationResult.details?.ingredientId}`,
+        details: reservationResult.details
+      };
+    }
 
     // 5. Transaction-safe ingestion and deduplication
     const result = await db.runTransaction(async (transaction) => {
@@ -231,6 +277,14 @@ class TrustedOrderService {
           cancelledBy: null,
           reason: null,
           refundStatus: null
+        },
+
+        inventorySnapshot: {
+          status: reservationResult.reserved ? 'RESERVED' : 'NOT_CONFIGURED',
+          requiredIngredients: reservationResult.requiredIngredients || [],
+          ledgerEntries: reservationResult.ledgerEntries || [],
+          reservedAt: reservationResult.reserved ? now : null,
+          consumedAt: null
         },
 
         createdAt: now,
@@ -439,6 +493,7 @@ class TrustedOrderService {
       paymentStatus: normalized.payment?.status || 'PENDING',
       paymentMethod: normalized.payment?.method || 'CASH',
       orderTime: normalized.timestamps.placedAt,
+      inventorySnapshot: normalized.inventorySnapshot || null,
       isLegacyMirror: true,
       authoritativeRef: `aggregatorOrders/${normalized.orderId}`,
       updatedAt: new Date().toISOString()
@@ -639,6 +694,25 @@ class TrustedOrderService {
         reason,
         refundStatus: 'PENDING'
       };
+    }
+
+    // Inventory lifecycle transitions
+    if (newStatus === ORDER_STATUSES.PREPARING) {
+      try {
+        await inventoryLedgerService.consumeOrderStock(orderData.restaurantId, orderData.outletId, orderData, { uid: actor, role: 'kitchen', name: actor });
+        updatePayload['inventorySnapshot.status'] = 'CONSUMED';
+        updatePayload['inventorySnapshot.consumedAt'] = now;
+      } catch (invErr) {
+        logger.error('Failed to consume stock during PREPARING transition', { error: invErr.message, orderId });
+      }
+    } else if (newStatus === ORDER_STATUSES.CANCELLED || newStatus === ORDER_STATUSES.REJECTED) {
+      try {
+        const cancelResult = await inventoryLedgerService.handleOrderCancellation(orderData.restaurantId, orderData.outletId, orderData, { uid: actor, role: 'staff', name: actor });
+        updatePayload['inventorySnapshot.status'] = cancelResult.released ? 'RELEASED' : (cancelResult.wastageRecorded ? 'WASTAGE' : 'CANCELLED');
+        updatePayload['inventorySnapshot.cancelledAt'] = now;
+      } catch (invErr) {
+        logger.error('Failed to handle inventory on order cancellation', { error: invErr.message, orderId });
+      }
     }
 
     await orderDocRef.update(updatePayload);

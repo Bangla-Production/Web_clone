@@ -264,7 +264,7 @@ service cloud.firestore {
         allow delete: if isRestaurantAdmin(restaurantId);
       }
 
-      // Inventory & Stock Transactions
+      // Inventory & Stock Transactions (Legacy Mirror)
       match /inventory/{itemId} {
         allow read: if isRestaurantStaff(restaurantId);
         allow write: if isRestaurantAdmin(restaurantId);
@@ -273,6 +273,42 @@ service cloud.firestore {
           allow read: if isRestaurantStaff(restaurantId);
           allow write: if isRestaurantAdmin(restaurantId);
         }
+      }
+
+      // Master Ingredient Catalog
+      match /ingredients/{ingredientId} {
+        allow read: if isRestaurantStaff(restaurantId);
+        allow write: if isRestaurantAdmin(restaurantId);
+      }
+
+      // Master Menu Item Recipes
+      match /recipes/{itemId} {
+        allow read: if isRestaurantStaff(restaurantId);
+        allow write: if isRestaurantAdmin(restaurantId);
+      }
+
+      // Raw Material Suppliers
+      match /suppliers/{supplierId} {
+        allow read: if isRestaurantStaff(restaurantId);
+        allow write: if isRestaurantAdmin(restaurantId) || (
+          userProfile().role in ['outlet_manager', 'owner', 'restaurant_admin'] &&
+          userProfile().restaurantId == restaurantId
+        );
+      }
+
+      // Outlet-to-Outlet Stock Transfers
+      match /stockTransfers/{transferId} {
+        allow read: if isRestaurantStaff(restaurantId);
+        allow write: if isRestaurantAdmin(restaurantId) || (
+          userProfile().role in ['outlet_manager', 'owner', 'restaurant_admin'] &&
+          userProfile().restaurantId == restaurantId
+        );
+      }
+
+      // Immutable Inventory Audit Ledger (Client writes strictly blocked)
+      match /inventoryLedger/{ledgerId} {
+        allow read: if isRestaurantStaff(restaurantId);
+        allow write: if isSuperAdmin();
       }
 
       // Table Reservations: Public guest create; Staff manage
@@ -321,6 +357,33 @@ service cloud.firestore {
         // Aggregator Connections (Swiggy, Zomato API credentials — Never Public)
         match /aggregatorConnections/{connectionId} {
           allow read, write: if isRestaurantAdmin(restaurantId);
+        }
+
+        // Outlet-Specific Stock Balances
+        match /inventoryStock/{ingredientId} {
+          allow read: if isRestaurantStaff(restaurantId) && hasOutletAccess(restaurantId, outletId);
+          allow write: if isRestaurantAdmin(restaurantId) || (
+            hasOutletAccess(restaurantId, outletId) &&
+            userProfile().role in ['outlet_manager', 'owner', 'restaurant_admin']
+          );
+        }
+
+        // Outlet-Specific Recipe Overrides
+        match /recipeOverrides/{itemId} {
+          allow read: if isRestaurantStaff(restaurantId) && hasOutletAccess(restaurantId, outletId);
+          allow write: if isRestaurantAdmin(restaurantId) || (
+            hasOutletAccess(restaurantId, outletId) &&
+            userProfile().role in ['outlet_manager', 'owner', 'restaurant_admin']
+          );
+        }
+
+        // Outlet Purchases & Goods Receipt
+        match /purchases/{purchaseId} {
+          allow read: if isRestaurantStaff(restaurantId) && hasOutletAccess(restaurantId, outletId);
+          allow write: if isRestaurantAdmin(restaurantId) || (
+            hasOutletAccess(restaurantId, outletId) &&
+            userProfile().role in ['outlet_manager', 'owner', 'restaurant_admin']
+          );
         }
       }
     }

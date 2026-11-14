@@ -201,6 +201,35 @@ class SecurityContext {
         if (outletSub === 'aggregatorConnections') {
           return this.isRestaurantAdmin(restId);
         }
+        if (['inventoryStock', 'recipeOverrides', 'purchases'].includes(outletSub)) {
+          if (operation === 'read') {
+            return this.isRestaurantStaff(restId) && this.hasOutletAccess(restId, outletId);
+          }
+          return (
+            this.isRestaurantAdmin(restId) ||
+            (this.hasOutletAccess(restId, outletId) &&
+             ['outlet_manager', 'owner', 'restaurant_admin'].includes(this.userProfile()?.role))
+          );
+        }
+      }
+
+      if (['ingredients', 'recipes'].includes(sub)) {
+        if (operation === 'read') return this.isRestaurantStaff(restId);
+        return this.isRestaurantAdmin(restId);
+      }
+
+      if (['suppliers', 'stockTransfers'].includes(sub)) {
+        if (operation === 'read') return this.isRestaurantStaff(restId);
+        return (
+          this.isRestaurantAdmin(restId) ||
+          (['outlet_manager', 'owner', 'restaurant_admin'].includes(this.userProfile()?.role) &&
+           this.userProfile()?.restaurantId === restId)
+        );
+      }
+
+      if (sub === 'inventoryLedger') {
+        if (operation === 'read') return this.isRestaurantStaff(restId);
+        return this.isSuperAdmin();
       }
 
       if (['tables', 'orders', 'kots', 'invoices'].includes(sub)) {
@@ -1054,6 +1083,79 @@ assert(
   'Public user CANNOT read aggregatorConnections (Forbidden)',
   unauthCtx.evaluate('restaurants/rest_a/outlets/rest_a_main/aggregatorConnections/swiggy', 'read'),
   false
+);
+
+console.log('\n11. STEP 7: INVENTORY, RECIPE & AUDIT LEDGER SECURITY');
+console.log('-'.repeat(60));
+
+// Test 76: Restaurant Admin A writing Master Ingredient in Restaurant A
+assert(
+  'Restaurant Admin A can write Master Ingredient in Restaurant A',
+  adminACtx.evaluate('restaurants/rest_a/ingredients/ing_basmati', 'create', { name: 'Basmati Rice', unit: 'kg' }),
+  true
+);
+
+// Test 77: Restaurant Admin A writing Master Ingredient in Restaurant B (Cross-tenant blocked)
+assert(
+  'Restaurant Admin A CANNOT write Master Ingredient in Restaurant B (Cross-tenant blocked)',
+  adminACtx.evaluate('restaurants/rest_b/ingredients/ing_basmati', 'create', { name: 'Basmati Rice', unit: 'kg' }),
+  false
+);
+
+// Test 78: Waiter A writing Master Ingredient in Restaurant A (Admin only)
+assert(
+  'Waiter A CANNOT write Master Ingredient in Restaurant A (Admin only)',
+  waiterACtx.evaluate('restaurants/rest_a/ingredients/ing_basmati', 'create', { name: 'Basmati Rice', unit: 'kg' }),
+  false
+);
+
+// Test 79: Outlet Manager updating outlet stock in assigned outlet
+assert(
+  'Outlet Manager can update outlet stock in assigned outlet',
+  managerCtx.evaluate('restaurants/rest_a/outlets/rest_a_main/inventoryStock/ing_basmati', 'update', { currentStock: 40 }),
+  true
+);
+
+// Test 80: Outlet Manager updating outlet stock in unassigned outlet (Cross-outlet blocked)
+assert(
+  'Outlet Manager CANNOT update outlet stock in unassigned outlet (Cross-outlet blocked)',
+  managerCtx.evaluate('restaurants/rest_a/outlets/rest_a_branch2/inventoryStock/ing_basmati', 'update', { currentStock: 40 }),
+  false
+);
+
+// Test 81: Staff A updating Tenant B outlet stock (Cross-tenant blocked)
+assert(
+  'Staff A CANNOT update Tenant B outlet stock (Cross-tenant blocked)',
+  adminACtx.evaluate('restaurants/rest_b/outlets/rest_b_main/inventoryStock/ing_basmati', 'update', { currentStock: 40 }),
+  false
+);
+
+// Test 82: Client-side user writing to inventoryLedger (Blocked - Admin SDK only)
+assert(
+  'Client-side user CANNOT write to inventoryLedger (Blocked - Admin SDK only)',
+  adminACtx.evaluate('restaurants/rest_a/inventoryLedger/LEDGER_12345', 'create', { quantityChange: -2 }),
+  false
+);
+
+// Test 83: Public user reading inventoryStock (Forbidden)
+assert(
+  'Public user CANNOT read inventoryStock (Forbidden)',
+  unauthCtx.evaluate('restaurants/rest_a/outlets/rest_a_main/inventoryStock/ing_basmati', 'read'),
+  false
+);
+
+// Test 84: Public user reading Master Ingredients (Forbidden)
+assert(
+  'Public user CANNOT read Master Ingredients (Forbidden)',
+  unauthCtx.evaluate('restaurants/rest_a/ingredients/ing_basmati', 'read'),
+  false
+);
+
+// Test 85: Restaurant Admin A creating Supplier record
+assert(
+  'Restaurant Admin A can create Supplier record in Restaurant A',
+  adminACtx.evaluate('restaurants/rest_a/suppliers/sup_bengal', 'create', { name: 'Bengal Traders' }),
+  true
 );
 
 console.log('\n' + '='.repeat(80));

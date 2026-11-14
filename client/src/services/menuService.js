@@ -22,6 +22,7 @@ import {
   orderBy,
   serverTimestamp
 } from '../firebase/config.js';
+import { convertUnit, areUnitsCompatible } from '../utils/unitConverter.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. CHANNELS, CONSTANTS & ENUMS
@@ -502,4 +503,117 @@ export async function getEffectiveOutletCatalog(
     console.error(`getEffectiveOutletCatalog error (${restaurantId}/${outletId}):`, error);
     throw error;
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. INVENTORY & RECIPE-BASED STOCK AVAILABILITY ENGINE
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Calculates stock-based availability for a menu item given outlet stock balances and recipe.
+ * 
+ * @param {Object} masterItem 
+ * @param {Object} [outletStockMap={}] - Map of ingredientId -> stock document
+ * @param {Object} [recipe=null] - Recipe object with ingredients array
+ * @returns {{ status: 'AVAILABLE'|'LOW_STOCK'|'OUT_OF_STOCK'|'DISABLED', available: boolean, maxPortions: number, reason?: string, limitingIngredient?: string }}
+ */
+export function calculateItemStockAvailability(masterItem, outletStockMap = {}, recipe = null) {
+  if (!masterItem) {
+    return { status: 'DISABLED', available: false, maxPortions: 0, reason: 'ITEM_NOT_FOUND' };
+  }
+
+  // 1. Master item status checks
+  if (masterItem.status === ITEM_STATUS.INACTIVE || masterItem.status === ITEM_STATUS.ARCHIVED || masterItem.isAvailable === false) {
+    return { status: 'DISABLED', available: false, maxPortions: 0, reason: 'MASTER_ITEM_DISABLED' };
+  }
+
+  // 2. If no recipe configured, availability is governed by manual availability toggle
+  if (!recipe || !Array.isArray(recipe.ingredients) || recipe.ingredients.length === 0) {
+    return { status: 'AVAILABLE', available: true, maxPortions: 999 };
+  }
+
+  // 3. Calculate maximum portions possible from limiting ingredient
+  let minPortions = Infinity;
+  let limitingIngredient = null;
+
+  for (const ing of recipe.ingredients) {
+    const stock = outletStockMap[ing.ingredientId];
+    if (!stock) {
+      minPortions = 0;
+      limitingIngredient = ing.name || ing.ingredientId;
+      break;
+    }
+
+    const availableQty = Number(stock.availableStock ?? (Number(stock.currentStock || 0) - Number(stock.reservedStock || 0)));
+    const reqQty = Number(ing.quantity || 0);
+
+    let convertedReq = reqQty;
+    if (stock.unit && ing.unit && stock.unit !== ing.unit) {
+      if (areUnitsCompatible(ing.unit, stock.unit)) {
+        convertedReq = convertUnit(reqQty, ing.unit, stock.unit);
+      }
+    }
+
+    if (convertedReq <= 0) continue;
+
+    const portions = Math.floor(availableQty / convertedReq);
+    if (portions < minPortions) {
+      minPortions = portions;
+      limitingIngredient = ing.name || ing.ingredientId;
+    }
+  }
+
+  if (minPortions === Infinity) minPortions = 0;
+
+  if (minPortions <= 0) {
+    return {
+      status: 'OUT_OF_STOCK',
+      available: false,
+      maxPortions: 0,
+      limitingIngredient
+    };
+  }
+
+  const lowStockThreshold = Number(masterItem.lowStockThreshold || 5);
+  if (minPortions <= lowStockThreshold) {
+    return {
+      status: 'LOW_STOCK',
+      available: true,
+      maxPortions: minPortions,
+      limitingIngredient
+    };
+  }
+
+  return {
+    status: 'AVAILABLE',
+    available: true,
+    maxPortions: minPortions
+  };
+}
+
+/**
+ * Sanitizes a menu item for public customer-facing displays.
+ * Completely strips internal ingredient recipes, costPerBaseUnit, raw stock quantities, and supplier details.
+ * 
+ * @param {Object} menuItem 
+ * @returns {Object} Clean public-facing item
+ */
+export function sanitizeMenuForCustomer(menuItem) {
+  if (!menuItem) return null;
+
+  return {
+    id: menuItem.id || menuItem.itemId,
+    name: menuItem.name,
+    category: menuItem.category || 'Main Course',
+    description: menuItem.description || '',
+    imageUrl: menuItem.imageUrl || '',
+    foodType: menuItem.foodType || 'NON_VEG',
+    effectivePrice: menuItem.effectivePrice ?? menuItem.basePrice ?? menuItem.price ?? 0,
+    basePrice: menuItem.basePrice ?? menuItem.price ?? 0,
+    taxInclusive: menuItem.taxInclusive ?? true,
+    isAvailable: menuItem.isAvailable !== false && menuItem.stockStatus !== 'OUT_OF_STOCK',
+    stockStatus: menuItem.stockStatus || 'AVAILABLE',
+    variants: Array.isArray(menuItem.variants) ? menuItem.variants : [],
+    addons: Array.isArray(menuItem.addons) ? menuItem.addons : []
+  };
 }

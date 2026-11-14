@@ -99,6 +99,14 @@ export function validateTimestampDrift(timestamp, maxDriftSeconds = 300) {
 }
 
 /**
+ * Computes a SHA-256 hash string for arbitrary data.
+ */
+export function generateSha256(data) {
+  const str = typeof data === 'string' ? data : JSON.stringify(data);
+  return crypto.createHash('sha256').update(str, 'utf8').digest('hex');
+}
+
+/**
  * Generates a deterministic webhook event ID for deduplication.
  */
 export function generateWebhookEventId(provider, eventId, rawBody) {

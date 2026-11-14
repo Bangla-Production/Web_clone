@@ -1898,6 +1898,19 @@ export async function savePrinterConfigs(restaurantId, configs) {
 // 11. INVENTORY & RESERVATIONS (Existing working functions maintained)
 // ----------------------------------------------------------------------
 
+export {
+  getIngredientCatalog,
+  createIngredient,
+  getOutletStock,
+  getInventoryLedger,
+  getSuppliers,
+  createSupplier,
+  getRecipes,
+  getRecipe,
+  setRecipe,
+  synthesizeModernStockFromLegacy
+} from './inventoryService.js';
+
 export async function getInventory(restaurantId) {
   try {
     const colRef = collection(db, 'restaurants', restaurantId, 'inventory');

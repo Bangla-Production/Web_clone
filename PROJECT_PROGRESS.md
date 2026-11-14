@@ -324,4 +324,67 @@
   * **Live Firestore Emulator (`tests/emulator_rules_unit.test.js`):** 48 / 48 scenarios passed.
   * **Vite Production Build:** 1,678 modules transformed cleanly in 4.56s with 0 errors.
 * **Next Authorized Step:**
-  * Awaiting user review and authorization to proceed to **Step 7 (Inventory, Recipe & Menu Availability Engine)**.
+  * Step 7 completed.
+
+---
+
+## Stage 2 Part B Summary (Step 7: Inventory, Recipe & Menu Availability Engine)
+
+* **What was implemented:**
+  * **Unit Conversion Engine (`unitConverter.js`):**
+    * Multi-dimensional conversion covering Mass (`kg`, `g`, `mg`), Volume (`litre`, `ml`), and Discrete Count (`pcs`, `pkt`, `box`, `can`, etc.).
+    * Strict dimension validation: prevents conversion between incompatible dimensions (e.g. `kg` to `ml` or `kg` to `pcs`).
+  * **Master Ingredient Catalog & Outlet Stock Balances:**
+    * Catalog: `restaurants/{restaurantId}/ingredients/{ingredientId}` (SKU, category, baseUnit, minThreshold, reorderQuantity, supplier reference).
+    * Outlet stock: `restaurants/{restaurantId}/outlets/{outletId}/inventoryStock/{ingredientId}` tracking `currentStock`, `reservedStock`, and `availableStock`.
+  * **Recipe & Menu Item Mapping Engine (`recipeService.js`):**
+    * Master recipes: `restaurants/{restaurantId}/recipes/{itemId}`.
+    * Outlet recipe overrides: `restaurants/{restaurantId}/outlets/{outletId}/recipeOverrides/{itemId}`.
+    * Dynamic variant modifiers (e.g., Special Double Mutton) and add-on modifiers (e.g., Extra Aloo).
+    * Order-time historical recipe snapshots attached to `aggregatorOrders/{orderId}.inventorySnapshot`.
+    * Items without configured recipes remain fully orderable without blocking.
+  * **Inventory Ledger & Transaction Safety (`inventoryLedgerService.js`):**
+    * 10 distinct movement types: `OPENING_STOCK`, `PURCHASE`, `STOCK_ADJUSTMENT`, `RESERVATION`, `RESERVATION_RELEASE`, `CONSUMPTION`, `RESTOCK`, `TRANSFER_OUT`, `TRANSFER_IN`, `WASTAGE`.
+    * Deterministic SHA-256 idempotency key: `(movementType:restaurantId:outletId:referenceId:ingredientId)`.
+    * Atomic Firestore transactions guarantee concurrent stock integrity and prevent overselling.
+    * Configurable inventory policy supporting negative stock prevention, automatic reservation release, and post-cooking cancellation wastage.
+  * **Order Lifecycle Integration (`trustedOrderService.js`):**
+    * Order Placed/Accepted $\rightarrow$ stock atomically reserved (`RESERVATION`).
+    * Cooking Started (`PREPARING`) $\rightarrow$ reservation converted to physical consumption (`CONSUMPTION`).
+    * Pre-cooking Cancellation $\rightarrow$ reservation released (`RESERVATION_RELEASE`).
+    * Post-cooking Cancellation $\rightarrow$ recorded as wastage (`WASTAGE`).
+    * Works identically across POS, Takeaway, Abar Khabo Direct, Swiggy, and Zomato.
+  * **Menu Availability Engine (`menuService.js`):**
+    * Calculates status: `AVAILABLE`, `LOW_STOCK`, `OUT_OF_STOCK`, `DISABLED`.
+    * Strict outlet independence: stock depletion at Branch 2 does not disable the item at Branch 1.
+    * Public customer menu sanitization: strips internal recipes, raw stock numbers, and supplier details.
+  * **Security Hardening (`firestore.rules`):**
+    * `inventoryLedger`: write strictly forbidden to clients (Super Admin / Admin SDK backend only).
+    * `ingredients`, `recipes`, `suppliers`: Admin manage, staff read.
+    * `inventoryStock`, `recipeOverrides`, `purchases`: Admin / Outlet Manager manage.
+    * Customers and public users strictly denied access to raw inventory data.
+* **Files Created:**
+  * `server/src/utils/unitConverter.js`
+  * `client/src/utils/unitConverter.js`
+  * `server/src/services/recipeService.js`
+  * `server/src/services/inventoryLedgerService.js`
+  * `client/src/services/inventoryService.js`
+  * `tests/test_inventory_recipe_engine.js`
+  * `STAGE2_STEP7_IMPLEMENTATION_REPORT.md`
+* **Files Modified:**
+  * `server/src/services/trustedOrderService.js`
+  * `server/src/utils/cryptoUtils.js`
+  * `client/src/services/menuService.js`
+  * `client/src/services/firestoreService.js`
+  * `firestore.rules`
+  * `tests/test_rules_isolation.js`
+  * `tests/emulator_rules_unit.test.js`
+  * `package.json`
+  * `PROJECT_PROGRESS.md`
+* **Test Verification Results:**
+  * **Step 7 Unit Suite (`tests/test_inventory_recipe_engine.js`):** 69 / 69 tests passed covering all 21 categories.
+  * **Complete Regression Suite (`npm test`):** 412 / 412 assertions passed across all 8 test suites.
+  * **Live Firestore Emulator (`tests/emulator_rules_unit.test.js`):** 55 / 55 scenarios passed.
+  * **Vite Production Build:** 1,680 modules transformed cleanly in 4.51s with 0 errors.
+* **Next Authorized Step:**
+  * Awaiting user review and authorization to proceed to **Step 8 (Delivery Management, Rider Dispatch & Fleet Logistics)**.
