@@ -13,7 +13,7 @@
 | :--- | :--- | :--- | :--- |
 | **STAGE 0** | Repository Inspection, Architecture Audit & Risk Analysis | **COMPLETE** | 2026-11-15 |
 | **STAGE 1** | Security & Strict Tenant Isolation | **COMPLETE** | 2026-11-15 |
-| **STAGE 2** | Database Schema & Outlets Model | **PART B IN PROGRESS** (Step 2 Complete; Awaiting Step 3 Approval) | 2026-11-15 |
+| **STAGE 2** | Database Schema & Outlets Model | **PART B IN PROGRESS** (Step 3 Complete; Awaiting Step 4 Approval) | 2026-11-15 |
 | **STAGE 3** | Backend Integration Infrastructure (`server/`) | QUEUED | - |
 | **STAGE 4** | Common Aggregator Adapter Framework | QUEUED | - |
 | **STAGE 5** | Mock Swiggy & Zomato Integration & Test Sandbox | QUEUED | - |
@@ -143,4 +143,40 @@
   * **Unit & AST Suites (`npm test`):** 132 / 132 tests passed (45 outlet model + 40 staff identity + 47 security rules).
   * **Vite Production Build:** 1674 modules bundled cleanly in 4.50s with 0 errors.
 * **Next Authorized Step:**
-  * Awaiting user review and authorization to proceed to **Step 3 (Menu Catalog, Outlet Overrides & Channel Pricing Model)**.
+  * Step 3 completed.
+
+---
+
+## Stage 2 Part B Summary (Step 3: Master Menu Catalog, Outlet Overrides & Channel Pricing)
+
+* **What was implemented:**
+  * **Master Menu Catalog & Pricing Engine (`client/src/services/menuService.js`):**
+    * Master Catalog schema: `restaurants/{restaurantId}/menuCatalog/{itemId}`.
+    * Outlet Overrides schema: `restaurants/{restaurantId}/outlets/{outletId}/menuOverrides/{itemId}`.
+    * Multi-Channel Pricing Engine covering 5 channels (`DINE_IN`, `DIRECT_ONLINE`, `SWIGGY`, `ZOMATO`, `TAKEAWAY`) with five-level priority resolution hierarchy.
+    * Currency rounding to integer rupees and precise tax breakdown calculation (tax inclusive vs exclusive).
+    * Multi-level availability resolution (master status, outlet 86 toggle, temporary `outOfStockUntil` window, and channel availability toggles).
+    * Historical order preservation principle (order snapshots retain checkout pricing regardless of future menu updates).
+    * Zero-downtime backward compatibility mirror with legacy `menuItems` subcollection.
+  * **Hardened Security Rules (`firestore.rules`):**
+    * Restricted `menuCatalog` write access strictly to Brand Admins (`restaurant_admin`, `owner`, `super_admin`).
+    * Restricted `menuOverrides` write access to Brand Admins and assigned Outlet Managers (`hasOutletAccess`).
+    * Prohibited cashiers, waiters, and kitchen staff from modifying master menu catalog or outlet overrides.
+    * Enforced cross-tenant and cross-outlet write prevention.
+* **Files Created:**
+  * `client/src/services/menuService.js`
+  * `tests/test_menu_pricing.js`
+  * `STAGE2_STEP3_IMPLEMENTATION_REPORT.md`
+* **Files Modified:**
+  * `firestore.rules`
+  * `client/src/services/firestoreService.js`
+  * `package.json`
+  * `tests/emulator_rules_unit.test.js`
+  * `tests/test_rules_isolation.js`
+  * `PROJECT_PROGRESS.md`
+* **Test Verification Results:**
+  * **Live Firestore Emulator:** 32 / 32 scenarios passed (gRPC `PERMISSION_DENIED` enforced for unauthorized menu writes, cross-tenant menu writes, and unassigned outlet override writes).
+  * **Unit & AST Suites (`npm test`):** 170 / 170 tests passed (45 outlet model + 40 staff identity + 30 menu pricing + 55 security rules).
+  * **Vite Production Build:** 1675 modules bundled cleanly in 4.61s with 0 errors.
+* **Next Authorized Step:**
+  * Awaiting user review and authorization to proceed to **Step 4 (Normalized Online Orders Schema & Dual-Mirroring Engine)**.

@@ -78,12 +78,24 @@ async function main() {
       status: 'active',
       authMethod: 'email',
     });
-    // Staff UID profile (Tenant A)
+    // Staff UID profile (Tenant A Waiter)
     await db.doc('users/staff_uid_1').set({
       uid: 'staff_uid_1',
       email: 'waiter1@resta.com',
       name: 'Waiter One',
       role: 'waiter',
+      restaurantId: 'rest_a',
+      assignedOutletIds: ['rest_a_main'],
+      allOutlets: false,
+      status: 'active',
+      authMethod: 'email',
+    });
+    // Staff UID profile (Tenant A Outlet Manager)
+    await db.doc('users/manager_uid_1').set({
+      uid: 'manager_uid_1',
+      email: 'manager@resta.com',
+      name: 'Manager One',
+      role: 'outlet_manager',
       restaurantId: 'rest_a',
       assignedOutletIds: ['rest_a_main'],
       allOutlets: false,
@@ -110,6 +122,17 @@ async function main() {
     await db.doc('restaurants/rest_b/orders/ord_b1').set({
       restaurantId: 'rest_b',
       total: 600,
+    });
+    // Menu Catalogs
+    await db.doc('restaurants/rest_a/menuCatalog/item_1').set({
+      name: 'Awadhi Biryani',
+      basePrice: 550,
+      restaurantId: 'rest_a'
+    });
+    await db.doc('restaurants/rest_b/menuCatalog/item_b1').set({
+      name: 'Chili Chicken',
+      basePrice: 380,
+      restaurantId: 'rest_b'
     });
     // Aggregator Connection Tenant B
     await db.doc('restaurants/rest_b/aggregatorConnections/swiggy_cred').set({
@@ -171,6 +194,12 @@ async function main() {
     email_verified: true,
   });
   const dbStaffUid = staffUidContext.firestore();
+
+  const managerAContext = testEnv.authenticatedContext('manager_uid_1', {
+    email: 'manager@resta.com',
+    email_verified: true,
+  });
+  const dbManagerA = managerAContext.firestore();
 
   const staffLegacyContext = testEnv.authenticatedContext('staff_legacy_uid', {
     email: 'legacy_waiter@resta.com',
@@ -360,6 +389,62 @@ async function main() {
   await runTest('Super Admin reading user profiles across any tenant (Allowed)', async () => {
     await assertSucceeds(dbSuperAdmin.doc('users/staff_uid_1').get());
     await assertSucceeds(dbSuperAdmin.doc('users/admin_b@restb.com').get());
+  });
+
+  // --- Step 3 Menu Catalog & Outlet Overrides Scenarios ---
+
+  // Scenario 26: Restaurant Admin A creating Master Menu item in Tenant A (Allowed)
+  await runTest('Restaurant Admin A creating Master Menu item in Tenant A (Allowed)', async () => {
+    await assertSucceeds(dbAdminA.doc('restaurants/rest_a/menuCatalog/item_new').set({
+      name: 'Paneer Butter Masala',
+      basePrice: 320,
+      restaurantId: 'rest_a'
+    }));
+  });
+
+  // Scenario 27: Restaurant Admin A creating Master Menu item in Tenant B (Cross-tenant blocked)
+  await runTest('Restaurant Admin A creating Master Menu item in Tenant B (Cross-tenant blocked)', async () => {
+    await assertFails(dbAdminA.doc('restaurants/rest_b/menuCatalog/item_hack').set({
+      name: 'Hacked Item',
+      basePrice: 10,
+      restaurantId: 'rest_b'
+    }));
+  });
+
+  // Scenario 28: Waiter A attempting to write to Master Menu item (Denied - Admin only)
+  await runTest('Waiter A attempting to write to Master Menu Catalog (Forbidden)', async () => {
+    await assertFails(dbStaffUid.doc('restaurants/rest_a/menuCatalog/item_1').update({
+      basePrice: 100
+    }));
+  });
+
+  // Scenario 29: Outlet Manager A writing menu override to assigned outlet (Allowed)
+  await runTest('Outlet Manager A writing menu override to assigned outlet (Allowed)', async () => {
+    await assertSucceeds(dbManagerA.doc('restaurants/rest_a/outlets/rest_a_main/menuOverrides/item_1').set({
+      priceOverrides: { SWIGGY: 650 },
+      isAvailable: true
+    }));
+  });
+
+  // Scenario 30: Outlet Manager A writing menu override to unassigned outlet (Cross-outlet blocked)
+  await runTest('Outlet Manager A writing menu override to unassigned outlet (Cross-outlet blocked)', async () => {
+    await assertFails(dbManagerA.doc('restaurants/rest_a/outlets/rest_a_branch2/menuOverrides/item_1').set({
+      priceOverrides: { SWIGGY: 999 },
+      isAvailable: false
+    }));
+  });
+
+  // Scenario 31: Waiter A attempting to write outlet menu override (Denied)
+  await runTest('Waiter A attempting to write outlet menu override (Forbidden)', async () => {
+    await assertFails(dbStaffUid.doc('restaurants/rest_a/outlets/rest_a_main/menuOverrides/item_1').set({
+      priceOverrides: { DINE_IN: 10 }
+    }));
+  });
+
+  // Scenario 32: Public/Customer reading Master Menu Catalog and Overrides (Allowed for discovery)
+  await runTest('Public/Customer reading Master Menu Catalog & Overrides (Allowed)', async () => {
+    await assertSucceeds(dbCustomerA.doc('restaurants/rest_a/menuCatalog/item_1').get());
+    await assertSucceeds(dbCustomerA.doc('restaurants/rest_a/outlets/rest_a_main/menuOverrides/item_1').get());
   });
 
   await testEnv.cleanup();

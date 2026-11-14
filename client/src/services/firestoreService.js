@@ -123,6 +123,25 @@ export {
 } from './staffIdentityService';
 
 // ----------------------------------------------------------------------
+// 1.3 MASTER MENU CATALOG, OVERRIDES & MULTI-CHANNEL PRICING
+// ----------------------------------------------------------------------
+export {
+  ORDER_CHANNELS,
+  FOOD_TYPES,
+  ITEM_STATUS,
+  roundToCurrency,
+  calculateEffectivePrice,
+  evaluateItemAvailability,
+  resolveEffectiveMenuItem,
+  getMasterMenuCatalog,
+  saveMasterMenuItem,
+  getOutletMenuOverrides,
+  saveOutletMenuOverride,
+  deleteOutletMenuOverride,
+  getEffectiveOutletCatalog
+} from './menuService';
+
+// ----------------------------------------------------------------------
 // 2. USERS & STAFF
 // ----------------------------------------------------------------------
 

@@ -235,6 +235,12 @@ service cloud.firestore {
         allow write: if isRestaurantAdmin(restaurantId);
       }
 
+      // Master Menu Catalog (Enterprise multi-outlet catalog)
+      match /menuCatalog/{itemId} {
+        allow read: if true;
+        allow write: if isRestaurantAdmin(restaurantId);
+      }
+
       // Tables: Floor management for restaurant staff
       match /tables/{tableId} {
         allow read, write: if isRestaurantStaff(restaurantId);
@@ -297,15 +303,25 @@ service cloud.firestore {
         allow read, write: if isRestaurantStaff(restaurantId);
       }
 
-      // Outlets (Multi-Tenant Outlets Schema for Stage 2 Readiness)
+      // Outlets (Multi-Tenant Outlets Schema)
       match /outlets/{outletId} {
         allow read: if true;
         allow write: if isRestaurantAdmin(restaurantId);
-      }
 
-      // Aggregator Connections (Swiggy, Zomato API credentials — Never Public)
-      match /aggregatorConnections/{connectionId} {
-        allow read, write: if isRestaurantAdmin(restaurantId);
+        // Outlet-Specific Menu Overrides & Channel Pricing
+        match /menuOverrides/{itemId} {
+          allow read: if true;
+          // Permitted for Restaurant Admin or assigned Outlet Manager with outlet access
+          allow write: if isRestaurantAdmin(restaurantId) || (
+            hasOutletAccess(restaurantId, outletId) &&
+            userProfile().role in ['outlet_manager', 'owner', 'restaurant_admin']
+          );
+        }
+
+        // Aggregator Connections (Swiggy, Zomato API credentials — Never Public)
+        match /aggregatorConnections/{connectionId} {
+          allow read, write: if isRestaurantAdmin(restaurantId);
+        }
       }
     }
 

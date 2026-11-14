@@ -65,7 +65,16 @@ class SecurityContext {
     if (this.isSuperAdmin()) return true;
     if (!this.hasActiveProfile()) return false;
     const p = this.userProfile();
-    return ['restaurant_admin', 'owner', 'staff', 'waiter', 'cashier', 'kitchen'].includes(p.role) && p.restaurantId === restId;
+    return ['restaurant_admin', 'owner', 'outlet_manager', 'staff', 'waiter', 'cashier', 'kitchen'].includes(p.role) && p.restaurantId === restId;
+  }
+
+  hasOutletAccess(restId, outletId) {
+    if (this.isSuperAdmin()) return true;
+    if (!this.isRestaurantStaff(restId)) return false;
+    const p = this.userProfile();
+    if (p.allOutlets === true) return true;
+    if (Array.isArray(p.assignedOutletIds) && p.assignedOutletIds.includes(outletId)) return true;
+    return false;
   }
 
   isCustomerOwner(customerId) {
@@ -167,9 +176,31 @@ class SecurityContext {
         }
       }
 
-      if (['categories', 'menuItems'].includes(sub)) {
+      if (['categories', 'menuItems', 'menuCatalog'].includes(sub)) {
         if (operation === 'read') return true;
         if (['create', 'update', 'delete'].includes(operation)) return this.isRestaurantAdmin(restId);
+      }
+
+      if (sub === 'outlets') {
+        const outletId = parts[3];
+        const outletSub = parts[4];
+        if (!outletSub) {
+          if (operation === 'read') return true;
+          if (['create', 'update', 'delete'].includes(operation)) return this.isRestaurantAdmin(restId);
+        }
+        if (outletSub === 'menuOverrides') {
+          if (operation === 'read') return true;
+          if (['create', 'update', 'delete'].includes(operation)) {
+            return (
+              this.isRestaurantAdmin(restId) ||
+              (this.hasOutletAccess(restId, outletId) &&
+               ['outlet_manager', 'owner', 'restaurant_admin'].includes(this.userProfile()?.role))
+            );
+          }
+        }
+        if (outletSub === 'aggregatorConnections') {
+          return this.isRestaurantAdmin(restId);
+        }
       }
 
       if (['tables', 'orders', 'kots', 'invoices'].includes(sub)) {
@@ -679,6 +710,76 @@ assert(
   'Staff A CANNOT read Tenant B Admin profile (Cross-tenant forbidden)',
   staffUidCtx.evaluate('users/admin_b@restb.com', 'read', null, mockDb['users/admin_b@restb.com']),
   false
+);
+
+console.log('\n8. STEP 3: MASTER MENU CATALOG & OUTLET OVERRIDES');
+console.log('-'.repeat(60));
+
+mockDb['users/manager_uid_200'] = {
+  uid: 'manager_uid_200',
+  email: 'mgr@resta.com',
+  role: 'outlet_manager',
+  restaurantId: 'rest_a',
+  assignedOutletIds: ['rest_a_main'],
+  allOutlets: false,
+  status: 'active'
+};
+const managerCtx = new SecurityContext({ uid: 'manager_uid_200', token: { email: 'mgr@resta.com', email_verified: true } }, mockDb);
+
+// Test 48: Restaurant Admin A writing Master Menu item in Restaurant A (Allowed)
+assert(
+  'Restaurant Admin A can write Master Menu item in Restaurant A',
+  adminACtx.evaluate('restaurants/rest_a/menuCatalog/biryani_awadhi', 'create'),
+  true
+);
+
+// Test 49: Restaurant Admin A writing Master Menu item in Restaurant B (Cross-tenant forbidden)
+assert(
+  'Restaurant Admin A CANNOT write Master Menu item in Restaurant B (Cross-tenant forbidden)',
+  adminACtx.evaluate('restaurants/rest_b/menuCatalog/biryani_awadhi', 'create'),
+  false
+);
+
+// Test 50: Waiter A attempting to write Master Menu item (Forbidden)
+assert(
+  'Waiter A CANNOT write Master Menu item in Restaurant A (Admin only)',
+  waiterACtx.evaluate('restaurants/rest_a/menuCatalog/biryani_awadhi', 'update'),
+  false
+);
+
+// Test 51: Outlet Manager writing menu override to assigned outlet (Allowed)
+assert(
+  'Outlet Manager can write menu override to assigned outlet',
+  managerCtx.evaluate('restaurants/rest_a/outlets/rest_a_main/menuOverrides/biryani_awadhi', 'create'),
+  true
+);
+
+// Test 52: Outlet Manager writing menu override to unassigned outlet (Cross-outlet forbidden)
+assert(
+  'Outlet Manager CANNOT write menu override to unassigned outlet (Forbidden)',
+  managerCtx.evaluate('restaurants/rest_a/outlets/rest_a_branch2/menuOverrides/biryani_awadhi', 'create'),
+  false
+);
+
+// Test 53: Waiter A attempting to write outlet menu override (Forbidden)
+assert(
+  'Waiter A CANNOT write outlet menu override (Manager/Admin only)',
+  waiterACtx.evaluate('restaurants/rest_a/outlets/rest_a_main/menuOverrides/biryani_awadhi', 'create'),
+  false
+);
+
+// Test 54: Public user can read Master Menu item
+assert(
+  'Public user can read Master Menu item (Customer discovery)',
+  customerCtx.evaluate('restaurants/rest_a/menuCatalog/biryani_awadhi', 'read'),
+  true
+);
+
+// Test 55: Public user can read Outlet Menu Override
+assert(
+  'Public user can read Outlet Menu Override',
+  customerCtx.evaluate('restaurants/rest_a/outlets/rest_a_main/menuOverrides/biryani_awadhi', 'read'),
+  true
 );
 
 console.log('\n' + '='.repeat(80));
