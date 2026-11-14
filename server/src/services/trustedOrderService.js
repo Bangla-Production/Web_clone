@@ -144,6 +144,11 @@ class TrustedOrderService {
         compositeKey: `${restaurantId}#${outletId}`,
         outletName: valResult.outletData?.outletName || valResult.restData?.name || outletId,
 
+        tableId: orderPayload.tableId || null,
+        tableNumber: orderPayload.tableNumber || null,
+        waiterId: orderPayload.waiterId || null,
+        waiterName: orderPayload.waiterName || null,
+
         customer: {
           uid: orderPayload.customer?.uid || null,
           name: orderPayload.customer?.name || 'Customer',
@@ -240,9 +245,162 @@ class TrustedOrderService {
     if (result.status === 'INGESTED') {
       const mirrorResult = await this.mirrorOrderToLegacyDestinations(result.order);
       result.order.mirrorStatus = mirrorResult;
+
+      // 7. Generate idempotent KOT for the kitchen
+      const kotResult = await this.ensureOrderKOT(result.order);
+      result.kot = kotResult.kot;
     }
 
     return result;
+  }
+
+  /**
+   * Generates a deterministic, idempotent Kitchen Order Ticket (KOT) for an order.
+   * Path: restaurants/{restaurantId}/kots/{kotId}
+   * Guarantees that duplicate order deliveries or status updates NEVER create duplicate KOTs.
+   */
+  async ensureOrderKOT(order) {
+    const db = getDb();
+    const kotId = `KOT_${order.orderId}_1`;
+    const kotDocRef = db.doc(`restaurants/${order.restaurantId}/kots/${kotId}`);
+
+    const existingSnap = await kotDocRef.get();
+    if (existingSnap.exists) {
+      return { success: true, isNew: false, kotId, kot: existingSnap.data() };
+    }
+
+    const now = new Date().toISOString();
+    const kotPayload = {
+      id: kotId,
+      kotNumber: `KOT-${order.externalOrderId || order.orderId}-1`,
+      kotIndex: 1,
+      orderId: order.orderId,
+      orderNumber: order.externalOrderId || order.orderId,
+      restaurantId: order.restaurantId,
+      outletId: order.outletId,
+      orderSource: order.orderSource,
+      orderType: order.orderType,
+      tableId: order.tableId || null,
+      tableNumber: order.tableNumber || null,
+      waiterId: order.waiterId || null,
+      waiterName: order.waiterName || null,
+      customerName: order.customer?.name || null,
+      items: (order.items || []).map(it => ({
+        id: it.id,
+        name: it.name,
+        quantity: it.quantity,
+        variant: it.variant ? (typeof it.variant === 'object' ? it.variant.name : it.variant) : '',
+        addons: Array.isArray(it.addons) ? it.addons.map(a => typeof a === 'object' ? a.name : a) : [],
+        instructions: it.instructions || ''
+      })),
+      orderNotes: order.orderNotes || '',
+      status: 'NEW', // NEW, PREPARING, READY, SERVED
+      isPrinted: false,
+      printerDestination: 'KITCHEN',
+      createdAt: now,
+      updatedAt: now
+    };
+
+    await kotDocRef.set(kotPayload);
+    logger.info('Idempotent KOT generated for order', { orderId: order.orderId, kotId, outletId: order.outletId });
+    return { success: true, isNew: true, kotId, kot: kotPayload };
+  }
+
+  /**
+   * Updates KOT status and synchronizes back to authoritative order record and mirrors.
+   */
+  async updateKOTStatus(restaurantId, kotId, newStatus, actor = 'KITCHEN_STAFF') {
+    const db = getDb();
+    const kotDocRef = db.doc(`restaurants/${restaurantId}/kots/${kotId}`);
+    const snap = await kotDocRef.get();
+    if (!snap.exists) {
+      return { success: false, reason: `KOT ${kotId} not found` };
+    }
+
+    const kotData = snap.data();
+    const now = new Date().toISOString();
+
+    await kotDocRef.update({
+      status: newStatus,
+      updatedAt: now
+    });
+
+    // Synchronize to authoritative order
+    if (kotData.orderId) {
+      let mappedOrderStatus = null;
+      if (newStatus === 'PREPARING') mappedOrderStatus = ORDER_STATUSES.PREPARING;
+      if (newStatus === 'READY') mappedOrderStatus = ORDER_STATUSES.READY;
+      if (newStatus === 'SERVED' && kotData.orderType === 'DINE_IN') mappedOrderStatus = ORDER_STATUSES.COMPLETED;
+
+      if (mappedOrderStatus) {
+        await this.transitionOrderStatus(kotData.orderId, mappedOrderStatus, actor);
+      }
+    }
+
+    return { success: true, kotId, status: newStatus };
+  }
+
+  /**
+   * Creates an order from POS (Dine-in or Takeaway) through the trusted backend engine.
+   */
+  async createPosOrder(posInput, waiterData) {
+    const restaurantId = posInput.restaurantId;
+    const outletId = posInput.outletId || `${restaurantId}_main`;
+    const orderType = posInput.orderType || 'DINE_IN';
+    const source = orderType === 'TAKEAWAY' ? ORDER_SOURCES.TAKEAWAY : ORDER_SOURCES.POS;
+
+    const timestamp = new Date();
+    const dateStr = timestamp.toISOString().slice(0, 10).replace(/-/g, '');
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    const orderNumber = `ORD-${dateStr}-${randomSuffix}`;
+
+    const orderPayload = {
+      orderSource: source,
+      orderType,
+      restaurantId,
+      outletId,
+      externalOrderId: orderNumber,
+      tableId: posInput.tableId || null,
+      tableNumber: posInput.tableNumber || null,
+      waiterId: waiterData?.uid || null,
+      waiterName: waiterData?.name || 'Staff',
+      customer: {
+        name: posInput.customerName || (orderType === 'TAKEAWAY' ? 'Takeaway Guest' : 'Dine-In Guest'),
+        phone: posInput.customerPhone || ''
+      },
+      items: posInput.items || [],
+      charges: {
+        discountAmount: posInput.discountAmount || 0,
+        discountType: posInput.discountType || null,
+        packagingCharge: posInput.packagingCharge || 0
+      },
+      payment: {
+        status: posInput.paymentStatus || 'UNPAID',
+        method: posInput.paymentMethod || 'CASH'
+      }
+    };
+
+    const ingested = await this.ingestOrder(orderPayload);
+
+    // If dine-in, mark table as OCCUPIED in database
+    if (ingested.success && orderType === 'DINE_IN' && posInput.tableId) {
+      const db = getDb();
+      try {
+        await db.doc(`restaurants/${restaurantId}/tables/${posInput.tableId}`).update({
+          status: 'OCCUPIED',
+          activeOrder: {
+            orderId: ingested.orderId,
+            orderNumber,
+            totalAmount: ingested.order.pricing.grandTotal
+          },
+          updatedAt: new Date().toISOString()
+        });
+      } catch (err) {
+        logger.warn('Could not update table status on POS order creation', { error: err.message });
+      }
+    }
+
+    return ingested;
   }
 
   /**
@@ -274,6 +432,10 @@ class TrustedOrderService {
       deliveryFee: normalized.pricing.deliveryCharge,
       status: normalized.orderStatus,
       orderType: normalized.orderType,
+      tableId: normalized.tableId || null,
+      tableNumber: normalized.tableNumber || null,
+      waiterId: normalized.waiterId || null,
+      waiterName: normalized.waiterName || null,
       paymentStatus: normalized.payment?.status || 'PENDING',
       paymentMethod: normalized.payment?.method || 'CASH',
       orderTime: normalized.timestamps.placedAt,

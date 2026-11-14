@@ -47,7 +47,7 @@ import InvoiceModal from '../components/invoice/InvoiceModal';
 
 export default function POSPage() {
   const { user, activeRestaurantId } = useAuth();
-  const { restaurant, currencySymbol, taxName } = useRestaurant();
+  const { restaurant, currencySymbol, taxName, activeOutletId, activeOutlet } = useRestaurant();
   const toast = useToast();
   const navigate = useNavigate();
 
@@ -386,6 +386,7 @@ export default function POSPage() {
           orderType,
           tableId: orderType === 'DINE_IN' ? selectedTableId : null,
           tableNumber: orderType === 'DINE_IN' ? (currentTable?.tableNumber || 'Table') : null,
+          outletId: activeOutletId || `${activeRestaurantId}_main`,
           subtotal: cartCalculations.subtotal,
           discountType,
           discountValue,
@@ -470,6 +471,7 @@ export default function POSPage() {
           orderType,
           tableId: orderType === 'DINE_IN' ? selectedTableId : null,
           tableNumber: orderType === 'DINE_IN' ? (currentTable?.tableNumber || 'Table') : null,
+          outletId: activeOutletId || `${activeRestaurantId}_main`,
           subtotal: cartCalculations.subtotal,
           discountType,
           discountValue,
@@ -490,6 +492,7 @@ export default function POSPage() {
       const paymentData = {
         tableId: orderType === 'DINE_IN' ? selectedTableId : null,
         tableNumber: orderType === 'DINE_IN' ? (currentTable?.tableNumber || 'Table') : null,
+        outletId: activeOutletId || `${activeRestaurantId}_main`,
         customerName: customerName || currentActiveOrder?.customerName,
         customerPhone: customerPhone || currentActiveOrder?.customerPhone,
         subtotal: runningOrderTotals.subtotal,

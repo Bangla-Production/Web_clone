@@ -11,6 +11,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useRestaurant } from '../context/RestaurantContext';
 import { useToast } from '../context/ToastContext';
+import ChannelBadge from '../components/common/ChannelBadge';
 
 // ─── Status config ────────────────────────────────────────────────────────────
 
@@ -71,6 +72,7 @@ function OrderCard({ order }) {
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-extrabold text-slate-900 dark:text-white text-sm">#{order.id.slice(-6).toUpperCase()}</span>
+              <ChannelBadge source={order.orderSource || 'ABAR_KHABO'} />
               <OrderTypeBadge type={order.orderType}/>
               <StatusBadge status={order.status}/>
             </div>

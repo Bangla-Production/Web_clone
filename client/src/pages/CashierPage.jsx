@@ -35,7 +35,7 @@ import InvoiceModal from '../components/invoice/InvoiceModal';
 
 export default function CashierPage() {
   const { user, activeRestaurantId } = useAuth();
-  const { restaurant, currencySymbol, taxName } = useRestaurant();
+  const { restaurant, currencySymbol, taxName, activeOutletId } = useRestaurant();
   const toast = useToast();
 
   const [activeTab, setActiveTab] = useState('LIVE_BILLING'); // 'LIVE_BILLING' | 'SETTLED_INVOICES'
@@ -219,6 +219,7 @@ export default function CashierPage() {
       const paymentPayload = {
         tableId: currentTable.id,
         tableNumber: currentTable.tableNumber,
+        outletId: activeOutletId || currentOrder?.outletId || `${activeRestaurantId}_main`,
         customerName: customerName.trim() || 'Walk-in Guest',
         customerPhone: customerPhone.trim() || '',
         subtotal: billingCalculations.subtotal,

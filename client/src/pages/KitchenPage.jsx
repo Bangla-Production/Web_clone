@@ -39,9 +39,11 @@ import {
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../context/AuthContext';
+import { useRestaurant } from '../context/RestaurantContext';
 import { useToast } from '../context/ToastContext';
 import { kitchenAudio, dispatchThermalPrint } from '../services/thermalPrintService';
 import InvoiceModal from '../components/invoice/InvoiceModal';
+import ChannelBadge from '../components/common/ChannelBadge';
 
 export default function KitchenPage() {
   const [kots, setKots] = useState([]);
@@ -57,6 +59,7 @@ export default function KitchenPage() {
   const [listenError, setListenError] = useState('');
 
   const { activeRestaurantId, user, logout } = useAuth();
+  const { activeOutletId, activeOutlet } = useRestaurant();
   const navigate = useNavigate();
   const toast = useToast();
   const targetRestId = activeRestaurantId || user?.restaurantId || 'spice-haven';
@@ -251,22 +254,34 @@ export default function KitchenPage() {
     }
   };
 
+  // Filter KOTs and Online Orders by active outlet for strict outlet isolation
+  const outletKots = useMemo(() => {
+    if (!activeOutletId) return kots;
+    return kots.filter(k => !k.outletId || k.outletId === activeOutletId || k.outletId === `${targetRestId}_main`);
+  }, [kots, activeOutletId, targetRestId]);
+
+  const outletOnlineOrders = useMemo(() => {
+    if (!activeOutletId) return onlineOrders;
+    return onlineOrders.filter(o => !o.outletId || o.outletId === activeOutletId || o.outletId === `${targetRestId}_main`);
+  }, [onlineOrders, activeOutletId, targetRestId]);
+
   // Group KOTs into columns for Kanban
-  const newKots = kots.filter(k => k.status === 'NEW');
-  const preparingKots = kots.filter(k => ['CONFIRMED', 'PREPARING'].includes(k.status));
-  const readyKots = kots.filter(k => k.status === 'READY');
+  const newKots = outletKots.filter(k => k.status === 'NEW');
+  const preparingKots = outletKots.filter(k => ['CONFIRMED', 'PREPARING'].includes(k.status));
+  const readyKots = outletKots.filter(k => k.status === 'READY');
 
   // Group KOTs by Table for Whole Table Master View
   const tableGroupedOrders = useMemo(() => {
     const tableMap = {};
 
-    kots.forEach(kot => {
+    outletKots.forEach(kot => {
       const key = kot.tableNumber ? `Table ${kot.tableNumber}` : (kot.orderType || 'Takeaway');
       if (!tableMap[key]) {
         tableMap[key] = {
           tableKey: key,
           tableNumber: kot.tableNumber || null,
           orderType: kot.orderType || 'DINE_IN',
+          orderSource: kot.orderSource || 'POS',
           orderNumber: kot.orderNumber,
           waiterName: kot.waiterName || 'Staff',
           oldestCreatedAt: kot.createdAt,
@@ -306,12 +321,12 @@ export default function KitchenPage() {
   };
 
   const activeOnlineOrders = useMemo(() => {
-    return onlineOrders.filter(o => ['PLACED', 'CONFIRMED', 'PREPARING', 'READY', 'READY_FOR_PICKUP'].includes(o.status));
-  }, [onlineOrders]);
+    return outletOnlineOrders.filter(o => ['PLACED', 'CONFIRMED', 'PREPARING', 'READY', 'READY_FOR_PICKUP'].includes(o.status));
+  }, [outletOnlineOrders]);
 
   const newOnlineOrders = useMemo(() => {
-    return onlineOrders.filter(o => o.status === 'PLACED');
-  }, [onlineOrders]);
+    return outletOnlineOrders.filter(o => o.status === 'PLACED');
+  }, [outletOnlineOrders]);
 
   return (
     <div className="space-y-3 h-[calc(100vh-4.75rem)] flex flex-col select-none transition-colors duration-200">
@@ -686,6 +701,7 @@ export default function KitchenPage() {
                         <span className="text-[10px] bg-pos-dark text-slate-600 dark:text-slate-400 px-1.5 py-0.5 rounded font-mono border border-pos-border">
                           {kot.kotNumber}
                         </span>
+                        <ChannelBadge source={kot.orderSource || (kot.orderType === 'DELIVERY' ? 'ABAR_KHABO' : (kot.orderType === 'TAKEAWAY' ? 'TAKEAWAY' : 'POS'))} short={true} />
                       </div>
                       <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
                         Server: <strong className="text-slate-800 dark:text-slate-200">{kot.waiterName || 'Staff'}</strong>
@@ -795,6 +811,7 @@ export default function KitchenPage() {
                         <span className="text-[10px] bg-pos-dark text-slate-600 dark:text-slate-400 px-1.5 py-0.5 rounded font-mono border border-pos-border">
                           {kot.kotNumber}
                         </span>
+                        <ChannelBadge source={kot.orderSource || (kot.orderType === 'DELIVERY' ? 'ABAR_KHABO' : (kot.orderType === 'TAKEAWAY' ? 'TAKEAWAY' : 'POS'))} short={true} />
                       </div>
                       <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
                         Server: <strong className="text-slate-800 dark:text-slate-200">{kot.waiterName || 'Staff'}</strong>
@@ -880,9 +897,12 @@ export default function KitchenPage() {
                 >
                   <div className="flex items-center justify-between pb-2 border-b border-pos-border">
                     <div>
-                      <span className="text-base font-black text-emerald-600 dark:text-emerald-400 font-display">
-                        {kot.tableNumber ? `Table ${kot.tableNumber}` : kot.orderType}
-                      </span>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-base font-black text-emerald-600 dark:text-emerald-400 font-display">
+                          {kot.tableNumber ? `Table ${kot.tableNumber}` : kot.orderType}
+                        </span>
+                        <ChannelBadge source={kot.orderSource || (kot.orderType === 'DELIVERY' ? 'ABAR_KHABO' : (kot.orderType === 'TAKEAWAY' ? 'TAKEAWAY' : 'POS'))} short={true} />
+                      </div>
                       <p className="text-[10px] text-slate-500 dark:text-slate-400">
                         Server: <strong className="text-slate-800 dark:text-white">{kot.waiterName || 'Staff'}</strong>
                       </p>
@@ -1000,6 +1020,7 @@ export default function KitchenPage() {
                             <span className="font-display font-black text-base text-slate-900 dark:text-white">
                               #{order.id.slice(-5).toUpperCase()}
                             </span>
+                            <ChannelBadge source={order.orderSource || 'ABAR_KHABO'} />
                             <span className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
                               isDelivery
                                 ? 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30'

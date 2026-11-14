@@ -1051,10 +1051,13 @@ export async function createOrderWithKOT(restaurantId, orderData, kotItems, wait
   const orderRef = doc(collection(db, 'restaurants', restaurantId, 'orders'));
   const kotRef = doc(collection(db, 'restaurants', restaurantId, 'kots'));
   const tableRef = orderData.tableId ? doc(db, 'restaurants', restaurantId, 'tables', orderData.tableId) : null;
+  const outletId = orderData.outletId || `${restaurantId}_main`;
 
   const orderPayload = {
     orderNumber,
     restaurantId,
+    outletId,
+    compositeKey: `${restaurantId}#${outletId}`,
     tableId: orderData.tableId || null,
     tableNumber: orderData.tableNumber || null,
     orderType: orderData.orderType || 'DINE_IN',
@@ -1093,6 +1096,8 @@ export async function createOrderWithKOT(restaurantId, orderData, kotItems, wait
     orderId: orderRef.id,
     orderNumber,
     restaurantId,
+    outletId,
+    orderSource: orderData.orderType === 'TAKEAWAY' ? 'TAKEAWAY' : 'POS',
     tableId: orderData.tableId || null,
     tableNumber: orderData.tableNumber || null,
     orderType: orderData.orderType || 'DINE_IN',
@@ -1135,6 +1140,62 @@ export async function createOrderWithKOT(restaurantId, orderData, kotItems, wait
 
     transaction.set(orderRef, orderPayload);
     transaction.set(kotRef, kotPayload);
+
+    // Also bridge to authoritative aggregatorOrders collection
+    const normalizedRef = doc(db, 'aggregatorOrders', orderRef.id);
+    const normalizedPayload = {
+      _schemaVersion: '2.0.0',
+      orderId: orderRef.id,
+      externalOrderId: orderNumber,
+      orderNumber,
+      orderSource: orderData.orderType === 'TAKEAWAY' ? 'TAKEAWAY' : 'POS',
+      orderType: orderData.orderType || 'DINE_IN',
+      restaurantId,
+      outletId,
+      compositeKey: `${restaurantId}#${outletId}`,
+      tableId: orderData.tableId || null,
+      tableNumber: orderData.tableNumber || null,
+      waiterId: waiterData?.uid || null,
+      waiterName: waiterData?.name || 'Staff',
+      customer: {
+        name: orderData.customerName || (orderData.orderType === 'TAKEAWAY' ? 'Takeaway Guest' : 'Dine-In Guest'),
+        phone: orderData.customerPhone || ''
+      },
+      items: kotItems.map((item, idx) => ({
+        id: item.menuItemId || item.id || `item_${idx + 1}`,
+        name: item.name,
+        unitPrice: parseFloat(item.price) || 0,
+        quantity: parseInt(item.quantity, 10) || 1,
+        subtotal: (parseFloat(item.price) || 0) * (parseInt(item.quantity, 10) || 1),
+        variant: item.variant || null,
+        addons: item.addons || [],
+        instructions: item.notes || ''
+      })),
+      pricing: {
+        itemTotal: parseFloat(orderData.subtotal) || 0,
+        discountAmount: parseFloat(orderData.discountAmount) || 0,
+        taxableAmount: (parseFloat(orderData.subtotal) || 0) - (parseFloat(orderData.discountAmount) || 0),
+        taxAmount: parseFloat(orderData.taxAmount) || 0,
+        taxRate: parseFloat(orderData.taxRate) || 0,
+        grandTotal: parseFloat(orderData.totalAmount) || 0,
+        commissionRate: 0,
+        commissionAmount: 0,
+        merchantNetPayout: parseFloat(orderData.totalAmount) || 0
+      },
+      payment: {
+        status: 'UNPAID',
+        method: 'PENDING'
+      },
+      orderStatus: 'PREPARING',
+      statusHistory: [
+        { status: 'PLACED', timestamp: new Date().toISOString(), actor: waiterData?.name || 'POS_WAITER' },
+        { status: 'PREPARING', timestamp: new Date().toISOString(), actor: 'KOT_GENERATED' }
+      ],
+      kotCount: 1,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    };
+    transaction.set(normalizedRef, normalizedPayload);
 
     if (tableRef) {
       transaction.update(tableRef, {
@@ -1317,7 +1378,14 @@ export async function updateKOTStatus(restaurantId, kotId, newStatus, orderId = 
       await updateDoc(orderDocRef, {
         orderStatus: newStatus,
         updatedAt: serverTimestamp()
-      });
+      }).catch(() => {});
+
+      const normDocRef = doc(db, 'aggregatorOrders', orderId);
+      const mapped = newStatus === 'SERVED' ? 'COMPLETED' : newStatus;
+      await updateDoc(normDocRef, {
+        orderStatus: mapped,
+        updatedAt: serverTimestamp()
+      }).catch(() => {});
     }
 
     // Kitchen marked food 'READY' or 'COOKED': send immediate alert to floor/waiters!
@@ -1510,10 +1578,15 @@ export async function settleAndReleaseTableAtomic(restaurantId, orderId, payment
       throw new Error(`Order ${order.orderNumber} is already paid.`);
     }
 
+    const outletId = order.outletId || paymentData.outletId || `${restaurantId}_main`;
+
     const invoicePayload = {
       invoiceNumber,
       orderId,
       orderNumber: order.orderNumber,
+      restaurantId,
+      outletId,
+      compositeKey: `${restaurantId}#${outletId}`,
       orderType: order.orderType || 'DINE_IN',
       tableId: paymentData.tableId || order.tableId || null,
       tableNumber: paymentData.tableNumber || order.tableNumber || null,
@@ -1543,6 +1616,17 @@ export async function settleAndReleaseTableAtomic(restaurantId, orderId, payment
       invoiceId: invDocRef.id,
       invoiceNumber,
       closedAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+
+    // Also update authoritative aggregatorOrders document if it exists
+    const normRef = doc(db, 'aggregatorOrders', orderId);
+    transaction.update(normRef, {
+      'payment.status': 'PAID',
+      'payment.method': paymentData.paymentMethod || 'CASH',
+      orderStatus: 'COMPLETED',
+      invoiceId: invDocRef.id,
+      invoiceNumber,
       updatedAt: serverTimestamp()
     });
 

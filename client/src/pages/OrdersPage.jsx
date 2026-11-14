@@ -21,6 +21,7 @@ import { useRestaurant } from '../context/RestaurantContext';
 import { useToast } from '../context/ToastContext';
 import Modal from '../components/common/Modal';
 import InvoiceModal from '../components/invoice/InvoiceModal';
+import ChannelBadge from '../components/common/ChannelBadge';
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState([]);
@@ -76,6 +77,7 @@ export default function OrdersPage() {
       const invoiceData = await settleAndReleaseTableAtomic(activeRestaurantId, billOrder.id, {
         orderNumber: billOrder.orderNumber,
         orderType: billOrder.orderType,
+        outletId: billOrder.outletId || `${activeRestaurantId}_main`,
         tableId: billOrder.tableId,
         tableNumber: billOrder.tableNumber,
         customerName: billOrder.customerName,
@@ -248,7 +250,12 @@ export default function OrdersPage() {
               ) : (
                 filtered.map((order) => (
                   <tr key={order.id} className="hover:bg-pos-card-hover transition-colors">
-                    <td className="py-3.5 px-4 font-extrabold text-slate-900 dark:text-white font-num">#{order.orderNumber}</td>
+                    <td className="py-3.5 px-4 font-extrabold text-slate-900 dark:text-white font-num">
+                      <div className="flex items-center space-x-1.5">
+                        <span>#{order.orderNumber}</span>
+                        <ChannelBadge source={order.orderSource || (order.orderType === 'DELIVERY' ? 'ABAR_KHABO' : (order.orderType === 'TAKEAWAY' ? 'TAKEAWAY' : 'POS'))} short={true} />
+                      </div>
+                    </td>
                     <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400">
                       <div>{new Date(order.createdAt).toLocaleDateString()}</div>
                       <div className="text-[10px] font-num">

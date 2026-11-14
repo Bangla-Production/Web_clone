@@ -269,4 +269,59 @@
   * **Unit & AST Suites (`npm test`):** 289 / 289 tests passed (45 outlet + 40 identity + 30 menu + 46 order + 53 webhook + 75 security AST).
   * **Vite Production Build:** 1,677 modules bundled cleanly in 4.52s with 0 errors.
 * **Next Authorized Step:**
-  * Awaiting user review and authorization to proceed to **Step 6 (Unified Order Management Engine — POS, KDS & Aggregators)**.
+  * Step 6 completed.
+
+---
+
+## Stage 2 Part B Summary (Step 6: Unified Order Management Engine — POS, KDS & Aggregators)
+
+* **What was implemented:**
+  * **Unified Order Document Model (`aggregatorOrders/{orderId}`):**
+    * Authoritative single source of truth across all 5 order channels: `ABAR_KHABO`, `POS`, `SWIGGY`, `ZOMATO`, `TAKEAWAY`.
+    * Extended schema to capture `tableId`, `tableNumber`, `waiterId`, and `waiterName` for complete POS Dine-In fidelity.
+  * **Visual Channel Differentiation (`client/src/components/common/ChannelBadge.jsx`):**
+    * Distinct Tailwind color styling for instant channel identification across POS, KDS, Cashier, and Order management views:
+      * Emerald (`bg-emerald-500/15`, `text-emerald-700`) for `ABAR_KHABO` (Direct Online)
+      * Orange (`bg-orange-500/15`, `text-orange-700`) for `SWIGGY`
+      * Red (`bg-red-500/15`, `text-red-700`) for `ZOMATO`
+      * Blue (`bg-blue-500/15`, `text-blue-700`) for `POS` (Dine-In)
+      * Neutral Slate (`bg-slate-500/15`, `text-slate-700`) for `TAKEAWAY`
+  * **Idempotent KOT Generation (`KOT_${orderId}_1`):**
+    * Deterministic document ID strategy guarantees zero duplicate tickets, zero repeated audio alerts, and zero double cooking upon network retries or repeated webhook events.
+    * Implemented in `server/src/services/trustedOrderService.js:ensureOrderKOT` and bridged into `client/src/services/firestoreService.js:createOrderWithKOT`.
+  * **Kitchen Display System (KDS) Synchronization (`client/src/pages/KitchenPage.jsx`):**
+    * Multi-channel queue filtered by `activeOutletId` from `RestaurantContext`.
+    * Bidirectional status synchronization: KOT status changes (`NEW` -> `PREPARING` -> `READY`) automatically propagate back to authoritative `aggregatorOrders/{orderId}` and legacy mirrors.
+  * **POS & Table Management Flow (`client/src/pages/POSPage.jsx`):**
+    * Trusted POS order creation (`trustedOrderService.createPosOrder`) binds `outletId`, customer metadata, line items, and updates table occupancy atomically.
+  * **Cashier Settlement & Invoices (`client/src/pages/CashierPage.jsx` & `client/src/services/firestoreService.js`):**
+    * Table release and checkout (`settleAndReleaseTableAtomic`) binds `outletId` to generated invoices and transitions `aggregatorOrders/{orderId}` to `COMPLETED` with `payment.status: PAID`.
+    * Preserves strict payment separation (`ONLINE` for aggregators vs `CASH`/`UPI`/`CARD` for POS).
+  * **Customer & Delivery Compatibility:**
+    * Direct consumer delivery addresses and customer identities protected from public scraping.
+    * Aggregator delivery partner tracking, fleet metadata, and pickup OTP preserved.
+* **Scope Exclusions Strictly Enforced:**
+  * Inventory deduction, stock reservation, and cancellation restocking strictly excluded (deferred to Step 7).
+  * No live Swiggy/Zomato APIs or credentials connected.
+  * No production Firestore rules or cloud services deployed.
+* **Files Created:**
+  * `client/src/components/common/ChannelBadge.jsx`
+  * `tests/test_unified_order_engine.js`
+  * `STAGE2_STEP6_IMPLEMENTATION_REPORT.md`
+* **Files Modified:**
+  * `server/src/services/trustedOrderService.js`
+  * `client/src/services/firestoreService.js`
+  * `client/src/pages/KitchenPage.jsx`
+  * `client/src/pages/POSPage.jsx`
+  * `client/src/pages/CashierPage.jsx`
+  * `client/src/pages/OrdersPage.jsx`
+  * `client/src/pages/OnlineOrdersPage.jsx`
+  * `package.json`
+  * `PROJECT_PROGRESS.md`
+* **Test Verification Results:**
+  * **Step 6 Unit Suite (`tests/test_unified_order_engine.js`):** 44 / 44 tests passed covering all 16 specified requirements.
+  * **Complete Regression Suite (`npm test`):** 333 / 333 assertions passed across all 7 test suites.
+  * **Live Firestore Emulator (`tests/emulator_rules_unit.test.js`):** 48 / 48 scenarios passed.
+  * **Vite Production Build:** 1,678 modules transformed cleanly in 4.56s with 0 errors.
+* **Next Authorized Step:**
+  * Awaiting user review and authorization to proceed to **Step 7 (Inventory, Recipe & Menu Availability Engine)**.
