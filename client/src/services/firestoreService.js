@@ -91,6 +91,26 @@ export async function deleteRestaurant(restaurantId) {
 }
 
 // ----------------------------------------------------------------------
+// 1.1 OUTLETS (Multi-Tenant Outlets Schema)
+// ----------------------------------------------------------------------
+export {
+  getOutletDocPath,
+  getDefaultOutletId,
+  formatCompositeOutletKey,
+  parseCompositeOutletKey,
+  validateOutletData,
+  normalizeOutletData,
+  synthesizeDefaultOutlet,
+  createOutlet,
+  getOutlet,
+  getOutletsByRestaurant,
+  updateOutlet,
+  deleteOutlet,
+  ensureDefaultOutlet,
+  subscribeOutlets
+} from './outletService';
+
+// ----------------------------------------------------------------------
 // 2. USERS & STAFF
 // ----------------------------------------------------------------------
 

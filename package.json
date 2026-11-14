@@ -7,6 +7,8 @@
     "dev": "npm --prefix client run dev",
     "build": "npm --prefix client run build",
     "preview": "npm --prefix client run preview",
+    "test": "node tests/test_outlet_model.js && node tests/test_rules_isolation.js",
+    "test:outlet": "node tests/test_outlet_model.js",
     "test:security": "node tests/test_rules_isolation.js"
   },
   "keywords": [

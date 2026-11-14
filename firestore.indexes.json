@@ -1,0 +1,21 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "outlets",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "restaurantId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "outlets",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "restaurantId", "order": "ASCENDING" },
+        { "fieldPath": "isDefaultOutlet", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

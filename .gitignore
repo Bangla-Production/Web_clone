@@ -32,3 +32,4 @@ dist-ssr
 .config
 firebase-debug.log*
 firestore-debug.log*
+*.zip

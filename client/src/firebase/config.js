@@ -30,13 +30,15 @@ import {
   writeBatch
 } from 'firebase/firestore';
 
+const env = (typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env : (typeof process !== 'undefined' ? process.env : {});
+
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDemoKeyRestoPulseProject2026",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "restopulse-restaurant.firebaseapp.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "restopulse-restaurant",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "restopulse-restaurant.appspot.com",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "1029384756",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:1029384756:web:abcd1234efgh5678"
+  apiKey: env.VITE_FIREBASE_API_KEY || "AIzaSyDemoKeyRestoPulseProject2026",
+  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || "restopulse-restaurant.firebaseapp.com",
+  projectId: env.VITE_FIREBASE_PROJECT_ID || "restopulse-restaurant",
+  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || "restopulse-restaurant.appspot.com",
+  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || "1029384756",
+  appId: env.VITE_FIREBASE_APP_ID || "1:1029384756:web:abcd1234efgh5678"
 };
 
 // Initialize Firebase App

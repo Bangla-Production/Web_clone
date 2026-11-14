@@ -13,7 +13,7 @@
 | :--- | :--- | :--- | :--- |
 | **STAGE 0** | Repository Inspection, Architecture Audit & Risk Analysis | **COMPLETE** | 2026-11-15 |
 | **STAGE 1** | Security & Strict Tenant Isolation | **COMPLETE** | 2026-11-15 |
-| **STAGE 2** | Database Schema & Outlets Model | **PART A COMPLETE** (Awaiting Approval for Part B) | 2026-11-15 |
+| **STAGE 2** | Database Schema & Outlets Model | **PART B IN PROGRESS** (Step 1 Complete; Awaiting Step 2 Approval) | 2026-11-15 |
 | **STAGE 3** | Backend Integration Infrastructure (`server/`) | QUEUED | - |
 | **STAGE 4** | Common Aggregator Adapter Framework | QUEUED | - |
 | **STAGE 5** | Mock Swiggy & Zomato Integration & Test Sandbox | QUEUED | - |
@@ -64,5 +64,44 @@
 * **Files Created / Modified:**
   * `STAGE2_DATABASE_SCHEMA.md` (Revised to v2.0.0-PROPOSED)
   * `PROJECT_PROGRESS.md` (Updated)
-* **Next Steps:**
-  * Obtain user approval on the revised Stage 2 Part A design before proceeding to **Part B (Implementation)**.
+
+---
+
+## Stage 2 Part B Summary (Step 1: Restaurant and Outlet Data Model)
+
+* **What was implemented:**
+  * **Enterprise Outlet Service (`client/src/services/outletService.js`):**
+    * Canonical document paths: `restaurants/{restaurantId}/outlets/{outletId}`.
+    * Deterministic default outlet strategy: `${restaurantId}_main`.
+    * Composite business key support: `(restaurantId, outletId)` / `restaurantId#outletId`.
+    * Enterprise outlet validation (`restaurantId`, `outletName`, `status` enforcement).
+    * Comprehensive payload normalization (defaults for operating hours, delivery radius, contact, coordinates, status).
+    * **Zero-Downtime Backward Compatibility Synthesis (`synthesizeDefaultOutlet`):** Converts single-restaurant documents to virtual default outlet objects on-the-fly, allowing unmigrated databases to operate without forced data migration or downtime.
+    * Complete Firestore CRUD suite: `createOutlet`, `getOutlet`, `getOutletsByRestaurant`, `updateOutlet`, `deleteOutlet`, `ensureDefaultOutlet`, and `subscribeOutlets`.
+  * **Frontend Multi-Tenant React Context (`client/src/context/RestaurantContext.jsx`):**
+    * Enhanced with outlet awareness: `outlets`, `activeOutletId`, `activeOutlet`, `setActiveOutletId`, `updateActiveOutlet`, and `refreshOutlets`.
+    * Preserves 100% backward compatibility for all existing consumers accessing `restaurant`, `loading`, `currencySymbol`, `taxRate`, `taxName`, and `updateRestaurant`.
+  * **Composite Indexes Configuration (`firestore.indexes.json` & `firebase.json`):**
+    * Configured collection-group indexes for `outlets` covering `(restaurantId, status)` and `(restaurantId, isDefaultOutlet)`.
+  * **Automated Unit & Isolation Test Harness (`tests/test_outlet_model.js`):**
+    * 45 comprehensive test assertions verifying canonical paths, deterministic IDs, composite keys, schema validation, payload normalization, synthetic backward compatibility, and multi-branch discrimination.
+* **Files Created:**
+  * `client/src/services/outletService.js`
+  * `firestore.indexes.json`
+  * `tests/test_outlet_model.js`
+* **Files Modified:**
+  * `client/src/context/RestaurantContext.jsx`
+  * `client/src/services/firestoreService.js` (re-exports outlet functions)
+  * `client/src/firebase/config.js` (environment-agnostic import.meta / Node runtime guard)
+  * `firebase.json` (indexed firestore.indexes.json)
+  * `package.json` (added `npm test` and `npm run test:outlet`)
+  * `.gitignore` (safeguarded `*.zip` artifacts)
+  * `PROJECT_PROGRESS.md` (updated status)
+* **Test Verification Results:**
+  * `npm test`: 82 / 82 tests passed (45 outlet model unit tests + 37 security isolation tests).
+  * Vite Production Build (`npm --prefix client run build`): 1673 modules bundled cleanly with 0 errors.
+* **Remaining Risks & Mitigations:**
+  * *Risk:* Staff accounts currently query `users/{email}` rather than `users/{uid}`.
+  * *Mitigation:* Scheduled for Step 2 (Staff identity transition to `users/{uid}` with `allOutlets: true` flag and dual-lookup backward compatibility).
+* **Next Authorized Step:**
+  * Awaiting user review and authorization to proceed to **Step 2 (UID-Based Staff Identity & Outlet Authorization)**.
