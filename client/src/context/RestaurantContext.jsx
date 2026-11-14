@@ -13,7 +13,7 @@ import {
 const RestaurantContext = createContext(null);
 
 export function RestaurantProvider({ children }) {
-  const { activeRestaurantId } = useAuth();
+  const { activeRestaurantId, user } = useAuth();
   const toast = useToast();
 
   // Neutral placeholder until the real restaurant document loads (no demo branding).
@@ -56,11 +56,20 @@ export function RestaurantProvider({ children }) {
           if (loadedOutlets && loadedOutlets.length > 0) {
             setOutlets(loadedOutlets);
 
-            // Determine active outlet
+            // Determine authorized active outlet
             const storedOutletId = localStorage.getItem(`abar_khabo_active_outlet_${activeRestaurantId}`);
             let matched = loadedOutlets.find(o => o.id === storedOutletId);
+            
+            // If stored outlet is not authorized for the user, find the first authorized outlet
+            if (matched && user && typeof user.canAccessOutlet === 'function' && !user.canAccessOutlet(matched.id)) {
+              matched = null;
+            }
+
             if (!matched) {
-              matched = loadedOutlets.find(o => o.isDefaultOutlet) || loadedOutlets[0];
+              const authorizedOutlets = loadedOutlets.filter(o => 
+                !user || typeof user.canAccessOutlet !== 'function' || user.canAccessOutlet(o.id)
+              );
+              matched = authorizedOutlets.find(o => o.isDefaultOutlet) || authorizedOutlets[0] || loadedOutlets[0];
             }
             setActiveOutletIdState(matched.id);
             setActiveOutlet(matched);
@@ -88,22 +97,34 @@ export function RestaurantProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  }, [activeRestaurantId]);
+  }, [activeRestaurantId, user]);
 
   useEffect(() => {
     fetchCurrentRestaurant();
   }, [fetchCurrentRestaurant]);
 
   // Handler to switch active outlet (e.g. for multi-branch brand owners)
+  // Enforces explicit outlet authorization
   const setActiveOutletId = useCallback((newOutletId) => {
-    if (!newOutletId || !activeRestaurantId) return;
+    if (!newOutletId || !activeRestaurantId) return { success: false, error: 'Invalid parameters' };
+
+    // Outlet authorization check
+    if (user && typeof user.canAccessOutlet === 'function') {
+      if (!user.canAccessOutlet(newOutletId)) {
+        const errorMsg = `Unauthorized: You do not have permission to access outlet "${newOutletId}".`;
+        toast.error(errorMsg);
+        return { success: false, error: errorMsg };
+      }
+    }
+
     setActiveOutletIdState(newOutletId);
     localStorage.setItem(`abar_khabo_active_outlet_${activeRestaurantId}`, newOutletId);
     const matched = outlets.find(o => o.id === newOutletId);
     if (matched) {
       setActiveOutlet(matched);
     }
-  }, [activeRestaurantId, outlets]);
+    return { success: true };
+  }, [activeRestaurantId, outlets, user, toast]);
 
   const updateRestaurantData = async (updatedFields) => {
     try {

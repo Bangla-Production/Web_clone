@@ -14,6 +14,7 @@ import {
 } from '../firebase/config';
 import { friendlyAuthError } from '../services/authAccountService';
 import { getStaffLookup } from '../services/firestoreService';
+import { resolveStaffProfile, canAccessOutlet } from '../services/staffIdentityService';
 
 const AuthContext = createContext(null);
 
@@ -29,98 +30,55 @@ const USER_CACHE_KEY = 'restopulse_firebase_user';
  * signs out on rejection.
  */
 async function resolveProfile(fbUser) {
-  const email = (fbUser.email || '').toLowerCase();
+  const email = (fbUser.email || '').toLowerCase().trim();
 
-  // ---- Platform owner ----
+  // ---- Platform owner (Super Admin) ----
   if (email === SUPER_ADMIN_EMAIL) {
-    const ref = doc(db, 'users', email);
+    const uidRef = doc(db, 'users', fbUser.uid);
+    const emailRef = doc(db, 'users', email);
     try {
-      const snap = await getDoc(ref);
+      const snap = await getDoc(uidRef);
       if (!snap.exists()) {
-        await setDoc(ref, {
+        const superAdminProfile = {
+          uid: fbUser.uid,
           name: 'Super Admin',
+          displayName: 'Super Admin',
           email,
           username: email,
           role: 'super_admin',
           status: 'active',
           restaurantId: '',
+          allOutlets: true,
+          assignedOutletIds: [],
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
-        });
+        };
+        await setDoc(uidRef, superAdminProfile, { merge: true });
+        // Legacy email pointer
+        await setDoc(emailRef, superAdminProfile, { merge: true });
       }
     } catch (e) {
       console.warn('Super admin profile sync:', e);
     }
     return {
       ok: true,
-      user: { uid: fbUser.uid, email, username: email, name: 'Super Admin', role: 'super_admin', restaurantId: '' }
+      user: {
+        uid: fbUser.uid,
+        email,
+        username: email,
+        name: 'Super Admin',
+        displayName: 'Super Admin',
+        role: 'super_admin',
+        restaurantId: '',
+        allOutlets: true,
+        assignedOutletIds: [],
+        canAccessOutlet: () => true
+      }
     };
   }
 
-  // ---- Everyone else needs a profile created by an admin ----
-  const ref = doc(db, 'users', email);
-  let snap;
-  try {
-    snap = await getDoc(ref);
-  } catch (e) {
-    return { ok: false, error: `Could not load your account: ${e.message}` };
-  }
-  if (!snap.exists()) {
-    return { ok: false, error: 'This account has been removed or was never provisioned. Please contact your administrator.' };
-  }
-  const profile = snap.data();
-
-  if (profile.status === 'suspended' || profile.status === 'inactive') {
-    return { ok: false, error: 'Your account has been suspended.' };
-  }
-
-  // Email confirmation gate
-  if (profile.status === 'pending') {
-    // Refresh the token so email_verified is up to date, then activate.
-    try {
-      await fbUser.reload();
-      await fbUser.getIdToken(true);
-    } catch (e) { /* ignore */ }
-
-    if (!auth.currentUser?.emailVerified) {
-      return {
-        ok: false,
-        pending: true,
-        email,
-        error:
-          'Your email is not confirmed yet, so this account is still Pending. Open the confirmation email we sent you and click the link (check your Spam / Junk folder too), then log in again.'
-      };
-    }
-    try {
-      await updateDoc(ref, { status: 'active', emailVerified: true, updatedAt: serverTimestamp() });
-      profile.status = 'active';
-    } catch (e) {
-      return { ok: false, error: `Could not activate your account: ${e.message}` };
-    }
-  }
-
-  // A suspended restaurant blocks its admin and all of its staff.
-  if (profile.restaurantId) {
-    try {
-      const rest = await getDoc(doc(db, 'restaurants', profile.restaurantId));
-      if (rest.exists() && rest.data().status === 'suspended') {
-        return { ok: false, error: 'This restaurant has been suspended by the platform owner.' };
-      }
-    } catch (e) { /* non-blocking */ }
-  }
-
-  return {
-    ok: true,
-    user: {
-      uid: fbUser.uid,
-      email: profile.email || email,
-      username: profile.username || email,
-      name: profile.name || 'Staff Member',
-      role: profile.role || 'waiter',
-      restaurantId: profile.restaurantId || '',
-      restaurantName: profile.restaurantName || ''
-    }
-  };
+  // ---- Staff & Admins: UID-based profile resolution with legacy email fallback ----
+  return await resolveStaffProfile(fbUser);
 }
 
 export function AuthProvider({ children }) {

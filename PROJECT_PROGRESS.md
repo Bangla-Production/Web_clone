@@ -13,7 +13,7 @@
 | :--- | :--- | :--- | :--- |
 | **STAGE 0** | Repository Inspection, Architecture Audit & Risk Analysis | **COMPLETE** | 2026-11-15 |
 | **STAGE 1** | Security & Strict Tenant Isolation | **COMPLETE** | 2026-11-15 |
-| **STAGE 2** | Database Schema & Outlets Model | **PART B IN PROGRESS** (Step 1 Complete; Awaiting Step 2 Approval) | 2026-11-15 |
+| **STAGE 2** | Database Schema & Outlets Model | **PART B IN PROGRESS** (Step 2 Complete; Awaiting Step 3 Approval) | 2026-11-15 |
 | **STAGE 3** | Backend Integration Infrastructure (`server/`) | QUEUED | - |
 | **STAGE 4** | Common Aggregator Adapter Framework | QUEUED | - |
 | **STAGE 5** | Mock Swiggy & Zomato Integration & Test Sandbox | QUEUED | - |
@@ -104,4 +104,43 @@
   * *Risk:* Staff accounts currently query `users/{email}` rather than `users/{uid}`.
   * *Mitigation:* Scheduled for Step 2 (Staff identity transition to `users/{uid}` with `allOutlets: true` flag and dual-lookup backward compatibility).
 * **Next Authorized Step:**
-  * Awaiting user review and authorization to proceed to **Step 2 (UID-Based Staff Identity & Outlet Authorization)**.
+  * Step 2 completed.
+
+---
+
+## Stage 2 Part B Summary (Step 2: UID-Based Staff Identity & Outlet Authorization)
+
+* **What was implemented:**
+  * **Staff Identity & Outlet Authorization Service (`client/src/services/staffIdentityService.js`):**
+    * Canonical UID profile identity: `users/{uid}`.
+    * Dual-lookup with non-destructive lazy migration from legacy `users/{email}`.
+    * Explicit outlet permission evaluation (`canAccessOutlet`, `validateOutletSelection`).
+    * Enforced tenant isolation and strict defaults (empty/missing `assignedOutletIds` with `allOutlets: false` strictly denies access).
+    * Recognition of all 8 core platform roles (`super_admin`, `owner`, `restaurant_admin`, `outlet_manager`, `cashier`, `kitchen`, `waiter`, `delivery_partner`).
+  * **Hardened Security Rules (`firestore.rules`):**
+    * Profile lookup functions check `users/$(request.auth.uid)` with legacy email fallback.
+    * Added `hasOutletAccess(restId, outletId)` helper enforcing tenant boundaries and assigned outlet membership.
+    * Protected `role`, `restaurantId`, `allOutlets`, and `assignedOutletIds` against client-side self-tampering / privilege escalation.
+    * Prohibited restaurant admins from creating `super_admin` or `owner` accounts, or provisioning staff outside their tenant.
+  * **React Auth & Context Integration (`AuthContext.jsx` & `RestaurantContext.jsx`):**
+    * Authenticated user session exposes `allOutlets`, `assignedOutletIds`, and `canAccessOutlet(outletId)`.
+    * Active outlet switching validates permission with instant toast rejection and fallback to first authorized outlet on unauthorized attempts.
+* **Files Created:**
+  * `client/src/services/staffIdentityService.js`
+  * `tests/test_staff_identity.js`
+  * `STAGE2_STEP2_IMPLEMENTATION_REPORT.md`
+* **Files Modified:**
+  * `firestore.rules`
+  * `client/src/context/AuthContext.jsx`
+  * `client/src/context/RestaurantContext.jsx`
+  * `client/src/services/firestoreService.js`
+  * `package.json`
+  * `tests/emulator_rules_unit.test.js`
+  * `tests/test_rules_isolation.js`
+  * `PROJECT_PROGRESS.md`
+* **Test Verification Results:**
+  * **Live Firestore Emulator:** 25 / 25 scenarios passed (gRPC `PERMISSION_DENIED` enforced for role escalation, tenant hopping, and unauthorized outlet access).
+  * **Unit & AST Suites (`npm test`):** 132 / 132 tests passed (45 outlet model + 40 staff identity + 47 security rules).
+  * **Vite Production Build:** 1674 modules bundled cleanly in 4.50s with 0 errors.
+* **Next Authorized Step:**
+  * Awaiting user review and authorization to proceed to **Step 3 (Menu Catalog, Outlet Overrides & Channel Pricing Model)**.

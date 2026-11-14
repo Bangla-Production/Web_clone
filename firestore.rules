@@ -19,14 +19,27 @@ service cloud.firestore {
       );
     }
 
-    // Helper to get staff user profile
+    // Helper to check UID profile
+    function hasUidProfile() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    // Helper to check legacy email profile
+    function hasEmailProfile() {
+      return isAuthenticated() && request.auth.token.email != null &&
+        exists(/databases/$(database)/documents/users/$(request.auth.token.email));
+    }
+
+    // Helper to get staff user profile (prefers UID, falls back to legacy email)
     function userProfile() {
-      return get(/databases/$(database)/documents/users/$(request.auth.token.email)).data;
+      return hasUidProfile()
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+        : get(/databases/$(database)/documents/users/$(request.auth.token.email)).data;
     }
 
     function hasActiveProfile() {
       return isAuthenticated() &&
-        exists(/databases/$(database)/documents/users/$(request.auth.token.email)) &&
+        (hasUidProfile() || hasEmailProfile()) &&
         userProfile().get('status', 'active') == 'active' &&
         (request.auth.token.email_verified == true || userProfile().get('authMethod', '') == 'staffId');
     }
@@ -48,8 +61,23 @@ service cloud.firestore {
     function isRestaurantStaff(restId) {
       return isSuperAdmin() || (
         hasActiveProfile() &&
-        userProfile().role in ['restaurant_admin', 'owner', 'staff', 'waiter', 'cashier', 'kitchen'] &&
+        userProfile().role in ['restaurant_admin', 'owner', 'outlet_manager', 'staff', 'waiter', 'cashier', 'kitchen'] &&
         userProfile().restaurantId == restId
+      );
+    }
+
+    // Outlet Access Authorization:
+    // 1. Must belong to the restaurant (strict tenant isolation)
+    // 2. allOutlets: true grants access across all outlets of that restaurant
+    // 3. allOutlets: false allows access only to explicitly assigned outlets
+    // 4. Missing or empty assignedOutletIds with allOutlets != true strictly DENIES access
+    function hasOutletAccess(restId, outletId) {
+      return isSuperAdmin() || (
+        isRestaurantStaff(restId) && (
+          userProfile().get('allOutlets', false) == true ||
+          (userProfile().get('assignedOutletIds', []) is list &&
+           outletId in userProfile().get('assignedOutletIds', []))
+        )
       );
     }
 
@@ -99,36 +127,43 @@ service cloud.firestore {
 
     match /users/{userId} {
       // Super admin can read any profile.
-      // Staff can read their own profile.
+      // Staff can read their own profile (matching either auth UID or lowercase email).
       // Restaurant admin can read profiles of staff within their own restaurant.
       allow read: if isSuperAdmin() ||
-        (isAuthenticated() && request.auth.token.email == userId) ||
+        (isAuthenticated() && (request.auth.uid == userId || request.auth.token.email == userId)) ||
         (hasActiveProfile() && userProfile().role in ['restaurant_admin', 'owner'] &&
          resource.data.restaurantId == userProfile().restaurantId);
 
       // Super admin can create any user.
-      // Restaurant admin can create staff for their own restaurant (cannot create super_admin).
+      // Restaurant admin can create staff for their own restaurant.
+      // Prohibits creating super_admin or owner; prevents unauthorized allOutlets assignment.
       allow create: if isSuperAdmin() || (
         hasActiveProfile() &&
         userProfile().role in ['restaurant_admin', 'owner'] &&
         request.resource.data.restaurantId == userProfile().restaurantId &&
-        request.resource.data.role in ['waiter', 'kitchen', 'cashier', 'staff']
+        request.resource.data.role in ['outlet_manager', 'waiter', 'kitchen', 'cashier', 'staff'] &&
+        request.resource.data.role != 'super_admin' &&
+        request.resource.data.role != 'owner' &&
+        (request.resource.data.get('allOutlets', false) == false || userProfile().role == 'owner')
       );
 
       // Super admin can update any profile.
-      // Restaurant admin can update staff profiles within their own restaurant.
-      // Users can update their own activation flag (emailVerified) but cannot escalate role or change restaurant.
+      // Restaurant admin can update staff profiles within their own restaurant (cannot escalate to super_admin or owner).
+      // Self-update: Staff can update contact & display fields, but CANNOT tamper with role, restaurantId, allOutlets, or assignedOutletIds.
       allow update: if isSuperAdmin() || (
         hasActiveProfile() &&
         userProfile().role in ['restaurant_admin', 'owner'] &&
         resource.data.restaurantId == userProfile().restaurantId &&
         request.resource.data.restaurantId == userProfile().restaurantId &&
-        request.resource.data.role != 'super_admin'
+        request.resource.data.role != 'super_admin' &&
+        request.resource.data.role != 'owner'
       ) || (
         isAuthenticated() &&
-        request.auth.token.email == userId &&
-        request.resource.data.role == resource.data.role &&
-        request.resource.data.restaurantId == resource.data.restaurantId
+        (request.auth.uid == userId || request.auth.token.email == userId) &&
+        request.resource.data.get('role', resource.data.get('role', 'waiter')) == resource.data.get('role', 'waiter') &&
+        request.resource.data.get('restaurantId', '') == resource.data.get('restaurantId', '') &&
+        request.resource.data.get('allOutlets', false) == resource.data.get('allOutlets', false) &&
+        request.resource.data.get('assignedOutletIds', []) == resource.data.get('assignedOutletIds', [])
       );
 
       // Super admin or Restaurant admin deleting staff from their own restaurant

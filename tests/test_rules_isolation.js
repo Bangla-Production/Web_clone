@@ -38,6 +38,9 @@ class SecurityContext {
 
   userProfile() {
     if (!this.isAuthenticated()) return null;
+    if (this.auth.uid && this.db[`users/${this.auth.uid}`]) {
+      return this.db[`users/${this.auth.uid}`];
+    }
     const email = this.auth.token?.email;
     return this.db[`users/${email}`] || null;
   }
@@ -87,7 +90,7 @@ class SecurityContext {
       if (operation === 'read') {
         return (
           this.isSuperAdmin() ||
-          (this.isAuthenticated() && this.auth.token?.email === userId) ||
+          (this.isAuthenticated() && (this.auth.uid === userId || this.auth.token?.email === userId)) ||
           (this.hasActiveProfile() &&
             ['restaurant_admin', 'owner'].includes(this.userProfile().role) &&
             existingResourceData?.restaurantId === this.userProfile().restaurantId)
@@ -99,7 +102,10 @@ class SecurityContext {
           (this.hasActiveProfile() &&
             ['restaurant_admin', 'owner'].includes(this.userProfile().role) &&
             requestResourceData?.restaurantId === this.userProfile().restaurantId &&
-            ['waiter', 'kitchen', 'cashier', 'staff'].includes(requestResourceData?.role))
+            ['outlet_manager', 'waiter', 'kitchen', 'cashier', 'staff'].includes(requestResourceData?.role) &&
+            requestResourceData?.role !== 'super_admin' &&
+            requestResourceData?.role !== 'owner' &&
+            (requestResourceData?.allOutlets === false || requestResourceData?.allOutlets === undefined || this.userProfile().role === 'owner'))
         );
       }
       if (operation === 'update') {
@@ -108,13 +114,16 @@ class SecurityContext {
           ['restaurant_admin', 'owner'].includes(this.userProfile().role) &&
           existingResourceData?.restaurantId === this.userProfile().restaurantId &&
           requestResourceData?.restaurantId === this.userProfile().restaurantId &&
-          requestResourceData?.role !== 'super_admin';
+          requestResourceData?.role !== 'super_admin' &&
+          requestResourceData?.role !== 'owner';
 
         const isSelfNonEscalating =
           this.isAuthenticated() &&
-          this.auth.token?.email === userId &&
-          requestResourceData?.role === existingResourceData?.role &&
-          requestResourceData?.restaurantId === existingResourceData?.restaurantId;
+          (this.auth.uid === userId || this.auth.token?.email === userId) &&
+          (requestResourceData?.role === undefined || requestResourceData?.role === existingResourceData?.role) &&
+          (requestResourceData?.restaurantId === undefined || requestResourceData?.restaurantId === existingResourceData?.restaurantId) &&
+          (requestResourceData?.allOutlets === undefined || requestResourceData?.allOutlets === existingResourceData?.allOutlets) &&
+          (requestResourceData?.assignedOutletIds === undefined || JSON.stringify(requestResourceData?.assignedOutletIds) === JSON.stringify(existingResourceData?.assignedOutletIds));
 
         return this.isSuperAdmin() || isAdminOfTenant || isSelfNonEscalating;
       }
@@ -585,6 +594,92 @@ assert('Super Admin can manage aggregator connections across any tenant', superA
 
 // Test 37: Super admin can delete customer profiles or bad records
 assert('Super Admin can delete users and records', superAdminCtx.evaluate('users/bad_actor@test.com', 'delete', null, { restaurantId: 'rest_a' }), true);
+
+console.log('\n7. STEP 2: UID-BASED IDENTITY & OUTLET AUTHORIZATION');
+console.log('-'.repeat(60));
+
+// Setup UID-based staff in mockDb
+mockDb['users/staff_uid_100'] = {
+  uid: 'staff_uid_100',
+  email: 'waiter_uid@resta.com',
+  role: 'waiter',
+  restaurantId: 'rest_a',
+  allOutlets: false,
+  assignedOutletIds: ['rest_a_main'],
+  status: 'active'
+};
+
+const staffUidCtx = new SecurityContext({ uid: 'staff_uid_100', token: { email: 'waiter_uid@resta.com', email_verified: true } }, mockDb);
+
+// Test 38: Staff reading own profile via UID
+assert(
+  'Staff can read own profile using UID key',
+  staffUidCtx.evaluate('users/staff_uid_100', 'read'),
+  true
+);
+
+// Test 39: Staff reading own profile using legacy email key
+assert(
+  'Staff can read own profile using legacy email key',
+  waiterACtx.evaluate('users/waiter_a@resta.local', 'read'),
+  true
+);
+
+// Test 40: Staff attempting role escalation on self-update (Forbidden)
+assert(
+  'Staff CANNOT escalate own role on self-update',
+  staffUidCtx.evaluate('users/staff_uid_100', 'update', { role: 'super_admin' }, mockDb['users/staff_uid_100']),
+  false
+);
+
+// Test 41: Staff attempting to change restaurantId (Forbidden)
+assert(
+  'Staff CANNOT change restaurantId on self-update',
+  staffUidCtx.evaluate('users/staff_uid_100', 'update', { restaurantId: 'rest_b' }, mockDb['users/staff_uid_100']),
+  false
+);
+
+// Test 42: Staff attempting to self-grant allOutlets: true (Forbidden)
+assert(
+  'Staff CANNOT self-grant allOutlets: true on self-update',
+  staffUidCtx.evaluate('users/staff_uid_100', 'update', { allOutlets: true }, mockDb['users/staff_uid_100']),
+  false
+);
+
+// Test 43: Staff attempting to alter assignedOutletIds (Forbidden)
+assert(
+  'Staff CANNOT alter assignedOutletIds on self-update',
+  staffUidCtx.evaluate('users/staff_uid_100', 'update', { assignedOutletIds: ['rest_b_main'] }, mockDb['users/staff_uid_100']),
+  false
+);
+
+// Test 44: Restaurant Admin A attempting to create super_admin (Forbidden)
+assert(
+  'Restaurant Admin A CANNOT create super_admin user',
+  adminACtx.evaluate('users/new_super_user', 'create', { role: 'super_admin', restaurantId: 'rest_a' }),
+  false
+);
+
+// Test 45: Restaurant Admin A creating staff for Restaurant B (Cross-tenant forbidden)
+assert(
+  'Restaurant Admin A CANNOT create staff for Restaurant B',
+  adminACtx.evaluate('users/new_staff_b', 'create', { role: 'waiter', restaurantId: 'rest_b' }),
+  false
+);
+
+// Test 46: Restaurant Admin A creating valid staff for Restaurant A (Allowed)
+assert(
+  'Restaurant Admin A can create valid staff for Restaurant A',
+  adminACtx.evaluate('users/new_staff_a', 'create', { role: 'waiter', restaurantId: 'rest_a', allOutlets: false }),
+  true
+);
+
+// Test 47: Staff A attempting to read Tenant B Admin profile (Cross-tenant forbidden)
+assert(
+  'Staff A CANNOT read Tenant B Admin profile (Cross-tenant forbidden)',
+  staffUidCtx.evaluate('users/admin_b@restb.com', 'read', null, mockDb['users/admin_b@restb.com']),
+  false
+);
 
 console.log('\n' + '='.repeat(80));
 console.log(`TEST SUMMARY: ${passed} PASSED, ${failed} FAILED`);

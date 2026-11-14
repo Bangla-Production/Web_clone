@@ -78,6 +78,29 @@ async function main() {
       status: 'active',
       authMethod: 'email',
     });
+    // Staff UID profile (Tenant A)
+    await db.doc('users/staff_uid_1').set({
+      uid: 'staff_uid_1',
+      email: 'waiter1@resta.com',
+      name: 'Waiter One',
+      role: 'waiter',
+      restaurantId: 'rest_a',
+      assignedOutletIds: ['rest_a_main'],
+      allOutlets: false,
+      status: 'active',
+      authMethod: 'email',
+    });
+    // Staff Legacy Email profile (Tenant A)
+    await db.doc('users/legacy_waiter@resta.com').set({
+      email: 'legacy_waiter@resta.com',
+      name: 'Legacy Waiter',
+      role: 'waiter',
+      restaurantId: 'rest_a',
+      assignedOutletIds: ['rest_a_main'],
+      allOutlets: false,
+      status: 'active',
+      authMethod: 'email',
+    });
     // Tenant A Orders
     await db.doc('restaurants/rest_a/orders/ord_a1').set({
       restaurantId: 'rest_a',
@@ -136,6 +159,24 @@ async function main() {
     email_verified: true,
   });
   const dbAdminA = adminAContext.firestore();
+
+  const superAdminContext = testEnv.authenticatedContext('super_uid', {
+    email: 'altcafe2026@gmail.com',
+    email_verified: true,
+  });
+  const dbSuperAdmin = superAdminContext.firestore();
+
+  const staffUidContext = testEnv.authenticatedContext('staff_uid_1', {
+    email: 'waiter1@resta.com',
+    email_verified: true,
+  });
+  const dbStaffUid = staffUidContext.firestore();
+
+  const staffLegacyContext = testEnv.authenticatedContext('staff_legacy_uid', {
+    email: 'legacy_waiter@resta.com',
+    email_verified: true,
+  });
+  const dbStaffLegacy = staffLegacyContext.firestore();
 
   const customerAContext = testEnv.authenticatedContext('cust_a', {
     email: 'alice@customer.com',
@@ -246,11 +287,93 @@ async function main() {
     }));
   });
 
+  // --- Step 2 UID Identity & Outlet Authorization Scenarios ---
+
+  // Scenario 16: Staff reading own profile via UID document (Allowed)
+  await runTest('Staff reading own profile via UID document users/{uid} (Allowed)', async () => {
+    await assertSucceeds(dbStaffUid.doc('users/staff_uid_1').get());
+  });
+
+  // Scenario 17: Staff reading own profile via legacy email document users/{email} (Allowed)
+  await runTest('Staff reading own profile via legacy email document users/{email} (Allowed)', async () => {
+    await assertSucceeds(dbStaffLegacy.doc('users/legacy_waiter@resta.com').get());
+  });
+
+  // Scenario 18: Staff attempting role escalation on self-update (Denied)
+  await runTest('Staff attempting to escalate role to super_admin or restaurant_admin (Forbidden)', async () => {
+    await assertFails(dbStaffUid.doc('users/staff_uid_1').update({
+      role: 'super_admin'
+    }));
+  });
+
+  // Scenario 19: Staff attempting restaurantId tampering on self-update (Denied)
+  await runTest('Staff attempting to change restaurantId to another tenant (Forbidden)', async () => {
+    await assertFails(dbStaffUid.doc('users/staff_uid_1').update({
+      restaurantId: 'rest_b'
+    }));
+  });
+
+  // Scenario 20: Staff attempting to grant themselves allOutlets: true (Denied)
+  await runTest('Staff attempting to self-grant allOutlets: true (Forbidden)', async () => {
+    await assertFails(dbStaffUid.doc('users/staff_uid_1').update({
+      allOutlets: true
+    }));
+  });
+
+  // Scenario 21: Restaurant Admin A attempting to create a super_admin user (Denied)
+  await runTest('Restaurant Admin attempting to create super_admin account (Forbidden)', async () => {
+    await assertFails(dbAdminA.doc('users/rogue_super_admin').set({
+      email: 'rogue@admin.com',
+      role: 'super_admin',
+      restaurantId: 'rest_a',
+      status: 'active'
+    }));
+  });
+
+  // Scenario 22: Restaurant Admin A creating staff for Restaurant B (Denied)
+  await runTest('Restaurant Admin A creating staff for Restaurant B (Cross-tenant forbidden)', async () => {
+    await assertFails(dbAdminA.doc('users/staff_b_new').set({
+      email: 'staff_b@restb.com',
+      role: 'waiter',
+      restaurantId: 'rest_b',
+      status: 'active'
+    }));
+  });
+
+  // Scenario 23: Restaurant Admin A creating valid staff for Restaurant A (Allowed)
+  await runTest('Restaurant Admin A creating valid staff for own Restaurant A (Allowed)', async () => {
+    await assertSucceeds(dbAdminA.doc('users/staff_a_valid').set({
+      email: 'staff_a_valid@resta.com',
+      role: 'waiter',
+      restaurantId: 'rest_a',
+      allOutlets: false,
+      status: 'active'
+    }));
+  });
+
+  // Scenario 24: Staff member attempting to read another restaurant admin profile (Denied)
+  await runTest('Staff A attempting to read Tenant B Admin profile (Cross-tenant forbidden)', async () => {
+    await assertFails(dbStaffUid.doc('users/admin_b@restb.com').get());
+  });
+
+  // Scenario 25: Super Admin reading any user profile across tenants (Allowed)
+  await runTest('Super Admin reading user profiles across any tenant (Allowed)', async () => {
+    await assertSucceeds(dbSuperAdmin.doc('users/staff_uid_1').get());
+    await assertSucceeds(dbSuperAdmin.doc('users/admin_b@restb.com').get());
+  });
+
   await testEnv.cleanup();
 
   console.log('\n' + '='.repeat(80));
   console.log(`LIVE EMULATOR TEST SUMMARY: ${passed} PASSED, ${failed} FAILED`);
   console.log('='.repeat(80));
+
+  if (failed > 0) {
+    process.exit(1);
+  }
 }
 
-main().catch(console.error);
+main().catch((err) => {
+  console.error('Fatal test error:', err);
+  process.exit(1);
+});

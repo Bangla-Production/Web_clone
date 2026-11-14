@@ -111,15 +111,30 @@ export {
 } from './outletService';
 
 // ----------------------------------------------------------------------
+// 1.2 STAFF IDENTITY & OUTLET AUTHORIZATION (Enterprise Model)
+// ----------------------------------------------------------------------
+export {
+  ROLES,
+  BRAND_ADMIN_ROLES,
+  canAccessOutlet,
+  validateOutletSelection,
+  normalizeStaffProfile,
+  resolveStaffProfile
+} from './staffIdentityService';
+
+// ----------------------------------------------------------------------
 // 2. USERS & STAFF
 // ----------------------------------------------------------------------
 
 export async function getUserProfile(userId) {
   try {
+    if (!userId) return null;
     const docRef = doc(db, 'users', userId);
     const snapshot = await getDoc(docRef);
-    if (!snapshot.exists()) return null;
-    return { id: snapshot.id, ...snapshot.data() };
+    if (snapshot.exists()) {
+      return { id: snapshot.id, ...snapshot.data() };
+    }
+    return null;
   } catch (error) {
     console.error('getUserProfile error:', error);
     throw error;

@@ -7,9 +7,11 @@
     "dev": "npm --prefix client run dev",
     "build": "npm --prefix client run build",
     "preview": "npm --prefix client run preview",
-    "test": "node tests/test_outlet_model.js && node tests/test_rules_isolation.js",
+    "test": "node tests/test_outlet_model.js && node tests/test_staff_identity.js && node tests/test_rules_isolation.js",
     "test:outlet": "node tests/test_outlet_model.js",
-    "test:security": "node tests/test_rules_isolation.js"
+    "test:identity": "node tests/test_staff_identity.js",
+    "test:security": "node tests/test_rules_isolation.js",
+    "test:emulator": "firebase emulators:exec --project=demo-abar-khabo --only firestore \"node tests/emulator_rules_unit.test.js\""
   },
   "keywords": [
     "restaurant-pos",
