@@ -51,20 +51,18 @@
 
 ---
 
-## Stage 2 Summary (Database Schema & Outlets Model — Part A: Design)
+## Stage 2 Summary (Database Schema & Outlets Model — Part A: Revised Design)
 
-* **What was implemented:**
-  * Completed full architectural design for the multi-tenant SaaS restaurant data model.
-  * Designed the corporate Tenant vs. physical Outlet entity hierarchy.
-  * Specified aggregator connections (`swiggy`, `zomato`, `urbanpiper`) bound at the outlet level.
-  * Designed master menu catalog and branch-specific price/availability overrides.
-  * Designed the unified normalized order schema (`aggregatorOrders`) accommodating Swiggy, Zomato, Direct Online, and POS.
-  * Authored immutable webhook audit logging, operational diagnostics, atomic inventory ledger, and settlement models.
-  * Designed non-destructive migration strategy auto-provisioning default outlets (`${restaurantId}_main`) with zero downtime.
-  * Defined Firestore composite indexes in `STAGE2_DATABASE_SCHEMA.md`.
-* **Files Created:**
-  * `STAGE2_DATABASE_SCHEMA.md`
-* **Files Modified:**
-  * `PROJECT_PROGRESS.md`
+* **What was implemented & revised:**
+  * **Composite Outlet Identity:** Clarified that `${restaurantId}_main` is scoped locally, with global uniqueness defined by the composite key `(restaurantId, outletId)` and full document path.
+  * **Secret Management:** Designed backend-only credential access via Google Cloud Secret Manager; Firestore holds only versioned secret references (`secretResourceName`), never plaintext tokens.
+  * **Dual-Mirroring & Deduplication:** Redesigned `aggregatorOrders/{orderId}` as the authoritative record, with background idempotent mirroring to legacy `onlineOrders`, deduplicating KOTs and stock deductions via `aggregatorOrderId`.
+  * **Staff UID & Explicit Authorization:** Shifted primary identity to `users/{uid}`, requiring explicit `allOutlets: true` for brand-wide access and preventing implicit universal access on empty `assignedOutletIds`.
+  * **Independent Channel Pricing & Inventory:** Added explicit rupee overrides per channel (`Dine-in`, `Direct`, `Swiggy`, `Zomato`), transactional stock deductions, cancellation reversals, waste tracking, and overselling prevention.
+  * **Comprehensive Financial Model:** Specified gross sales, packaging, commissions, TCS/TDS GST, discounts, and net payouts in `settlementRecords`.
+  * **Query Constraint Alignment:** Defined mandatory query constraints (`where('restaurantId', '==', ...)` and `where('outletId', '==', ...)`) required by security rules.
+* **Files Created / Modified:**
+  * `STAGE2_DATABASE_SCHEMA.md` (Revised to v2.0.0-PROPOSED)
+  * `PROJECT_PROGRESS.md` (Updated)
 * **Next Steps:**
-  * Obtain user approval on Part A design before proceeding to **Part B (Implementation)**.
+  * Obtain user approval on the revised Stage 2 Part A design before proceeding to **Part B (Implementation)**.
