@@ -26,15 +26,15 @@ All 10 verification criteria specified in the security mandate were investigated
 
 ---
 
-### 1. RULES TEST FRAMEWORK CLARIFICATION (Point 1 & 2)
+### 1. RULES TEST FRAMEWORK CLARIFICATION & LIVE EMULATOR EXECUTION (Point 1 & 2)
 
 #### Finding on `tests/test_rules_isolation.js`
 * **Test Type:** AST / Rule-Logic Execution Harness.
 * **Mechanism:** It compiles the security constraints, helper functions, and conditional evaluations directly in Node.js to test every logical branch (cross-tenant access, unauthorized role escalations, public attempts).
 * **Clarification:** While highly effective at validating logical rules behavior across 37 boundary conditions with zero network latency, it operates in Node.js rather than running inside Google's Java-based Cloud Firestore Emulator JAR (`cloud-firestore-emulator.jar`).
 
-#### Official Live Firebase Emulator Suite Setup
-To enable true runtime execution against Google's Cloud Firestore Emulator:
+#### Official Live Firebase Emulator Suite Setup & Execution
+The official Firebase Emulator Suite was configured and executed against the live Cloud Firestore Emulator engine:
 1. Created `firebase.json` with emulator port definitions:
    ```json
    {
@@ -53,11 +53,53 @@ To enable true runtime execution against Google's Cloud Firestore Emulator:
      }
    }
    ```
-2. Created [`tests/emulator_rules_unit.test.js`](file:///c:/Users/ARGHA/Downloads/Web_clone/tests/emulator_rules_unit.test.js) using the official `@firebase/rules-unit-testing` SDK.
-3. **Actual Emulator Execution Command:**
+2. Installed `firebase-tools` (v15.36.0) and `@firebase/rules-unit-testing` (v3.0.4).
+3. Authored [`tests/emulator_rules_unit.test.js`](file:///c:/Users/ARGHA/Downloads/Web_clone/tests/emulator_rules_unit.test.js) using the official `@firebase/rules-unit-testing` SDK.
+4. **Actual Emulator Execution Command:**
    ```bash
-   # Starts Firestore Emulator on 127.0.0.1:8080, runs the test suite, and exits:
-   firebase emulators:exec --only firestore "node tests/emulator_rules_unit.test.js"
+   firebase emulators:exec --project=demo-abar-khabo --only firestore "node tests/emulator_rules_unit.test.js"
+   ```
+5. **Live Emulator Test Output:**
+   ```text
+   i  emulators: Starting emulators: firestore
+   i  emulators: Detected demo project ID "demo-abar-khabo", emulated services will use a demo configuration.
+   i  firestore: downloading cloud-firestore-emulator-v1.22.0.jar...
+   i  firestore: Firestore Emulator logging to firestore-debug.log
+   +  firestore: Firestore Emulator was started in standard edition.
+   +  firestore: Firestore Emulator UI websocket is running on 9150.
+   i  Running script: node tests/emulator_rules_unit.test.js
+   ================================================================================
+   FIREBASE EMULATOR SUITE: FIRESTORE SECURITY RULES VERIFICATION
+   ================================================================================
+   Connected to Firestore Emulator on 127.0.0.1:8080
+
+   --- Real Emulator Test Scenarios ---
+     ✓ PASS: Admin A reading Tenant A orders (Allowed)
+     ✓ PASS: Admin A reading Tenant B orders (Cross-tenant blocked)
+   [GrpcConnection RPC 'Write' stream error. Code: 7 Message: 7 PERMISSION_DENIED: evaluation error at L210:40 for 'update']
+     ✓ PASS: Admin A updating Tenant B orders (Cross-tenant blocked)
+     ✓ PASS: Admin A reading Tenant B Aggregator credentials (Cross-tenant blocked)
+     ✓ PASS: Unauthenticated user reading private orders (Forbidden)
+     ✓ PASS: Customer A reading own address (Allowed)
+     ✓ PASS: Customer B reading Customer A address (Forbidden)
+     ✓ PASS: Unauthenticated user reading Customer A address (Forbidden)
+     ✓ PASS: Unauthenticated user reading GPS deliveryTracking (Forbidden - Requirement 5)
+     ✓ PASS: Customer A reading own deliveryTracking (Allowed)
+     ✓ PASS: Assigned Rider reading deliveryTracking (Allowed)
+     ✓ PASS: Assigned Rider updating GPS coordinates on deliveryTracking (Allowed)
+   [GrpcConnection RPC 'Write' stream error. Code: 7 Message: 7 PERMISSION_DENIED: evaluation error at L310:24 for 'update']
+     ✓ PASS: Assigned Rider altering order totalAmount (Forbidden - Requirement 7 & 8)
+   [GrpcConnection RPC 'Write' stream error. Code: 7 Message: 7 PERMISSION_DENIED: evaluation error at L392:24 for 'update']
+     ✓ PASS: Rider self-verifying KYC / isAadhaarVerified (Forbidden - Requirement 8)
+     ✓ PASS: Rider updating their own online availability (Allowed)
+
+   ================================================================================
+   LIVE EMULATOR TEST SUMMARY: 15 PASSED, 0 FAILED
+   ================================================================================
+   +  Script exited successfully (code 0)
+   i  emulators: Shutting down emulators.
+   i  firestore: Stopping Firestore Emulator
+   i  hub: Stopping emulator hub
    ```
 
 ---
