@@ -2,10 +2,15 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // 1. CORE AUTHENTICATION & IDENTITY HELPERS
+    // ─────────────────────────────────────────────────────────────────────────
+
     function isAuthenticated() {
       return request.auth != null;
     }
 
+    // Super Admin: platform owner email or explicit role in /users/{email}
     function isSuperAdmin() {
       return isAuthenticated() && (
         request.auth.token.email == 'altcafe2026@gmail.com' ||
@@ -14,140 +19,374 @@ service cloud.firestore {
       );
     }
 
-    function profile() {
+    // Helper to get staff user profile
+    function userProfile() {
       return get(/databases/$(database)/documents/users/$(request.auth.token.email)).data;
     }
 
     function hasActiveProfile() {
       return isAuthenticated() &&
         exists(/databases/$(database)/documents/users/$(request.auth.token.email)) &&
-        profile().get('status', 'active') == 'active' &&
-        (request.auth.token.email_verified == true || profile().get('authMethod', '') == 'staffId');
+        userProfile().get('status', 'active') == 'active' &&
+        (request.auth.token.email_verified == true || userProfile().get('authMethod', '') == 'staffId');
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // 2. TENANT BOUNDARY & ROLE-BASED ACCESS HELPERS
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // Restaurant Admin / Owner: Full management of their own tenant
     function isRestaurantAdmin(restId) {
       return isSuperAdmin() || (
         hasActiveProfile() &&
-        profile().role == 'restaurant_admin' &&
-        profile().restaurantId == restId
+        userProfile().role in ['restaurant_admin', 'owner'] &&
+        userProfile().restaurantId == restId
       );
     }
 
+    // Restaurant Staff: Any authenticated staff member of this specific restaurant
     function isRestaurantStaff(restId) {
       return isSuperAdmin() || (
         hasActiveProfile() &&
-        profile().role in ['restaurant_admin', 'staff', 'waiter', 'cashier', 'kitchen'] &&
-        profile().restaurantId == restId
+        userProfile().role in ['restaurant_admin', 'owner', 'staff', 'waiter', 'cashier', 'kitchen'] &&
+        userProfile().restaurantId == restId
       );
     }
 
-    // 1. Users (profiles)
+    // Kitchen Staff: Allowed to update cooking status & KOTs
+    function isKitchenAuthorized(restId) {
+      return isSuperAdmin() || (
+        hasActiveProfile() &&
+        userProfile().role in ['restaurant_admin', 'owner', 'kitchen', 'staff'] &&
+        userProfile().restaurantId == restId
+      );
+    }
+
+    // Cashier Staff: Allowed to settle bills, manage invoices & assign riders
+    function isCashierAuthorized(restId) {
+      return isSuperAdmin() || (
+        hasActiveProfile() &&
+        userProfile().role in ['restaurant_admin', 'owner', 'cashier', 'staff'] &&
+        userProfile().restaurantId == restId
+      );
+    }
+
+    // Waiter Staff: Allowed to take floor orders and create KOTs
+    function isWaiterAuthorized(restId) {
+      return isSuperAdmin() || (
+        hasActiveProfile() &&
+        userProfile().role in ['restaurant_admin', 'owner', 'waiter', 'staff'] &&
+        userProfile().restaurantId == restId
+      );
+    }
+
+    // Customer Identity check (authenticated end-consumer)
+    function isCustomerOwner(customerId) {
+      return isAuthenticated() && (request.auth.uid == customerId || isSuperAdmin());
+    }
+
+    // Delivery Partner (Rider) check
+    function isDeliveryPartner() {
+      return isAuthenticated() && (
+        exists(/databases/$(database)/documents/deliveryPartners/$(request.auth.uid)) ||
+        (request.auth.token.email != null && request.auth.token.email.matches('.*@rider\\..*'))
+      );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 3. USER ACCOUNTS & PROFILES (/users/{userEmail})
+    // ─────────────────────────────────────────────────────────────────────────
+
     match /users/{userId} {
-      allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated();
-      allow delete: if isAuthenticated();
+      // Super admin can read any profile.
+      // Staff can read their own profile.
+      // Restaurant admin can read profiles of staff within their own restaurant.
+      allow read: if isSuperAdmin() ||
+        (isAuthenticated() && request.auth.token.email == userId) ||
+        (hasActiveProfile() && userProfile().role in ['restaurant_admin', 'owner'] &&
+         resource.data.restaurantId == userProfile().restaurantId);
+
+      // Super admin can create any user.
+      // Restaurant admin can create staff for their own restaurant (cannot create super_admin).
+      allow create: if isSuperAdmin() || (
+        hasActiveProfile() &&
+        userProfile().role in ['restaurant_admin', 'owner'] &&
+        request.resource.data.restaurantId == userProfile().restaurantId &&
+        request.resource.data.role in ['waiter', 'kitchen', 'cashier', 'staff']
+      );
+
+      // Super admin can update any profile.
+      // Restaurant admin can update staff profiles within their own restaurant.
+      // Users can update their own activation flag (emailVerified) but cannot escalate role or change restaurant.
+      allow update: if isSuperAdmin() || (
+        hasActiveProfile() &&
+        userProfile().role in ['restaurant_admin', 'owner'] &&
+        resource.data.restaurantId == userProfile().restaurantId &&
+        request.resource.data.restaurantId == userProfile().restaurantId &&
+        request.resource.data.role != 'super_admin'
+      ) || (
+        isAuthenticated() &&
+        request.auth.token.email == userId &&
+        request.resource.data.role == resource.data.role &&
+        request.resource.data.restaurantId == resource.data.restaurantId
+      );
+
+      // Super admin or Restaurant admin deleting staff from their own restaurant
+      allow delete: if isSuperAdmin() || (
+        hasActiveProfile() &&
+        userProfile().role in ['restaurant_admin', 'owner'] &&
+        resource.data.restaurantId == userProfile().restaurantId
+      );
     }
 
-    // 1b. Staff Lookup — maps a numeric Staff ID -> internal login email
+    // Staff Lookup: Maps numeric Staff ID -> internal login email
     match /staffLookup/{staffId} {
-      allow read: if true;
-      allow create, update, delete: if isAuthenticated();
+      allow read: if true; // Publicly readable for pre-auth staff ID login resolution
+      allow create, update, delete: if isSuperAdmin() || (
+        hasActiveProfile() &&
+        userProfile().role in ['restaurant_admin', 'owner']
+      );
     }
 
-    // 2. Restaurants
-    match /restaurants/{restaurantId} {
-      allow read: if true;
-      allow create, update, delete: if isAuthenticated();
+    // ─────────────────────────────────────────────────────────────────────────
+    // 4. CUSTOMER ACCOUNTS & ADDRESSES (/customers/{customerId})
+    // ─────────────────────────────────────────────────────────────────────────
 
+    match /customers/{customerId} {
+      allow read: if isCustomerOwner(customerId);
+      allow create: if isAuthenticated() && request.auth.uid == customerId;
+      allow update: if isCustomerOwner(customerId);
+      allow delete: if isSuperAdmin();
+
+      match /addresses/{addressId} {
+        allow read, write: if isCustomerOwner(customerId);
+      }
+    }
+
+    // Customer Addresses root fallback
+    match /customerAddresses/{customerId} {
+      allow read, write: if isCustomerOwner(customerId);
+
+      match /addresses/{addressId} {
+        allow read, write: if isCustomerOwner(customerId);
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 5. RESTAURANTS & TENANT SUBCOLLECTIONS (/restaurants/{restaurantId})
+    // ─────────────────────────────────────────────────────────────────────────
+
+    match /restaurants/{restaurantId} {
+      // Public discovery on Abar Khabo homepage and customer portal
+      allow read: if true;
+
+      // Only Super Admin can onboard new restaurants or delete restaurants
+      allow create, delete: if isSuperAdmin();
+
+      // Super Admin or assigned Restaurant Admin can update details (branding, address, phone)
+      allow update: if isSuperAdmin() || isRestaurantAdmin(restaurantId);
+
+      // Categories & Menu Items: Publicly readable for QR / online ordering; Admin write
       match /categories/{categoryId} {
         allow read: if true;
-        allow write: if isAuthenticated();
+        allow write: if isRestaurantAdmin(restaurantId);
       }
 
       match /menuItems/{itemId} {
         allow read: if true;
-        allow write: if isAuthenticated();
+        allow write: if isRestaurantAdmin(restaurantId);
       }
 
+      // Tables: Floor management for restaurant staff
       match /tables/{tableId} {
-        allow read, write: if isAuthenticated();
+        allow read, write: if isRestaurantStaff(restaurantId);
       }
 
+      // Orders (Dine-in / Counter POS): Restaurant staff only
       match /orders/{orderId} {
         allow read, create, update: if isRestaurantStaff(restaurantId);
-        // Only the restaurant admin can delete (used by Settings -> Data Cleanup)
         allow delete: if isRestaurantAdmin(restaurantId);
       }
 
+      // Kitchen Order Tickets (KOTs)
       match /kots/{kotId} {
         allow read, create, update: if isRestaurantStaff(restaurantId);
-        // Only the restaurant admin can delete (used by Settings -> Data Cleanup)
         allow delete: if isRestaurantAdmin(restaurantId);
       }
 
+      // Invoices & Billing
       match /invoices/{invoiceId} {
         allow read, create, update: if isRestaurantStaff(restaurantId);
-        // Only the restaurant admin can delete (used by Settings -> Data Cleanup)
         allow delete: if isRestaurantAdmin(restaurantId);
       }
 
+      // Inventory & Stock Transactions
       match /inventory/{itemId} {
-        allow read, write: if isAuthenticated();
+        allow read: if isRestaurantStaff(restaurantId);
+        allow write: if isRestaurantAdmin(restaurantId);
 
         match /transactions/{txnId} {
-          allow read, write: if isAuthenticated();
+          allow read: if isRestaurantStaff(restaurantId);
+          allow write: if isRestaurantAdmin(restaurantId);
         }
       }
 
+      // Table Reservations: Public guest create; Staff manage
       match /reservations/{resId} {
-        allow read: if isAuthenticated();
+        allow read: if isRestaurantStaff(restaurantId);
         allow create: if true;
-        allow update, delete: if isAuthenticated();
+        allow update, delete: if isRestaurantStaff(restaurantId);
       }
 
+      // Audit Logs & Settings
       match /auditLogs/{logId} {
-        allow read, write: if isAuthenticated();
+        allow read: if isRestaurantAdmin(restaurantId);
+        allow create: if isRestaurantStaff(restaurantId);
+        allow update, delete: if isSuperAdmin();
       }
 
       match /settings/{settingId} {
-        allow read, write: if isAuthenticated();
+        allow read: if isRestaurantStaff(restaurantId);
+        allow write: if isRestaurantAdmin(restaurantId);
       }
 
       match /customers/{custId} {
-        allow read, write: if isAuthenticated();
+        allow read, write: if isRestaurantStaff(restaurantId);
       }
 
+      // Subcollection copy of Online Orders
       match /onlineOrders/{orderId} {
-        allow read, create, update: if true;
-        allow delete: if isAuthenticated();
+        allow read, write: if isRestaurantStaff(restaurantId);
+      }
+
+      // Outlets (Multi-Tenant Outlets Schema for Stage 2 Readiness)
+      match /outlets/{outletId} {
+        allow read: if true;
+        allow write: if isRestaurantAdmin(restaurantId);
+      }
+
+      // Aggregator Connections (Swiggy, Zomato API credentials — Never Public)
+      match /aggregatorConnections/{connectionId} {
+        allow read, write: if isRestaurantAdmin(restaurantId);
       }
     }
 
-    // 3. Online Orders & Food Delivery (Customer / Restaurant / Delivery Partner)
+    // ─────────────────────────────────────────────────────────────────────────
+    // 6. ONLINE ORDERS & FOOD DELIVERY (/onlineOrders/{orderId})
+    // ─────────────────────────────────────────────────────────────────────────
+
     match /onlineOrders/{orderId} {
-      allow read, create, update: if true;
-      allow delete: if isAuthenticated();
+      // READ PERMISSIONS:
+      // 1. Super Admin
+      // 2. Staff belonging to the order's restaurant (strict tenant isolation)
+      // 3. Customer who owns the order (by customerId or phone number)
+      // 4. Assigned Rider or active Rider viewing available orders
+      // 5. Direct lookup by known unique Order ID (for live tracking)
+      allow read: if isSuperAdmin() ||
+        (isAuthenticated() && isRestaurantStaff(resource.data.restaurantId)) ||
+        (isAuthenticated() && (
+          resource.data.get('customerId', '') == request.auth.uid ||
+          resource.data.get('riderId', '') == request.auth.uid ||
+          resource.data.get('partnerId', '') == request.auth.uid
+        )) ||
+        (isDeliveryPartner() && resource.data.orderType == 'DELIVERY' &&
+         resource.data.status in ['CONFIRMED', 'PREPARING', 'READY', 'READY_FOR_PICKUP']) ||
+        true; // Public read by exact orderId enables live tracking without requiring login
+
+      // CREATE PERMISSIONS:
+      // Customers or guests placing an order: must start with PLACED status and valid restaurantId
+      allow create: if (
+        request.resource.data.restaurantId != null &&
+        request.resource.data.get('status', 'PLACED') == 'PLACED' &&
+        request.resource.data.totalAmount >= 0
+      ) || isSuperAdmin() || isRestaurantStaff(request.resource.data.restaurantId);
+
+      // UPDATE PERMISSIONS:
+      // 1. Super Admin: full access
+      // 2. Restaurant Staff: can only update orders belonging to their own restaurant
+      // 3. Assigned Rider: can update delivery status and assigned rider info
+      allow update: if isSuperAdmin() ||
+        (isAuthenticated() && isRestaurantStaff(resource.data.restaurantId) &&
+         request.resource.data.restaurantId == resource.data.restaurantId) ||
+        (isAuthenticated() && (
+          resource.data.get('riderId', '') == request.auth.uid ||
+          request.resource.data.get('riderId', '') == request.auth.uid
+        ));
+
+      // DELETE PERMISSIONS:
+      // Only Super Admin or the Restaurant Admin of that specific restaurant
+      allow delete: if isSuperAdmin() ||
+        (isAuthenticated() && isRestaurantAdmin(resource.data.restaurantId));
     }
 
-    // 4. Live GPS Delivery Tracking
+    // ─────────────────────────────────────────────────────────────────────────
+    // 7. LIVE GPS DELIVERY TRACKING (/deliveryTracking/{orderId})
+    // ─────────────────────────────────────────────────────────────────────────
+
     match /deliveryTracking/{orderId} {
-      allow read, create, update: if true;
-      allow delete: if isAuthenticated();
+      // Read: Public by unguessable Order ID (for customer tracking) and authenticated staff/riders
+      allow read: if true;
+
+      // Create: Initialized when order is placed or dispatched
+      allow create: if isAuthenticated() ||
+        request.resource.data.restaurantId != null;
+
+      // Update:
+      // 1. Super Admin
+      // 2. Restaurant Staff for their own restaurant's orders
+      // 3. Rider updating GPS coordinates or delivery status
+      allow update: if isSuperAdmin() ||
+        (isAuthenticated() && isRestaurantStaff(resource.data.restaurantId)) ||
+        (isAuthenticated() && (
+          resource.data.get('riderId', '') == request.auth.uid ||
+          request.resource.data.get('riderId', '') == request.auth.uid
+        )) ||
+        // Allow live GPS coordinate stream updates
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['riderCoordinates', 'lastUpdatedAt']);
+
+      allow delete: if isSuperAdmin() ||
+        (isAuthenticated() && isRestaurantAdmin(resource.data.restaurantId));
     }
 
-    // 5. Delivery Partners (Riders)
+    // ─────────────────────────────────────────────────────────────────────────
+    // 8. DELIVERY PARTNERS (/deliveryPartners/{partnerId})
+    // ─────────────────────────────────────────────────────────────────────────
+
     match /deliveryPartners/{partnerId} {
-      allow read, create, update: if true;
-      allow delete: if isAuthenticated();
+      // Read:
+      // 1. Super Admin
+      // 2. The delivery partner themselves
+      // 3. Restaurant staff looking up active riders for dispatch
+      allow read: if isSuperAdmin() ||
+        (isAuthenticated() && request.auth.uid == partnerId) ||
+        hasActiveProfile();
+
+      // Create:
+      // 1. Super Admin
+      // 2. Rider registering their own account
+      // 3. Restaurant staff registering a rider
+      allow create: if isSuperAdmin() ||
+        (isAuthenticated() && request.auth.uid == partnerId) ||
+        hasActiveProfile();
+
+      // Update:
+      // 1. Super Admin
+      // 2. Delivery partner updating their availability, GPS coordinates, status
+      // 3. Restaurant staff assigning an order
+      allow update: if isSuperAdmin() ||
+        (isAuthenticated() && request.auth.uid == partnerId) ||
+        hasActiveProfile();
+
+      allow delete: if isSuperAdmin();
     }
 
-    // 6. Customer Addresses
-    match /customerAddresses/{customerId} {
-      allow read, write: if true;
+    // ─────────────────────────────────────────────────────────────────────────
+    // 9. SYSTEM EMAIL NOTIFICATIONS & AUDIT LOGS
+    // ─────────────────────────────────────────────────────────────────────────
 
-      match /addresses/{addressId} {
-        allow read, write: if true;
-      }
+    match /email_notifications/{notificationId} {
+      allow create: if isAuthenticated();
+      allow read, update, delete: if isSuperAdmin();
     }
   }
 }

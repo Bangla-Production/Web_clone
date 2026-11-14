@@ -7,6 +7,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
+import { maskAadhaar } from '../utils/aadhaarValidation';
 
 const DeliveryPartnerAuthContext = createContext(null);
 
@@ -68,16 +69,20 @@ export function DeliveryPartnerAuthProvider({ children }) {
     isAadhaarVerified
   }) => {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
+    const masked = aadhaarNumber ? maskAadhaar(aadhaarNumber) : '';
+    const last4 = aadhaarNumber ? String(aadhaarNumber).replace(/\D/g, '').slice(-4) : '';
     const partnerDoc = {
       uid: cred.user.uid,
       name,
       email,
       phone,
       photoUrl: photoUrl || '',
-      aadhaarNumber: aadhaarNumber || '',
-      aadhaarPhoto: aadhaarPhoto || '',
-      isAadhaarVerified: Boolean(isAadhaarVerified),
-      aadhaarVerifiedAt: isAadhaarVerified ? serverTimestamp() : null,
+      // Security compliance: Do not store raw 12-digit Aadhaar number
+      aadhaarMasked: masked,
+      aadhaarLast4: last4,
+      isAadhaarFormatVerified: Boolean(isAadhaarVerified),
+      kycStatus: isAadhaarVerified ? 'FORMAT_VALIDATED_PENDING_OFFICIAL' : 'UNVERIFIED',
+      hasIdentityDocument: Boolean(aadhaarPhoto),
       vehicleType: vehicleType || 'BIKE',
       vehicleNumber: vehicleNumber || '',
       status: 'APPROVED', // Pre-approved for instant demo/testability

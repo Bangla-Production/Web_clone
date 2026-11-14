@@ -1,11 +1,13 @@
 {
   "name": "restopulse-restaurant-pos",
   "version": "1.0.0",
+  "type": "module",
   "description": "RestoPulse - Cloud Restaurant Billing, POS & Kitchen Display System",
   "scripts": {
     "dev": "npm --prefix client run dev",
     "build": "npm --prefix client run build",
-    "preview": "npm --prefix client run preview"
+    "preview": "npm --prefix client run preview",
+    "test:security": "node tests/test_rules_isolation.js"
   },
   "keywords": [
     "restaurant-pos",

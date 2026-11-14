@@ -572,8 +572,8 @@ export default function DeliveryPartnerAuthPage({ defaultMode }) {
                 <ShieldCheck className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">UIDAI Aadhaar OTP</h3>
-                <p className="text-[11px] text-slate-400">Government Identity e-KYC</p>
+                <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">Rider KYC Phone Verification</h3>
+                <p className="text-[11px] text-slate-400">Identity Pre-Check & Format Verification</p>
               </div>
             </div>
 
@@ -585,7 +585,7 @@ export default function DeliveryPartnerAuthPage({ defaultMode }) {
                 </span>
               </div>
               <p className="text-[10px] text-slate-500 mt-2 text-center">
-                (Enter this 4-digit verification code below to verify your Aadhaar)
+                (Enter this 4-digit verification code. Note: Verhoeff format checksum is applied; full UIDAI biometric e-KYC is subject to compliance verification.)
               </p>
             </div>
 

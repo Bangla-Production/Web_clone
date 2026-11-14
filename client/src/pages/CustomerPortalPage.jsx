@@ -560,11 +560,11 @@ export default function CustomerPortalPage() {
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-lg font-black text-white">Join as an Abar Khabo Delivery Partner</h3>
                 <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[10px] font-bold">
-                  ✓ Aadhaar Verified
+                  ✓ Verified ID Partner
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-1 max-w-lg">
-                Earn competitive payouts on every delivery order. Register with your verified Aadhaar, mobile phone number, and vehicle details to get approved instantly.
+                Earn competitive payouts on every delivery order. Register with your verified identity, mobile phone number, and vehicle details to get approved instantly.
               </p>
             </div>
           </div>

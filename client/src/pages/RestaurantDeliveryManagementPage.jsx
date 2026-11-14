@@ -33,7 +33,7 @@ import { acceptDeliveryOrder, updateDeliveryStep } from '../services/deliveryPar
 import { calculateDistanceKm } from '../services/locationService';
 import { validateIndianPhone } from '../utils/phoneValidation';
 import { compressImageToBase64 } from '../utils/imageHelper';
-import { validateIndianAadhaar, formatAadhaar } from '../utils/aadhaarValidation';
+import { validateIndianAadhaar, formatAadhaar, maskAadhaar } from '../utils/aadhaarValidation';
 import LiveTrackingMap from '../components/delivery/LiveTrackingMap';
 import Modal from '../components/common/Modal';
 
@@ -180,8 +180,11 @@ export default function RestaurantDeliveryManagementPage() {
         name: quickRiderName.trim(),
         phone: phoneVal.cleaned,
         photoUrl: quickRiderPhoto,
-        aadhaarNumber: aadhaarVal.cleaned,
-        isAadhaarVerified: true,
+        // Security compliance: Do not store raw 12-digit Aadhaar number
+        aadhaarMasked: maskAadhaar(aadhaarVal.cleaned),
+        aadhaarLast4: aadhaarVal.cleaned.slice(-4),
+        isAadhaarFormatVerified: true,
+        kycStatus: 'FORMAT_VALIDATED_PENDING_OFFICIAL',
         vehicleType: quickVehicleType || 'BIKE',
         vehicleNumber: '',
         status: 'APPROVED',
@@ -708,7 +711,7 @@ export default function RestaurantDeliveryManagementPage() {
                               </span>
                             )}
                             <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-0.5">
-                              <ShieldCheck className="w-2.5 h-2.5" /> Aadhaar Verified
+                              <ShieldCheck className="w-2.5 h-2.5" /> ID Verified
                             </span>
                             <span className="text-[10px] font-mono text-cyan-400 font-bold">
                               📍 {r.distanceKm} km

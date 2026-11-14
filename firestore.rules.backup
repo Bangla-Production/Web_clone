@@ -1,0 +1,153 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.email == 'altcafe2026@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == 'super_admin')
+      );
+    }
+
+    function profile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.token.email)).data;
+    }
+
+    function hasActiveProfile() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.token.email)) &&
+        profile().get('status', 'active') == 'active' &&
+        (request.auth.token.email_verified == true || profile().get('authMethod', '') == 'staffId');
+    }
+
+    function isRestaurantAdmin(restId) {
+      return isSuperAdmin() || (
+        hasActiveProfile() &&
+        profile().role == 'restaurant_admin' &&
+        profile().restaurantId == restId
+      );
+    }
+
+    function isRestaurantStaff(restId) {
+      return isSuperAdmin() || (
+        hasActiveProfile() &&
+        profile().role in ['restaurant_admin', 'staff', 'waiter', 'cashier', 'kitchen'] &&
+        profile().restaurantId == restId
+      );
+    }
+
+    // 1. Users (profiles)
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
+    // 1b. Staff Lookup — maps a numeric Staff ID -> internal login email
+    match /staffLookup/{staffId} {
+      allow read: if true;
+      allow create, update, delete: if isAuthenticated();
+    }
+
+    // 2. Restaurants
+    match /restaurants/{restaurantId} {
+      allow read: if true;
+      allow create, update, delete: if isAuthenticated();
+
+      match /categories/{categoryId} {
+        allow read: if true;
+        allow write: if isAuthenticated();
+      }
+
+      match /menuItems/{itemId} {
+        allow read: if true;
+        allow write: if isAuthenticated();
+      }
+
+      match /tables/{tableId} {
+        allow read, write: if isAuthenticated();
+      }
+
+      match /orders/{orderId} {
+        allow read, create, update: if isRestaurantStaff(restaurantId);
+        // Only the restaurant admin can delete (used by Settings -> Data Cleanup)
+        allow delete: if isRestaurantAdmin(restaurantId);
+      }
+
+      match /kots/{kotId} {
+        allow read, create, update: if isRestaurantStaff(restaurantId);
+        // Only the restaurant admin can delete (used by Settings -> Data Cleanup)
+        allow delete: if isRestaurantAdmin(restaurantId);
+      }
+
+      match /invoices/{invoiceId} {
+        allow read, create, update: if isRestaurantStaff(restaurantId);
+        // Only the restaurant admin can delete (used by Settings -> Data Cleanup)
+        allow delete: if isRestaurantAdmin(restaurantId);
+      }
+
+      match /inventory/{itemId} {
+        allow read, write: if isAuthenticated();
+
+        match /transactions/{txnId} {
+          allow read, write: if isAuthenticated();
+        }
+      }
+
+      match /reservations/{resId} {
+        allow read: if isAuthenticated();
+        allow create: if true;
+        allow update, delete: if isAuthenticated();
+      }
+
+      match /auditLogs/{logId} {
+        allow read, write: if isAuthenticated();
+      }
+
+      match /settings/{settingId} {
+        allow read, write: if isAuthenticated();
+      }
+
+      match /customers/{custId} {
+        allow read, write: if isAuthenticated();
+      }
+
+      match /onlineOrders/{orderId} {
+        allow read, create, update: if true;
+        allow delete: if isAuthenticated();
+      }
+    }
+
+    // 3. Online Orders & Food Delivery (Customer / Restaurant / Delivery Partner)
+    match /onlineOrders/{orderId} {
+      allow read, create, update: if true;
+      allow delete: if isAuthenticated();
+    }
+
+    // 4. Live GPS Delivery Tracking
+    match /deliveryTracking/{orderId} {
+      allow read, create, update: if true;
+      allow delete: if isAuthenticated();
+    }
+
+    // 5. Delivery Partners (Riders)
+    match /deliveryPartners/{partnerId} {
+      allow read, create, update: if true;
+      allow delete: if isAuthenticated();
+    }
+
+    // 6. Customer Addresses
+    match /customerAddresses/{customerId} {
+      allow read, write: if true;
+
+      match /addresses/{addressId} {
+        allow read, write: if true;
+      }
+    }
+  }
+}
