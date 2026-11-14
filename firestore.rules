@@ -184,7 +184,10 @@ service cloud.firestore {
       allow create, delete: if isSuperAdmin();
 
       // Super Admin or assigned Restaurant Admin can update details (branding, address, phone)
-      allow update: if isSuperAdmin() || isRestaurantAdmin(restaurantId);
+      allow update: if isSuperAdmin() || (
+        isRestaurantAdmin(restaurantId) &&
+        request.resource.data.get('createdAt', '') == resource.data.get('createdAt', '')
+      );
 
       // Categories & Menu Items: Publicly readable for QR / online ordering; Admin write
       match /categories/{categoryId} {
@@ -279,9 +282,9 @@ service cloud.firestore {
       // READ PERMISSIONS:
       // 1. Super Admin
       // 2. Staff belonging to the order's restaurant (strict tenant isolation)
-      // 3. Customer who owns the order (by customerId or phone number)
+      // 3. Authenticated Customer who owns the order (by customerId or phone)
       // 4. Assigned Rider or active Rider viewing available orders
-      // 5. Direct lookup by known unique Order ID (for live tracking)
+      // Public users CANNOT read arbitrary/guessed order IDs.
       allow read: if isSuperAdmin() ||
         (isAuthenticated() && isRestaurantStaff(resource.data.restaurantId)) ||
         (isAuthenticated() && (
@@ -289,9 +292,7 @@ service cloud.firestore {
           resource.data.get('riderId', '') == request.auth.uid ||
           resource.data.get('partnerId', '') == request.auth.uid
         )) ||
-        (isDeliveryPartner() && resource.data.orderType == 'DELIVERY' &&
-         resource.data.status in ['CONFIRMED', 'PREPARING', 'READY', 'READY_FOR_PICKUP']) ||
-        true; // Public read by exact orderId enables live tracking without requiring login
+        (isDeliveryPartner() && resource.data.orderType == 'DELIVERY');
 
       // CREATE PERMISSIONS:
       // Customers or guests placing an order: must start with PLACED status and valid restaurantId
@@ -303,15 +304,22 @@ service cloud.firestore {
 
       // UPDATE PERMISSIONS:
       // 1. Super Admin: full access
-      // 2. Restaurant Staff: can only update orders belonging to their own restaurant
-      // 3. Assigned Rider: can update delivery status and assigned rider info
+      // 2. Restaurant Staff: can update order status for their own restaurant (cannot alter totalAmount, items, or restaurantId)
+      // 3. Assigned Rider: can only update delivery-specific fields (status, riderCoordinates, deliveryStatus, timestamps)
+      // Client updates CANNOT alter payment amounts, restaurant ownership, or ordered items!
       allow update: if isSuperAdmin() ||
         (isAuthenticated() && isRestaurantStaff(resource.data.restaurantId) &&
-         request.resource.data.restaurantId == resource.data.restaurantId) ||
+         request.resource.data.restaurantId == resource.data.restaurantId &&
+         request.resource.data.totalAmount == resource.data.totalAmount &&
+         request.resource.data.items == resource.data.items) ||
         (isAuthenticated() && (
           resource.data.get('riderId', '') == request.auth.uid ||
           request.resource.data.get('riderId', '') == request.auth.uid
-        ));
+        ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'deliveryStatus', 'riderId', 'riderName', 'riderPhone',
+          'riderPhoto', 'riderVehicle', 'riderVehicleNumber', 'isAadhaarVerified',
+          'assignedAt', 'pickedUpAt', 'deliveredAt', 'updatedAt'
+        ]));
 
       // DELETE PERMISSIONS:
       // Only Super Admin or the Restaurant Admin of that specific restaurant
@@ -324,8 +332,15 @@ service cloud.firestore {
     // ─────────────────────────────────────────────────────────────────────────
 
     match /deliveryTracking/{orderId} {
-      // Read: Public by unguessable Order ID (for customer tracking) and authenticated staff/riders
-      allow read: if true;
+      // READ: Public users CANNOT read GPS coordinates or private tracking by guessing order IDs.
+      // Only super admin, restaurant staff of that restaurant, customer owner, or assigned rider.
+      allow read: if isSuperAdmin() ||
+        (isAuthenticated() && isRestaurantStaff(resource.data.restaurantId)) ||
+        (isAuthenticated() && (
+          resource.data.get('customerId', '') == request.auth.uid ||
+          resource.data.get('riderId', '') == request.auth.uid ||
+          resource.data.get('partnerId', '') == request.auth.uid
+        ));
 
       // Create: Initialized when order is placed or dispatched
       allow create: if isAuthenticated() ||
@@ -334,15 +349,15 @@ service cloud.firestore {
       // Update:
       // 1. Super Admin
       // 2. Restaurant Staff for their own restaurant's orders
-      // 3. Rider updating GPS coordinates or delivery status
+      // 3. Assigned Rider updating GPS coordinates or delivery status
       allow update: if isSuperAdmin() ||
         (isAuthenticated() && isRestaurantStaff(resource.data.restaurantId)) ||
         (isAuthenticated() && (
           resource.data.get('riderId', '') == request.auth.uid ||
           request.resource.data.get('riderId', '') == request.auth.uid
-        )) ||
-        // Allow live GPS coordinate stream updates
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['riderCoordinates', 'lastUpdatedAt']);
+        ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'riderCoordinates', 'status', 'lastUpdatedAt', 'riderPhone', 'riderName', 'riderVehicle', 'riderPhoto', 'isAadhaarVerified'
+        ]));
 
       allow delete: if isSuperAdmin() ||
         (isAuthenticated() && isRestaurantAdmin(resource.data.restaurantId));
@@ -370,12 +385,18 @@ service cloud.firestore {
         hasActiveProfile();
 
       // Update:
-      // 1. Super Admin
-      // 2. Delivery partner updating their availability, GPS coordinates, status
-      // 3. Restaurant staff assigning an order
+      // 1. Super Admin: full access
+      // 2. Delivery partner updating availability & GPS coordinates
+      //    (CANNOT alter isAadhaarVerified, kycStatus, status, or aadhaarMasked)
+      // 3. Restaurant staff assigning an order (can only modify isAvailable, currentOrderId)
       allow update: if isSuperAdmin() ||
-        (isAuthenticated() && request.auth.uid == partnerId) ||
-        hasActiveProfile();
+        (isAuthenticated() && request.auth.uid == partnerId &&
+         request.resource.data.get('isAadhaarVerified', false) == resource.data.get('isAadhaarVerified', false) &&
+         request.resource.data.get('kycStatus', '') == resource.data.get('kycStatus', '') &&
+         request.resource.data.get('status', 'APPROVED') == resource.data.get('status', 'APPROVED') &&
+         request.resource.data.get('aadhaarMasked', '') == resource.data.get('aadhaarMasked', '')) ||
+        (hasActiveProfile() &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isAvailable', 'currentOrderId', 'updatedAt']));
 
       allow delete: if isSuperAdmin();
     }

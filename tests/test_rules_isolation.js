@@ -150,7 +150,12 @@ class SecurityContext {
         // Root restaurant doc
         if (operation === 'read') return true;
         if (operation === 'create' || operation === 'delete') return this.isSuperAdmin();
-        if (operation === 'update') return this.isSuperAdmin() || this.isRestaurantAdmin(restId);
+        if (operation === 'update') {
+          return this.isSuperAdmin() || (
+            this.isRestaurantAdmin(restId) &&
+            (requestResourceData?.createdAt === undefined || requestResourceData?.createdAt === existingResourceData?.createdAt)
+          );
+        }
       }
 
       if (['categories', 'menuItems'].includes(sub)) {
@@ -198,10 +203,7 @@ class SecurityContext {
             (existingResourceData?.customerId === this.auth.uid ||
               existingResourceData?.riderId === this.auth.uid ||
               existingResourceData?.partnerId === this.auth.uid)) ||
-          (this.isDeliveryPartner() &&
-            existingResourceData?.orderType === 'DELIVERY' &&
-            ['CONFIRMED', 'PREPARING', 'READY', 'READY_FOR_PICKUP'].includes(existingResourceData?.status)) ||
-          true // Direct lookup by known order ID
+          (this.isDeliveryPartner() && existingResourceData?.orderType === 'DELIVERY')
         );
       }
 
@@ -217,11 +219,15 @@ class SecurityContext {
         const isStaffOfTenant =
           this.isAuthenticated() &&
           this.isRestaurantStaff(existingResourceData?.restaurantId) &&
-          requestResourceData?.restaurantId === existingResourceData?.restaurantId;
+          requestResourceData?.restaurantId === existingResourceData?.restaurantId &&
+          requestResourceData?.totalAmount === existingResourceData?.totalAmount;
 
+        // Rider can only update delivery-related fields (cannot touch totalAmount, paymentStatus, etc.)
         const isAssignedRider =
           this.isAuthenticated() &&
-          (existingResourceData?.riderId === this.auth.uid || requestResourceData?.riderId === this.auth.uid);
+          (existingResourceData?.riderId === this.auth.uid || requestResourceData?.riderId === this.auth.uid) &&
+          requestResourceData?.totalAmount === existingResourceData?.totalAmount &&
+          requestResourceData?.paymentStatus === existingResourceData?.paymentStatus;
 
         return this.isSuperAdmin() || isStaffOfTenant || isAssignedRider;
       }
@@ -233,7 +239,16 @@ class SecurityContext {
 
     // 5. /deliveryTracking/{orderId}
     if (collection === 'deliveryTracking') {
-      if (operation === 'read') return true;
+      if (operation === 'read') {
+        return (
+          this.isSuperAdmin() ||
+          (this.isAuthenticated() && this.isRestaurantStaff(existingResourceData?.restaurantId)) ||
+          (this.isAuthenticated() &&
+            (existingResourceData?.customerId === this.auth.uid ||
+              existingResourceData?.riderId === this.auth.uid ||
+              existingResourceData?.partnerId === this.auth.uid))
+        );
+      }
       if (operation === 'create') return this.isAuthenticated() || requestResourceData?.restaurantId != null;
       if (operation === 'update') {
         const isStaffOfTenant = this.isAuthenticated() && this.isRestaurantStaff(existingResourceData?.restaurantId);
@@ -251,8 +266,21 @@ class SecurityContext {
       if (operation === 'read') {
         return this.isSuperAdmin() || (this.isAuthenticated() && this.auth.uid === partnerId) || this.hasActiveProfile();
       }
-      if (operation === 'create' || operation === 'update') {
+      if (operation === 'create') {
         return this.isSuperAdmin() || (this.isAuthenticated() && this.auth.uid === partnerId) || this.hasActiveProfile();
+      }
+      if (operation === 'update') {
+        if (this.isSuperAdmin()) return true;
+        // If partner is updating their own profile, KYC & verification fields are strictly immutable
+        if (this.isAuthenticated() && this.auth.uid === partnerId) {
+          const alteredKyc =
+            requestResourceData?.isAadhaarVerified !== existingResourceData?.isAadhaarVerified ||
+            requestResourceData?.kycStatus !== existingResourceData?.kycStatus ||
+            requestResourceData?.status !== existingResourceData?.status ||
+            requestResourceData?.aadhaarMasked !== existingResourceData?.aadhaarMasked;
+          return !alteredKyc;
+        }
+        return this.hasActiveProfile();
       }
       if (operation === 'delete') return this.isSuperAdmin();
     }
@@ -325,7 +353,10 @@ const mockDb = {
   'deliveryPartners/rider_456': {
     name: 'Amit Kumar',
     phone: '9876543210',
+    isAadhaarVerified: false,
+    kycStatus: 'UNVERIFIED',
     status: 'APPROVED',
+    aadhaarMasked: '•••• •••• 1234',
   },
 };
 
@@ -336,6 +367,7 @@ const waiterACtx = new SecurityContext({ uid: 'waiter_a_uid', token: { email: 'w
 const kitchenACtx = new SecurityContext({ uid: 'kitchen_a_uid', token: { email: 'kitchen_a@resta.local' } }, mockDb);
 const adminBCtx = new SecurityContext({ uid: 'admin_b_uid', token: { email: 'admin_b@restb.com', email_verified: true } }, mockDb);
 const customerCtx = new SecurityContext({ uid: 'cust_123', token: { email: 'customer@test.com', email_verified: true } }, mockDb);
+const otherCustomerCtx = new SecurityContext({ uid: 'cust_999', token: { email: 'other@test.com', email_verified: true } }, mockDb);
 const riderCtx = new SecurityContext({ uid: 'rider_456', token: { email: '9876543210@rider.abarkhabo.local' } }, mockDb);
 const unauthCtx = new SecurityContext(null, mockDb);
 
@@ -413,8 +445,8 @@ assert(
 console.log('\n3. ONLINE ORDERS & FOOD DELIVERY SECURITY');
 console.log('-'.repeat(60));
 
-const onlineOrderA = { id: 'ord_online_a', restaurantId: 'rest_a', totalAmount: 350, status: 'PLACED', customerId: 'cust_123' };
-const onlineOrderB = { id: 'ord_online_b', restaurantId: 'rest_b', totalAmount: 450, status: 'PLACED', customerId: 'cust_999' };
+const onlineOrderA = { id: 'ord_online_a', restaurantId: 'rest_a', totalAmount: 350, paymentStatus: 'PENDING', status: 'PLACED', customerId: 'cust_123' };
+const onlineOrderB = { id: 'ord_online_b', restaurantId: 'rest_b', totalAmount: 450, paymentStatus: 'PENDING', status: 'PLACED', customerId: 'cust_999' };
 
 // Test 16: Customer placing a valid order
 assert(
@@ -433,32 +465,32 @@ assert(
 // Test 18: Admin A updating Online Order for Restaurant A
 assert(
   'Admin A can update Online Order for Restaurant A',
-  adminACtx.evaluate('onlineOrders/ord_online_a', 'update', { restaurantId: 'rest_a', status: 'CONFIRMED' }, onlineOrderA),
+  adminACtx.evaluate('onlineOrders/ord_online_a', 'update', { restaurantId: 'rest_a', status: 'CONFIRMED', totalAmount: 350 }, onlineOrderA),
   true
 );
 
 // Test 19: Admin A attempting to update Online Order for Restaurant B
 assert(
   'Admin A CANNOT update Online Order for Restaurant B (Cross-tenant blocked)',
-  adminACtx.evaluate('onlineOrders/ord_online_b', 'update', { restaurantId: 'rest_b', status: 'CONFIRMED' }, onlineOrderB),
+  adminACtx.evaluate('onlineOrders/ord_online_b', 'update', { restaurantId: 'rest_b', status: 'CONFIRMED', totalAmount: 450 }, onlineOrderB),
   false
 );
 
 // Test 20: Kitchen A updating food status to COOKING for Restaurant A
 assert(
   'Kitchen A can update Online Order cooking status for Restaurant A',
-  kitchenACtx.evaluate('onlineOrders/ord_online_a', 'update', { restaurantId: 'rest_a', status: 'COOKING' }, onlineOrderA),
+  kitchenACtx.evaluate('onlineOrders/ord_online_a', 'update', { restaurantId: 'rest_a', status: 'COOKING', totalAmount: 350 }, onlineOrderA),
   true
 );
 
 // Test 21: Kitchen A attempting to update food status for Restaurant B
 assert(
   'Kitchen A CANNOT update Online Order for Restaurant B (Cross-tenant blocked)',
-  kitchenACtx.evaluate('onlineOrders/ord_online_b', 'update', { restaurantId: 'rest_b', status: 'COOKING' }, onlineOrderB),
+  kitchenACtx.evaluate('onlineOrders/ord_online_b', 'update', { restaurantId: 'rest_b', status: 'COOKING', totalAmount: 450 }, onlineOrderB),
   false
 );
 
-console.log('\n4. CUSTOMER DATA PRIVACY & DELIVERY PARTNER BOUNDARIES');
+console.log('\n4. CUSTOMER DATA PRIVACY & PUBLIC ID GUESSING PREVENTION');
 console.log('-'.repeat(60));
 
 // Test 22: Customer reading their own addresses
@@ -470,15 +502,46 @@ assert('Customer 123 CANNOT read Customer 999 saved addresses', customerCtx.eval
 // Test 24: Unauthenticated user attempting to access customer addresses
 assert('Unauthenticated user CANNOT read customer addresses', unauthCtx.evaluate('customers/cust_123/addresses/addr_1', 'read'), false);
 
-// Test 25: Rider updating live GPS tracking on assigned order
-const trackingOrder = { id: 'ord_online_a', restaurantId: 'rest_a', riderId: 'rider_456' };
+// Test 25: Public/unauthenticated user attempting to read order using guessed Order ID
+assert(
+  'Public user CANNOT read private online order using guessed ID (Requirement 5)',
+  unauthCtx.evaluate('onlineOrders/ord_online_a', 'read', null, onlineOrderA),
+  false
+);
+
+// Test 26: Other customer attempting to read someone else order
+assert(
+  'Customer 999 CANNOT read Customer 123 order (Requirement 6)',
+  otherCustomerCtx.evaluate('onlineOrders/ord_online_a', 'read', null, onlineOrderA),
+  false
+);
+
+// Test 27: Public user attempting to read live GPS coordinates of rider
+const trackingOrder = { id: 'ord_online_a', restaurantId: 'rest_a', customerId: 'cust_123', riderId: 'rider_456' };
+assert(
+  'Public user CANNOT read live GPS coordinates using guessed ID (Requirement 5)',
+  unauthCtx.evaluate('deliveryTracking/ord_online_a', 'read', null, trackingOrder),
+  false
+);
+
+// Test 28: Customer who owns the order CAN read live tracking
+assert(
+  'Customer owning order CAN read live tracking',
+  customerCtx.evaluate('deliveryTracking/ord_online_a', 'read', null, trackingOrder),
+  true
+);
+
+console.log('\n5. DELIVERY PARTNER FIELD IMMUTABILITY & KYC SECURITY');
+console.log('-'.repeat(60));
+
+// Test 29: Assigned Rider updating GPS tracking coordinates
 assert(
   'Assigned Rider can update GPS tracking coordinates',
   riderCtx.evaluate('deliveryTracking/ord_online_a', 'update', { riderCoordinates: { lat: 22.5, lng: 88.3 } }, trackingOrder),
   true
 );
 
-// Test 26: Unassigned Rider attempting to update someone else delivery tracking
+// Test 30: Unassigned Rider attempting to hijack someone else delivery tracking
 const unassignedRiderCtx = new SecurityContext({ uid: 'rider_other', token: { email: 'other@rider.abarkhabo.local' } }, mockDb);
 assert(
   'Unassigned Rider CANNOT hijack delivery tracking',
@@ -486,19 +549,41 @@ assert(
   false
 );
 
-console.log('\n5. SUPER ADMIN PLATFORM-WIDE ACCESS');
+// Test 31: Assigned Rider attempting to change totalAmount or paymentStatus on order
+assert(
+  'Assigned Rider CANNOT alter order paymentStatus or totalAmount (Requirement 7 & 8)',
+  riderCtx.evaluate('onlineOrders/ord_online_a', 'update', { totalAmount: 0, paymentStatus: 'PAID' }, onlineOrderA),
+  false
+);
+
+// Test 32: Rider attempting to tamper with their own KYC verification status
+const riderDoc = mockDb['deliveryPartners/rider_456'];
+assert(
+  'Rider CANNOT self-verify KYC or tamper with isAadhaarVerified (Requirement 8)',
+  riderCtx.evaluate('deliveryPartners/rider_456', 'update', { ...riderDoc, isAadhaarVerified: true, kycStatus: 'VERIFIED' }, riderDoc),
+  false
+);
+
+// Test 33: Rider allowed to update their own online/offline availability
+assert(
+  'Rider can update their own availability and GPS',
+  riderCtx.evaluate('deliveryPartners/rider_456', 'update', { ...riderDoc, isOnline: true }, riderDoc),
+  true
+);
+
+console.log('\n6. SUPER ADMIN PLATFORM-WIDE ACCESS');
 console.log('-'.repeat(60));
 
-// Test 27: Super admin can manage Restaurant A
+// Test 34: Super admin can manage Restaurant A
 assert('Super Admin can manage Restaurant A', superAdminCtx.evaluate('restaurants/rest_a', 'update'), true);
 
-// Test 28: Super admin can manage Restaurant B
+// Test 35: Super admin can manage Restaurant B
 assert('Super Admin can manage Restaurant B', superAdminCtx.evaluate('restaurants/rest_b', 'update'), true);
 
-// Test 29: Super admin can manage aggregator connections across tenants
+// Test 36: Super admin can manage aggregator connections across tenants
 assert('Super Admin can manage aggregator connections across any tenant', superAdminCtx.evaluate('restaurants/rest_a/aggregatorConnections/zomato_1', 'read'), true);
 
-// Test 30: Super admin can delete customer profiles or bad records
+// Test 37: Super admin can delete customer profiles or bad records
 assert('Super Admin can delete users and records', superAdminCtx.evaluate('users/bad_actor@test.com', 'delete', null, { restaurantId: 'rest_a' }), true);
 
 console.log('\n' + '='.repeat(80));
