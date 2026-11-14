@@ -1,7 +1,7 @@
 # Abar Khabo: Multi-Tenant Aggregator Platform — Project Progress Tracker
 
 ## Status Overview
-* **Current Stage:** STAGE 2 PART B (Step 5 Complete — Awaiting User Approval to Begin Step 6)
+* **Current Stage:** STAGE 2 PART B (Step 8 Complete — Awaiting User Approval to Begin Step 9)
 * **Target Platforms:** Swiggy, Zomato, Abar Khabo Direct Ordering
 * **Target Architecture:** Multi-Tenant SaaS, Outlet Hierarchy, Node.js + TypeScript Backend, Firestore Database, React + Vite Frontend.
 
@@ -13,7 +13,7 @@
 | :--- | :--- | :--- | :--- |
 | **STAGE 0** | Repository Inspection, Architecture Audit & Risk Analysis | **COMPLETE** | 2026-11-15 |
 | **STAGE 1** | Security & Strict Tenant Isolation | **COMPLETE** | 2026-11-15 |
-| **STAGE 2** | Database Schema & Outlets Model | **PART B IN PROGRESS** (Step 5 Complete; Awaiting Step 6 Approval) | 2026-11-15 |
+| **STAGE 2** | Database Schema & Outlets Model | **PART B IN PROGRESS** (Step 8 Complete; Awaiting Step 9 Approval) | 2026-11-15 |
 | **STAGE 3** | Backend Integration Infrastructure (`server/`) | QUEUED | - |
 | **STAGE 4** | Common Aggregator Adapter Framework | QUEUED | - |
 | **STAGE 5** | Mock Swiggy & Zomato Integration & Test Sandbox | QUEUED | - |
@@ -387,4 +387,57 @@
   * **Live Firestore Emulator (`tests/emulator_rules_unit.test.js`):** 55 / 55 scenarios passed.
   * **Vite Production Build:** 1,680 modules transformed cleanly in 4.51s with 0 errors.
 * **Next Authorized Step:**
-  * Awaiting user review and authorization to proceed to **Step 8 (Delivery Management, Rider Dispatch & Fleet Logistics)**.
+  * Step 8 completed.
+
+---
+
+## Stage 2 Part B Summary (Step 8: Delivery Management, Rider Dispatch & Fleet Logistics)
+
+* **What was implemented:**
+  * **UID-Based Delivery Partner Identity & Profile Model:**
+    * Rider accounts use Firebase Auth UID as primary key: `users/{uid}` with `role: 'delivery_partner'` and `deliveryPartners/{uid}` fleet profile.
+    * Explicit tenant and outlet binding: `restaurantId`, `assignedOutletIds`, `allOutlets`.
+    * Aadhaar & KYC compliance: masked Aadhaar (`•••• •••• 1234`), status `SIMULATION_TEST_VERIFIED`, explicit disclaimers preventing claims of official UIDAI database validation.
+  * **Multi-Tenant Fleet Isolation & Outlet Visibility:**
+    * In-house riders filtered strictly by tenant brand and assigned outlet ID.
+    * Branch 1 riders cannot be assigned to Branch 2 orders unless explicitly assigned.
+  * **Aggregator Fleet Protection:**
+    * Aggregator orders handled by external fleets (`SWIGGY_FLEET`, `ZOMATO_FLEET`) are isolated from internal fleet dispatch. Attempting to assign in-house riders throws an error unless `allowSelfDeliveryOverride` is enabled.
+  * **Rider Dispatch & Assignment Engine (`deliveryDispatchService.js`):**
+    * Manual assignment (`assignRiderToOrder`) with audit trails and capacity checks (`maxActiveDeliveries`).
+    * Reassignment (`reassignRider`) releasing previous riders and logging reassignment events.
+    * Automatic dispatch (`autoAssignRider`) selecting the closest available online rider within outlet pool.
+    * Rider acceptance (`acceptAssignment`) and rejection (`rejectAssignment`) workflows.
+  * **11-State Delivery Lifecycle Machine:**
+    * Strict transitions: `DELIVERY_PENDING` $\rightarrow$ `RIDER_ASSIGNED` $\rightarrow$ `RIDER_ACCEPTED` $\rightarrow$ `ARRIVED_AT_RESTAURANT` $\rightarrow$ `PICKED_UP` $\rightarrow$ `OUT_FOR_DELIVERY` $\rightarrow$ `ARRIVED_AT_CUSTOMER` $\rightarrow$ `DELIVERED`.
+    * Failure and return flows: `DELIVERY_FAILED` and `RETURNED` with failure reasons (`CUSTOMER_UNAVAILABLE`, `WRONG_ADDRESS`, etc.).
+    * Dual OTP verification: pickup OTP from kitchen (`pickupOtp`) and delivery OTP from customer (`deliveryOtp`).
+  * **Geofencing & Dynamic Delivery Pricing Engine (`deliveryZoneService.js`):**
+    * Haversine formula distance calculation (`calculateDistanceKm`).
+    * Outlet serviceability checks (`checkServiceability` checking coordinates, max radius, and min order values).
+    * Dynamic fee calculation (`calculateDeliveryFee` supporting `DISTANCE_BASED`, `FIXED`, `FREE`, and threshold overrides).
+  * **Separation of Food Prep vs Delivery Status:**
+    * Kitchen cooking stages (`NEW` $\rightarrow$ `PREPARING` $\rightarrow$ `READY`) remain orthogonal to rider status. Rider actions never mutate inventory stock or invoice totals.
+  * **Deterministic Operational Delivery Events (`deliveryEvents`):**
+    * Idempotent audit logs at `restaurants/{restaurantId}/deliveryEvents/{eventId}` with SHA-256 deduplication.
+    * Firestore rules: Staff read allowed, client writes strictly blocked (Super Admin / Admin SDK backend only).
+* **Files Created:**
+  * `server/src/services/deliveryZoneService.js`
+  * `server/src/services/deliveryDispatchService.js`
+  * `client/src/services/deliveryDispatchClientService.js`
+  * `tests/test_delivery_fleet_engine.js`
+  * `STAGE2_STEP8_IMPLEMENTATION_REPORT.md`
+* **Files Modified:**
+  * `client/src/services/firestoreService.js`
+  * `firestore.rules`
+  * `tests/test_rules_isolation.js`
+  * `tests/emulator_rules_unit.test.js`
+  * `package.json`
+  * `PROJECT_PROGRESS.md`
+* **Test Verification Results:**
+  * **Step 8 Unit Suite (`tests/test_delivery_fleet_engine.js`):** 63 / 63 tests passed covering all 23 categories.
+  * **Complete Regression Suite (`npm test`):** 564 / 564 assertions passed across all 9 test suites.
+  * **Live Firestore Emulator (`tests/emulator_rules_unit.test.js`):** 59 / 59 scenarios passed.
+  * **Vite Production Build:** 1,681 modules transformed cleanly in 4.62s with 0 errors.
+* **Next Authorized Step:**
+  * Awaiting user review and authorization to proceed to **Step 9**.

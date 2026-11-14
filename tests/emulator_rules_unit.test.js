@@ -236,6 +236,14 @@ async function main() {
       outletId: 'rest_b_main',
       processingStatus: 'PROCESSED'
     });
+    // Step 8: Delivery Events
+    await db.doc('restaurants/rest_a/deliveryEvents/evt_seed_1').set({
+      eventId: 'evt_seed_1',
+      restaurantId: 'rest_a',
+      orderId: 'SWIGGY_rest_a_main_1001',
+      eventType: 'DISPATCHED',
+      createdAt: '2026-11-15T00:00:00.000Z'
+    });
   });
 
   // Authenticated Contexts
@@ -659,6 +667,31 @@ async function main() {
   // Scenario 55: Unauthenticated reading inventoryStock (Forbidden)
   await runTest('Unauthenticated reading inventoryStock (Forbidden)', async () => {
     await assertFails(dbUnauth.doc('restaurants/rest_a/outlets/rest_a_main/inventoryStock/ing_basmati').get());
+  });
+
+  // Scenario 56: Staff A reading deliveryEvents in Restaurant A (Allowed)
+  await runTest('Staff A reading deliveryEvents in Restaurant A (Allowed)', async () => {
+    await assertSucceeds(dbStaffUid.doc('restaurants/rest_a/deliveryEvents/evt_seed_1').get());
+  });
+
+  // Scenario 57: Staff A writing deliveryEvents directly (Blocked - Admin SDK only)
+  await runTest('Staff A writing deliveryEvents directly (Blocked - Admin SDK only)', async () => {
+    await assertFails(dbStaffUid.doc('restaurants/rest_a/deliveryEvents/evt_fake_client').set({
+      eventType: 'DISPATCH',
+      orderId: 'fake_order'
+    }));
+  });
+
+  // Scenario 58: Unauthenticated user reading deliveryEvents (Forbidden)
+  await runTest('Unauthenticated user reading deliveryEvents (Forbidden)', async () => {
+    await assertFails(dbUnauth.doc('restaurants/rest_a/deliveryEvents/evt_seed_1').get());
+  });
+
+  // Scenario 59: Admin A updating Delivery Partner currentActiveOrders (Allowed)
+  await runTest('Admin A updating Delivery Partner currentActiveOrders (Allowed)', async () => {
+    await assertSucceeds(dbAdminA.doc('deliveryPartners/rider_1').update({
+      currentActiveOrders: ['SWIGGY_rest_a_main_1001']
+    }));
   });
 
   await testEnv.cleanup();

@@ -311,6 +311,12 @@ service cloud.firestore {
         allow write: if isSuperAdmin();
       }
 
+      // Delivery Operational Audit Events
+      match /deliveryEvents/{eventId} {
+        allow read: if isRestaurantStaff(restaurantId);
+        allow write: if isSuperAdmin();
+      }
+
       // Table Reservations: Public guest create; Staff manage
       match /reservations/{resId} {
         allow read: if isRestaurantStaff(restaurantId);
@@ -579,7 +585,7 @@ service cloud.firestore {
          request.resource.data.get('status', 'APPROVED') == resource.data.get('status', 'APPROVED') &&
          request.resource.data.get('aadhaarMasked', '') == resource.data.get('aadhaarMasked', '')) ||
         (hasActiveProfile() &&
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isAvailable', 'currentOrderId', 'updatedAt']));
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isAvailable', 'currentOrderId', 'currentActiveOrders', 'updatedAt']));
 
       allow delete: if isSuperAdmin();
     }

@@ -1911,6 +1911,11 @@ export {
   synthesizeModernStockFromLegacy
 } from './inventoryService.js';
 
+export {
+  getAvailableRidersForOutlet,
+  subscribeToDeliveryEvents
+} from './deliveryDispatchClientService.js';
+
 export async function getInventory(restaurantId) {
   try {
     const colRef = collection(db, 'restaurants', restaurantId, 'inventory');

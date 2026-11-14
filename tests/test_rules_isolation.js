@@ -227,7 +227,7 @@ class SecurityContext {
         );
       }
 
-      if (sub === 'inventoryLedger') {
+      if (sub === 'inventoryLedger' || sub === 'deliveryEvents') {
         if (operation === 'read') return this.isRestaurantStaff(restId);
         return this.isSuperAdmin();
       }
@@ -1155,6 +1155,34 @@ assert(
 assert(
   'Restaurant Admin A can create Supplier record in Restaurant A',
   adminACtx.evaluate('restaurants/rest_a/suppliers/sup_bengal', 'create', { name: 'Bengal Traders' }),
+  true
+);
+
+// Test 86: Restaurant Staff reading deliveryEvents in Restaurant A (Allowed)
+assert(
+  'Restaurant Staff reading deliveryEvents in Restaurant A (Allowed)',
+  adminACtx.evaluate('restaurants/rest_a/deliveryEvents/evt_001', 'read'),
+  true
+);
+
+// Test 87: Restaurant Staff CANNOT write deliveryEvents directly (Admin SDK only)
+assert(
+  'Restaurant Staff CANNOT write deliveryEvents directly (Admin SDK only)',
+  adminACtx.evaluate('restaurants/rest_a/deliveryEvents/evt_001', 'create', { eventType: 'DISPATCH' }),
+  false
+);
+
+// Test 88: Unauthenticated user CANNOT read deliveryEvents (Forbidden)
+assert(
+  'Unauthenticated user CANNOT read deliveryEvents (Forbidden)',
+  unauthCtx.evaluate('restaurants/rest_a/deliveryEvents/evt_001', 'read'),
+  false
+);
+
+// Test 89: Restaurant Admin A updating Delivery Partner currentActiveOrders
+assert(
+  'Restaurant Admin A updating Delivery Partner currentActiveOrders',
+  adminACtx.evaluate('deliveryPartners/rider_456', 'update', { currentActiveOrders: ['ord_01'] }, riderDoc),
   true
 );
 
