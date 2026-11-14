@@ -82,11 +82,14 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Java Runtime (for Firebase Emulator)
+      - name: Setup Java 21 Runtime (for Firebase Emulator)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
+
+      - name: Verify Java Version
+        run: java -version
 
       - name: Setup Node.js 20.x
         uses: actions/setup-node@v4
