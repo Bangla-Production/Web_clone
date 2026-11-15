@@ -28,6 +28,8 @@ import { DELIVERY_STATUS, DELIVERY_STATUS_LABELS } from '../services/deliverySer
 import LiveTrackingMap from '../components/delivery/LiveTrackingMap';
 import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../firebase/config';
 
 const TIMELINE_STEPS = [
   { key: 'PLACED', label: 'Order Placed', desc: 'Sent to restaurant' },
@@ -105,39 +107,99 @@ export default function CustomerOrderTrackingPage() {
   const prevStatusRef = useRef(null);
   const hasNotifiedInitialRef = useRef(false);
 
-  // Subscribe to live order data with anonymous auth pre-check
+  // Subscribe to live order data with anonymous auth pre-check & polling fallback
   useEffect(() => {
     if (!orderId) return;
 
     let isMounted = true;
-    ensureCustomerAuthSession().catch(() => {});
+    let unsubOrder = () => {};
+    let unsubTracking = () => {};
 
-    const unsubOrder = subscribeToOnlineOrderById(orderId, (data) => {
-      if (!isMounted) return;
-      setOrder(data);
-      setLoading(false);
-    });
+    // Immediate local cache check for instant render
+    try {
+      const single = localStorage.getItem(`abar_khabo_order_${orderId}`);
+      if (single) {
+        setOrder(JSON.parse(single));
+        setLoading(false);
+      }
+      const trackingSingle = localStorage.getItem(`abar_khabo_tracking_${orderId}`);
+      if (trackingSingle) setTracking(JSON.parse(trackingSingle));
+    } catch {}
 
-    const unsubTracking = subscribeToDeliveryTracking(orderId, (data) => {
+    const initSubscription = async () => {
+      try {
+        await ensureCustomerAuthSession();
+      } catch {}
+
       if (!isMounted) return;
-      setTracking(data);
-    });
+
+      unsubOrder = subscribeToOnlineOrderById(orderId, (data) => {
+        if (!isMounted) return;
+        setOrder(data);
+        setLoading(false);
+      });
+
+      unsubTracking = subscribeToDeliveryTracking(orderId, (data) => {
+        if (!isMounted) return;
+        setTracking(data);
+      });
+    };
+
+    initSubscription();
+
+    // 2.5s polling fallback to guarantee real-time updates even if WebSocket connection drops or gets blocked
+    const pollInterval = setInterval(async () => {
+      if (!isMounted) return;
+      try {
+        const oSnap = await getDoc(doc(db, 'onlineOrders', orderId));
+        if (oSnap.exists() && isMounted) {
+          setOrder((prev) => ({ ...prev, ...oSnap.data(), id: oSnap.id }));
+        }
+        const tSnap = await getDoc(doc(db, 'deliveryTracking', orderId));
+        if (tSnap.exists() && isMounted) {
+          setTracking((prev) => ({ ...prev, ...tSnap.data(), id: tSnap.id }));
+        }
+      } catch {
+        try {
+          const single = localStorage.getItem(`abar_khabo_order_${orderId}`);
+          if (single && isMounted) {
+            setOrder((prev) => ({ ...prev, ...JSON.parse(single) }));
+          }
+          const trackingSingle = localStorage.getItem(`abar_khabo_tracking_${orderId}`);
+          if (trackingSingle && isMounted) {
+            setTracking((prev) => ({ ...prev, ...JSON.parse(trackingSingle) }));
+          }
+        } catch {}
+      }
+    }, 2500);
 
     return () => {
       isMounted = false;
       unsubOrder();
       unsubTracking();
+      clearInterval(pollInterval);
       stopRiderLocationBroadcast();
     };
   }, [orderId]);
 
+  const assignedRider = order?.riderName || tracking?.riderName;
+  const stepTracking = normalizeTimelineStep(tracking?.status, assignedRider);
+  const stepDelivery = normalizeTimelineStep(order?.deliveryStatus, assignedRider);
+  const stepOrder = normalizeTimelineStep(order?.status, assignedRider);
+  const activeStepIdx = Math.max(stepTracking, stepDelivery, stepOrder);
+
+  const isCancelled =
+    order?.status === 'CANCELLED' ||
+    tracking?.status === 'CANCELLED' ||
+    order?.deliveryStatus === 'CANCELLED';
+  const currentStatus = isCancelled ? 'CANCELLED' : (TIMELINE_STEPS[activeStepIdx]?.key || 'PLACED');
+
   // Alert customer whenever order status transitions or rider is assigned
   useEffect(() => {
-    const currentStatus = tracking?.status || order?.deliveryStatus || order?.status;
     if (!currentStatus) return;
 
     if (prevStatusRef.current && prevStatusRef.current !== currentStatus) {
-      const riderName = order?.riderName || tracking?.riderName || 'Delivery Partner';
+      const riderName = assignedRider || 'Delivery Partner';
       if (currentStatus === 'RIDER_ASSIGNED') {
         playDispatchChime();
         toast.success(`🛵 Rider Assigned! ${riderName} has been assigned to your order.`);
@@ -157,13 +219,13 @@ export default function CustomerOrderTrackingPage() {
       }
     } else if (!hasNotifiedInitialRef.current && (order || tracking)) {
       hasNotifiedInitialRef.current = true;
-      const riderName = order?.riderName || tracking?.riderName;
+      const riderName = assignedRider;
       if (riderName && (currentStatus === 'RIDER_ASSIGNED' || currentStatus === 'OUT_FOR_DELIVERY' || currentStatus === 'PICKED_UP')) {
         toast.info(`🛵 Order in progress: ${riderName} is assigned to your delivery.`);
       }
     }
     prevStatusRef.current = currentStatus;
-  }, [tracking?.status, order?.deliveryStatus, order?.status, order?.riderName, tracking?.riderName]);
+  }, [currentStatus, assignedRider]);
 
   const handleSimulateRider = () => {
     if (isSimulating) {
@@ -232,10 +294,6 @@ export default function CustomerOrderTrackingPage() {
     );
   }
 
-  const currentStatus = tracking?.status || order?.deliveryStatus || order?.status || 'PLACED';
-  const assignedRider = order?.riderName || tracking?.riderName;
-  const activeStepIdx = normalizeTimelineStep(currentStatus, assignedRider);
-  const isCancelled = order.status === 'CANCELLED' || tracking?.status === 'CANCELLED' || currentStatus === 'CANCELLED';
   const isFinished = isCancelled || activeStepIdx === 6;
   const canCancel = !isFinished;
 

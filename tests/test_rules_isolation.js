@@ -304,7 +304,7 @@ class SecurityContext {
         // Rider can only update delivery-related fields (cannot touch totalAmount, paymentStatus, etc.)
         const isAssignedRider =
           this.isAuthenticated() &&
-          (existingResourceData?.riderId === this.auth.uid || requestResourceData?.riderId === this.auth.uid) &&
+          (existingResourceData?.riderId === this.auth.uid || requestResourceData?.riderId === this.auth.uid || this.isDeliveryPartner()) &&
           requestResourceData?.totalAmount === existingResourceData?.totalAmount &&
           requestResourceData?.paymentStatus === existingResourceData?.paymentStatus;
 
@@ -333,13 +333,18 @@ class SecurityContext {
           (this.isAuthenticated() &&
             (existingResourceData?.customerId === this.auth.uid ||
               existingResourceData?.riderId === this.auth.uid ||
-              existingResourceData?.partnerId === this.auth.uid))
+              existingResourceData?.partnerId === this.auth.uid ||
+              this.isDeliveryPartner()))
         );
       }
       if (operation === 'create') return this.isAuthenticated() || requestResourceData?.restaurantId != null;
       if (operation === 'update') {
         const isStaffOfTenant = this.isAuthenticated() && this.isRestaurantStaff(existingResourceData?.restaurantId);
-        const isRider = this.isAuthenticated() && (existingResourceData?.riderId === this.auth.uid || requestResourceData?.riderId === this.auth.uid);
+        const isRider = this.isAuthenticated() && (
+          existingResourceData?.riderId === this.auth.uid ||
+          requestResourceData?.riderId === this.auth.uid ||
+          (!existingResourceData?.riderId && this.isDeliveryPartner())
+        );
         const isCustomerCancel = this.isAuthenticated() && existingResourceData?.customerId === this.auth.uid && requestResourceData?.status === 'CANCELLED';
         return this.isSuperAdmin() || isStaffOfTenant || isRider || isCustomerCancel;
       }

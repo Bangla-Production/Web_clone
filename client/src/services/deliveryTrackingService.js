@@ -85,11 +85,28 @@ export function subscribeToDeliveryTracking(orderId, callback) {
     } catch {}
   }
 
+  const handleStorage = (evt) => {
+    if (
+      evt.key === `abar_khabo_tracking_${orderId}` ||
+      evt.key === 'abar_khabo_placed_orders' ||
+      evt.key === `abar_khabo_order_${orderId}`
+    ) {
+      const updated = getLocalTracking();
+      if (updated) callback(updated);
+    }
+  };
+  if (typeof window !== 'undefined') {
+    window.addEventListener('storage', handleStorage);
+  }
+
   return () => {
     if (typeof unsubSnapshot === 'function') unsubSnapshot();
     if (trackingSyncChannel) {
       trackingSyncChannel.removeEventListener('message', handleBroadcast);
       trackingSyncChannel.close();
+    }
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('storage', handleStorage);
     }
   };
 }

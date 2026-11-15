@@ -132,6 +132,8 @@ export default function DeliveryPartnerDashboardPage() {
     } else if (current === DELIVERY_STATUS.ARRIVED_AT_RESTAURANT) {
       next = DELIVERY_STATUS.PICKED_UP;
     } else if (current === DELIVERY_STATUS.PICKED_UP) {
+      next = DELIVERY_STATUS.OUT_FOR_DELIVERY;
+    } else if (current === DELIVERY_STATUS.OUT_FOR_DELIVERY) {
       next = DELIVERY_STATUS.ARRIVED_AT_CUSTOMER;
     } else if (current === DELIVERY_STATUS.ARRIVED_AT_CUSTOMER) {
       next = DELIVERY_STATUS.DELIVERED;
@@ -282,11 +284,15 @@ export default function DeliveryPartnerDashboardPage() {
                   ) : currentStatus === DELIVERY_STATUS.RIDER_ASSIGNED ? (
                     'I Have Arrived at Restaurant'
                   ) : currentStatus === DELIVERY_STATUS.ARRIVED_AT_RESTAURANT ? (
-                    'Order Picked Up (Start Trip to Customer)'
+                    'Order Picked Up (Food Collected)'
+                  ) : currentStatus === DELIVERY_STATUS.PICKED_UP ? (
+                    'Start Delivery Trip (Out for Delivery)'
+                  ) : currentStatus === DELIVERY_STATUS.OUT_FOR_DELIVERY ? (
+                    'Arrived at Customer Doorstep'
                   ) : currentStatus === DELIVERY_STATUS.ARRIVED_AT_CUSTOMER ? (
                     'Confirm Delivery (Cash Collected / Delivered)'
                   ) : (
-                    'Arrived at Customer Doorstep'
+                    'Next Step'
                   )}
                 </button>
               </div>

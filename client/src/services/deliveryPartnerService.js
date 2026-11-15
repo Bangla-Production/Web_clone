@@ -162,9 +162,15 @@ export async function updateDeliveryStep(orderId, nextStatus, riderId) {
     updatedAt: serverTimestamp(),
   };
 
-  if (nextStatus === DELIVERY_STATUS.PICKED_UP) {
+  if (
+    nextStatus === DELIVERY_STATUS.PICKED_UP ||
+    nextStatus === DELIVERY_STATUS.OUT_FOR_DELIVERY ||
+    nextStatus === DELIVERY_STATUS.ARRIVED_AT_CUSTOMER
+  ) {
     updates.status = 'DISPATCHED';
-    updates.pickedUpAt = serverTimestamp();
+    if (nextStatus === DELIVERY_STATUS.PICKED_UP) {
+      updates.pickedUpAt = serverTimestamp();
+    }
   } else if (nextStatus === DELIVERY_STATUS.DELIVERED) {
     updates.status = 'COMPLETED';
     updates.deliveredAt = serverTimestamp();
@@ -173,13 +179,55 @@ export async function updateDeliveryStep(orderId, nextStatus, riderId) {
   await updateDoc(orderRef, updates);
 
   try {
-    await updateDoc(trackingRef, {
+    await setDoc(trackingRef, {
       status: nextStatus,
       lastUpdatedAt: serverTimestamp(),
-    });
+    }, { merge: true });
   } catch (err) {
     console.warn('Could not update trackingRef status:', err);
   }
+
+  // Sync locally to all storage keys for offline/immediate customer tab updates
+  try {
+    const orders = JSON.parse(localStorage.getItem('abar_khabo_placed_orders') || '[]');
+    const idx = orders.findIndex((o) => o.id === orderId);
+    if (idx >= 0) {
+      orders[idx] = {
+        ...orders[idx],
+        ...updates,
+        status: updates.status || orders[idx].status,
+        deliveryStatus: nextStatus,
+        updatedAt: new Date().toISOString(),
+      };
+      localStorage.setItem('abar_khabo_placed_orders', JSON.stringify(orders));
+    }
+    const single = localStorage.getItem(`abar_khabo_order_${orderId}`);
+    if (single) {
+      const parsed = JSON.parse(single);
+      localStorage.setItem(
+        `abar_khabo_order_${orderId}`,
+        JSON.stringify({
+          ...parsed,
+          ...updates,
+          status: updates.status || parsed.status,
+          deliveryStatus: nextStatus,
+          updatedAt: new Date().toISOString(),
+        })
+      );
+    }
+    const trackingLocal = localStorage.getItem(`abar_khabo_tracking_${orderId}`);
+    if (trackingLocal) {
+      const parsed = JSON.parse(trackingLocal);
+      localStorage.setItem(
+        `abar_khabo_tracking_${orderId}`,
+        JSON.stringify({
+          ...parsed,
+          status: nextStatus,
+          lastUpdatedAt: new Date().toISOString(),
+        })
+      );
+    }
+  } catch {}
 
   // If completed or cancelled, free up the rider
   if (nextStatus === DELIVERY_STATUS.DELIVERED && riderId) {
@@ -202,10 +250,14 @@ export async function updateDeliveryStep(orderId, nextStatus, riderId) {
           ...updates,
           status: updates.status || nextStatus,
           deliveryStatus: nextStatus,
-          updatedAt: new Date().toISOString()
-        }
+          updatedAt: new Date().toISOString(),
+        },
       });
-      channel.close();
+      setTimeout(() => {
+        try {
+          channel.close();
+        } catch {}
+      }, 2000);
     } catch {}
   }
 

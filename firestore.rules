@@ -525,7 +525,8 @@ service cloud.firestore {
          request.resource.data.items == resource.data.items) ||
         (isAuthenticated() && (
           resource.data.get('riderId', '') == request.auth.uid ||
-          request.resource.data.get('riderId', '') == request.auth.uid
+          request.resource.data.get('riderId', '') == request.auth.uid ||
+          isDeliveryPartner()
         ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'status', 'deliveryStatus', 'riderId', 'riderName', 'riderPhone',
           'riderPhoto', 'riderVehicle', 'riderVehicleNumber', 'isAadhaarVerified',
@@ -556,7 +557,8 @@ service cloud.firestore {
         (isAuthenticated() && (
           resource.data.get('customerId', '') == request.auth.uid ||
           resource.data.get('riderId', '') == request.auth.uid ||
-          resource.data.get('partnerId', '') == request.auth.uid
+          resource.data.get('partnerId', '') == request.auth.uid ||
+          isDeliveryPartner()
         ));
 
       // Create: Initialized when order is placed or dispatched
@@ -572,7 +574,8 @@ service cloud.firestore {
         (isAuthenticated() && isRestaurantStaff(resource.data.restaurantId)) ||
         (isAuthenticated() && (
           resource.data.get('riderId', '') == request.auth.uid ||
-          request.resource.data.get('riderId', '') == request.auth.uid
+          request.resource.data.get('riderId', '') == request.auth.uid ||
+          (resource.data.get('riderId', '') == '' && isDeliveryPartner())
         ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'riderCoordinates', 'status', 'lastUpdatedAt', 'riderPhone', 'riderName', 'riderVehicle', 'riderPhoto', 'isAadhaarVerified'
         ])) ||
