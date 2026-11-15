@@ -15,9 +15,20 @@ dist-ssr
 
 # Environment files
 .env
+.env.*
 .env*
 !.env.example
+!client/.env.example
+!server/.env.example
 *.env
+
+# Credentials and private keys
+*service-account*.json
+*serviceAccount*.json
+*credentials*.json
+*.pem
+*.key
+*.p12
 
 # Editor directories and files
 .vscode/*

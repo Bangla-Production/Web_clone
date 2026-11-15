@@ -1,0 +1,19 @@
+{
+  "name": "abar-khabo-server",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Abar Khabo Enterprise Multi-Tenant Node.js Backend & Aggregator Engine",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^4.22.3",
+    "firebase-admin": "^14.5.1"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

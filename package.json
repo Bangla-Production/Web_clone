@@ -5,6 +5,12 @@
   "description": "RestoPulse - Cloud Restaurant Billing, POS & Kitchen Display System",
   "scripts": {
     "dev": "npm --prefix client run dev",
+    "client:dev": "npm --prefix client run dev",
+    "client:build": "npm --prefix client run build",
+    "client:preview": "npm --prefix client run preview",
+    "server": "node server/src/server.js",
+    "server:dev": "node --watch server/src/server.js",
+    "start": "node server/src/server.js",
     "build": "npm --prefix client run build",
     "preview": "npm --prefix client run preview",
     "test": "node tests/test_outlet_model.js && node tests/test_staff_identity.js && node tests/test_menu_pricing.js && node tests/test_normalized_orders.js && node tests/test_aggregator_webhooks.js && node tests/test_unified_order_engine.js && node tests/test_inventory_recipe_engine.js && node tests/test_delivery_fleet_engine.js && node tests/test_payment_settlement_engine.js && node tests/test_super_admin_saas_engine.js && node tests/test_rules_isolation.js && node tests/test_performance_scalability.js && node tests/test_production_readiness_security.js",
