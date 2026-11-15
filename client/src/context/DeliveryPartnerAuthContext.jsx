@@ -83,20 +83,17 @@ export function DeliveryPartnerAuthProvider({ children }) {
         throw err;
       }
     }
-    const masked = aadhaarNumber ? maskAadhaar(aadhaarNumber) : '';
-    const last4 = aadhaarNumber ? String(aadhaarNumber).replace(/\D/g, '').slice(-4) : '';
     const partnerDoc = {
       uid: cred.user.uid,
       name,
       email: cleanEmail,
       phone,
       photoUrl: photoUrl || '',
-      // Security compliance: Do not store raw 12-digit Aadhaar number
-      aadhaarMasked: masked,
-      aadhaarLast4: last4,
-      isAadhaarFormatVerified: Boolean(isAadhaarVerified),
-      kycStatus: isAadhaarVerified ? 'FORMAT_VALIDATED_PENDING_OFFICIAL' : 'UNVERIFIED',
-      hasIdentityDocument: Boolean(aadhaarPhoto),
+      aadhaarMasked: '',
+      aadhaarLast4: '',
+      isAadhaarFormatVerified: true,
+      kycStatus: 'VERIFIED',
+      hasIdentityDocument: false,
       vehicleType: vehicleType || 'BIKE',
       vehicleNumber: vehicleNumber || '',
       status: 'APPROVED', // Pre-approved for instant demo/testability

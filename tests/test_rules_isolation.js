@@ -308,7 +308,15 @@ class SecurityContext {
           requestResourceData?.totalAmount === existingResourceData?.totalAmount &&
           requestResourceData?.paymentStatus === existingResourceData?.paymentStatus;
 
-        return this.isSuperAdmin() || isStaffOfTenant || isAssignedRider;
+        // Customer owner can cancel order before completion
+        const isCustomerCancel =
+          this.isAuthenticated() &&
+          existingResourceData?.customerId === this.auth.uid &&
+          requestResourceData?.status === 'CANCELLED' &&
+          ['PLACED', 'CONFIRMED', 'PREPARING', 'READY', 'READY_FOR_PICKUP'].includes(existingResourceData?.status) &&
+          (requestResourceData?.totalAmount === undefined || requestResourceData?.totalAmount === existingResourceData?.totalAmount);
+
+        return this.isSuperAdmin() || isStaffOfTenant || isAssignedRider || isCustomerCancel;
       }
 
       if (operation === 'delete') {
@@ -332,7 +340,8 @@ class SecurityContext {
       if (operation === 'update') {
         const isStaffOfTenant = this.isAuthenticated() && this.isRestaurantStaff(existingResourceData?.restaurantId);
         const isRider = this.isAuthenticated() && (existingResourceData?.riderId === this.auth.uid || requestResourceData?.riderId === this.auth.uid);
-        return this.isSuperAdmin() || isStaffOfTenant || isRider;
+        const isCustomerCancel = this.isAuthenticated() && existingResourceData?.customerId === this.auth.uid && requestResourceData?.status === 'CANCELLED';
+        return this.isSuperAdmin() || isStaffOfTenant || isRider || isCustomerCancel;
       }
       if (operation === 'delete') {
         return this.isSuperAdmin() || (this.isAuthenticated() && this.isRestaurantAdmin(existingResourceData?.restaurantId));
@@ -718,6 +727,27 @@ assert(
   'Customer owning order CAN read live tracking',
   customerCtx.evaluate('deliveryTracking/ord_online_a', 'read', null, trackingOrder),
   true
+);
+
+// Test 28b: Customer owning order CAN cancel active order
+assert(
+  'Customer owning order CAN cancel active order',
+  customerCtx.evaluate('onlineOrders/ord_online_a', 'update', { status: 'CANCELLED', totalAmount: 350 }, onlineOrderA),
+  true
+);
+
+// Test 28c: Customer CANNOT change order price when cancelling
+assert(
+  'Customer CANNOT change order price when cancelling',
+  customerCtx.evaluate('onlineOrders/ord_online_a', 'update', { status: 'CANCELLED', totalAmount: 0 }, onlineOrderA),
+  false
+);
+
+// Test 28d: Other customer CANNOT cancel someone else order
+assert(
+  'Other customer CANNOT cancel someone else order',
+  otherCustomerCtx.evaluate('onlineOrders/ord_online_a', 'update', { status: 'CANCELLED', totalAmount: 350 }, onlineOrderA),
+  false
 );
 
 console.log('\n5. DELIVERY PARTNER FIELD IMMUTABILITY & KYC SECURITY');

@@ -15,8 +15,10 @@ import {
   Play,
   RotateCcw,
   Sparkles,
+  XCircle,
 } from 'lucide-react';
 import { subscribeToOnlineOrderById, updateOnlineOrderStatus } from '../services/onlineOrderService';
+import { ensureCustomerAuthSession } from '../services/customerAuthService';
 import {
   subscribeToDeliveryTracking,
   startSimulatedRiderMovement,
@@ -36,6 +38,24 @@ const TIMELINE_STEPS = [
   { key: 'OUT_FOR_DELIVERY', label: 'Out for Delivery', desc: 'Nearby your location' },
   { key: 'DELIVERED', label: 'Delivered', desc: 'Enjoy your food!' },
 ];
+
+function normalizeTimelineStep(status, riderName) {
+  if (!status) return riderName ? 3 : 0;
+  const s = String(status).toUpperCase();
+  if (s === 'CANCELLED') return -1;
+  if (['DELIVERED', 'COMPLETED'].includes(s)) return 6;
+  if (['OUT_FOR_DELIVERY', 'ARRIVED_AT_CUSTOMER', 'IN_TRANSIT'].includes(s)) return 5;
+  if (['PICKED_UP', 'DISPATCHED'].includes(s)) return 4;
+  if (['RIDER_ASSIGNED', 'ARRIVED_AT_RESTAURANT'].includes(s)) return 3;
+  if (['PREPARING', 'COOKING', 'IN_KITCHEN', 'READY', 'READY_FOR_PICKUP'].includes(s)) {
+    return riderName ? 3 : 2;
+  }
+  if (['CONFIRMED', 'ACCEPTED'].includes(s)) {
+    return riderName ? 3 : 1;
+  }
+  if (riderName) return 3;
+  return 0; // PLACED
+}
 
 // Web Audio API notification chime
 function playDispatchChime() {
@@ -85,20 +105,26 @@ export default function CustomerOrderTrackingPage() {
   const prevStatusRef = useRef(null);
   const hasNotifiedInitialRef = useRef(false);
 
-  // Subscribe to live order data
+  // Subscribe to live order data with anonymous auth pre-check
   useEffect(() => {
     if (!orderId) return;
 
+    let isMounted = true;
+    ensureCustomerAuthSession().catch(() => {});
+
     const unsubOrder = subscribeToOnlineOrderById(orderId, (data) => {
+      if (!isMounted) return;
       setOrder(data);
       setLoading(false);
     });
 
     const unsubTracking = subscribeToDeliveryTracking(orderId, (data) => {
+      if (!isMounted) return;
       setTracking(data);
     });
 
     return () => {
+      isMounted = false;
       unsubOrder();
       unsubTracking();
       stopRiderLocationBroadcast();
@@ -147,7 +173,13 @@ export default function CustomerOrderTrackingPage() {
     } else {
       const restCoords = tracking?.restaurantCoordinates || { lat: 22.5726, lng: 88.3639 };
       const custCoords = tracking?.customerCoordinates || { lat: 22.5850, lng: 88.3750 };
-      startSimulatedRiderMovement(orderId, restCoords, custCoords);
+      startSimulatedRiderMovement(orderId, restCoords, custCoords, (simCoords) => {
+        setTracking((prev) => ({
+          ...(prev || {}),
+          riderCoordinates: simCoords,
+          status: (prev?.status === 'PLACED' || prev?.status === 'CONFIRMED' || prev?.status === 'PREPARING') ? 'OUT_FOR_DELIVERY' : prev?.status
+        }));
+      });
       setIsSimulating(true);
       toast.success('Simulated GPS rider movement started! Watch the live map.');
     }
@@ -156,9 +188,15 @@ export default function CustomerOrderTrackingPage() {
   const handleCancelOrder = async () => {
     if (!window.confirm('Are you sure you want to cancel this order?')) return;
     try {
-      await updateOnlineOrderStatus(orderId, 'CANCELLED');
+      await updateOnlineOrderStatus(orderId, 'CANCELLED', {
+        cancellationReason: 'Cancelled by customer',
+        deliveryStatus: 'CANCELLED',
+      });
+      setOrder((prev) => prev ? { ...prev, status: 'CANCELLED', deliveryStatus: 'CANCELLED' } : null);
+      setTracking((prev) => prev ? { ...prev, status: 'CANCELLED' } : null);
       toast.info('Order has been cancelled.');
     } catch (err) {
+      console.error('Cancel order error:', err);
       toast.error('Could not cancel order.');
     }
   };
@@ -195,9 +233,11 @@ export default function CustomerOrderTrackingPage() {
   }
 
   const currentStatus = tracking?.status || order?.deliveryStatus || order?.status || 'PLACED';
-  const currentStepIndex = TIMELINE_STEPS.findIndex((s) => s.key === currentStatus);
-  const activeStepIdx = currentStepIndex >= 0 ? currentStepIndex : 0;
-  const isCancelled = order.status === 'CANCELLED' || currentStatus === 'CANCELLED';
+  const assignedRider = order?.riderName || tracking?.riderName;
+  const activeStepIdx = normalizeTimelineStep(currentStatus, assignedRider);
+  const isCancelled = order.status === 'CANCELLED' || tracking?.status === 'CANCELLED' || currentStatus === 'CANCELLED';
+  const isFinished = isCancelled || activeStepIdx === 6;
+  const canCancel = !isFinished;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white transition-colors">
@@ -227,6 +267,16 @@ export default function CustomerOrderTrackingPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            {canCancel && (
+              <button
+                onClick={handleCancelOrder}
+                className="px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400 font-extrabold text-xs transition-colors flex items-center gap-1.5 shadow-sm"
+                title="Cancel this order"
+              >
+                <XCircle className="w-3.5 h-3.5" />
+                <span>Cancel Order</span>
+              </button>
+            )}
             <button
               onClick={toggleTheme}
               className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-slate-600 dark:text-slate-300"
@@ -262,15 +312,27 @@ export default function CustomerOrderTrackingPage() {
               </div>
             </div>
 
-            {/* Test Simulation Button */}
-            <button
-              onClick={handleSimulateRider}
-              className="px-3.5 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 backdrop-blur-md text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow"
-              title="Test GPS updates without moving"
-            >
-              <Play className="w-3.5 h-3.5" />
-              {isSimulating ? 'Stop GPS Simulation' : 'Simulate GPS Movement'}
-            </button>
+            <div className="flex items-center gap-2">
+              {canCancel && (
+                <button
+                  onClick={handleCancelOrder}
+                  className="px-3.5 py-1.5 rounded-xl bg-rose-600/80 hover:bg-rose-600 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow border border-rose-400/40"
+                  title="Cancel this order"
+                >
+                  <XCircle className="w-3.5 h-3.5" />
+                  Cancel Order
+                </button>
+              )}
+              {/* Test Simulation Button */}
+              <button
+                onClick={handleSimulateRider}
+                className="px-3.5 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 backdrop-blur-md text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow"
+                title="Test GPS updates without moving"
+              >
+                <Play className="w-3.5 h-3.5" />
+                {isSimulating ? 'Stop GPS Simulation' : 'Simulate GPS Movement'}
+              </button>
+            </div>
           </div>
         )}
 
@@ -417,13 +479,14 @@ export default function CustomerOrderTrackingPage() {
             </div>
           </div>
 
-          {/* Cancel button if order is fresh */}
-          {order.status === 'PLACED' && !isCancelled && (
-            <div className="pt-2 flex justify-end">
+          {/* Cancel button if order is active */}
+          {canCancel && (
+            <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end">
               <button
                 onClick={handleCancelOrder}
-                className="text-xs text-rose-500 hover:text-rose-600 font-bold hover:underline"
+                className="px-4 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-600 dark:text-rose-400 font-bold transition-all flex items-center gap-1.5 shadow-sm"
               >
+                <XCircle className="w-3.5 h-3.5" />
                 Cancel Order
               </button>
             </div>

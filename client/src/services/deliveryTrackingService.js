@@ -41,7 +41,7 @@ export function subscribeToDeliveryTracking(orderId, callback) {
   }
 
   const docRef = doc(db, 'deliveryTracking', orderId);
-  return onSnapshot(
+  const unsubSnapshot = onSnapshot(
     docRef,
     (snap) => {
       if (snap.exists()) {
@@ -59,6 +59,39 @@ export function subscribeToDeliveryTracking(orderId, callback) {
       callback(getLocalTracking());
     }
   );
+
+  const handleBroadcast = (evt) => {
+    if (evt?.data?.type === 'ORDER_UPDATED' && evt.data.orderId === orderId) {
+      const updates = evt.data.updates || {};
+      const current = getLocalTracking() || {};
+      const merged = {
+        ...current,
+        status: updates.deliveryStatus || updates.status || current.status,
+        riderName: updates.riderName || current.riderName,
+        riderPhone: updates.riderPhone || current.riderPhone,
+        riderVehicle: updates.riderVehicle || current.riderVehicle,
+        riderPhoto: updates.riderPhoto || current.riderPhoto,
+        isAadhaarVerified: updates.isAadhaarVerified ?? current.isAadhaarVerified,
+      };
+      callback(merged);
+    }
+  };
+
+  let trackingSyncChannel = null;
+  if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+    try {
+      trackingSyncChannel = new BroadcastChannel('abar_khabo_order_sync');
+      trackingSyncChannel.addEventListener('message', handleBroadcast);
+    } catch {}
+  }
+
+  return () => {
+    if (typeof unsubSnapshot === 'function') unsubSnapshot();
+    if (trackingSyncChannel) {
+      trackingSyncChannel.removeEventListener('message', handleBroadcast);
+      trackingSyncChannel.close();
+    }
+  };
 }
 
 /**
@@ -169,7 +202,7 @@ export function startSimulatedRiderMovement(orderId, startCoords, endCoords, onC
           lastUpdatedAt: serverTimestamp(),
         });
       } catch (err) {
-        console.warn('Simulation Firestore sync error:', err);
+        // Non-blocking for client simulation (local map renders via onCoordsUpdate)
       }
     }
 

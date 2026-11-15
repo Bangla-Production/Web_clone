@@ -148,7 +148,7 @@ export default function PublicMenuPage() {
 
       if (orderType === 'DELIVERY' && result?.id) {
         await initDeliveryTracking(result.id, {
-          customerId: customer?.uid || '',
+          customerId: result.customerId || customer?.uid || '',
           restaurantId: activeId,
           restaurantName: restaurant?.name || 'Restaurant',
           restaurantCoordinates: restaurant?.coordinates || {

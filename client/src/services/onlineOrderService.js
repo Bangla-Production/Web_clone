@@ -23,6 +23,12 @@ import {
   onSnapshot,
   serverTimestamp,
 } from '../firebase/config';
+import { ensureCustomerAuthSession } from './customerAuthService';
+
+// Real-time instantaneous cross-tab broadcast channel
+const orderSyncChannel = typeof window !== 'undefined' && 'BroadcastChannel' in window
+  ? new BroadcastChannel('abar_khabo_order_sync')
+  : null;
 
 // ─── Order Placement ──────────────────────────────────────────────────────────
 
@@ -31,11 +37,21 @@ export async function placeOnlineOrder(restaurantId, orderData) {
     throw new Error('Restaurant ID is required to place an order.');
   }
 
+  // Ensure an authenticated session exists (anonymous if guest) so customerId matches request.auth.uid
+  let customerId = orderData.customerId || auth?.currentUser?.uid || null;
+  if (!customerId) {
+    try {
+      const sessionUser = await ensureCustomerAuthSession();
+      if (sessionUser?.uid) customerId = sessionUser.uid;
+    } catch (e) {
+      console.warn('ensureCustomerAuthSession fallback on placeOnlineOrder:', e);
+    }
+  }
+
   // Generate a new unique order reference at the root collection
   const rootColRef = collection(db, 'onlineOrders');
   const orderDocRef = doc(rootColRef);
   const orderId = orderDocRef.id;
-  const customerId = orderData.customerId || auth?.currentUser?.uid || null;
 
   const payload = {
     ...orderData,
@@ -198,7 +214,7 @@ export function subscribeToOnlineOrderById(arg1, arg2, arg3) {
 
   // Listen to root onlineOrders document
   const rootDocRef = doc(db, 'onlineOrders', orderId);
-  return onSnapshot(
+  const unsubSnapshot = onSnapshot(
     rootDocRef,
     (snap) => {
       if (snap.exists()) {
@@ -240,6 +256,39 @@ export function subscribeToOnlineOrderById(arg1, arg2, arg3) {
       callback(getLocalOrder());
     }
   );
+
+  // Real-time instantaneous cross-tab BroadcastChannel sync listener
+  const handleBroadcast = (evt) => {
+    if (evt?.data?.type === 'ORDER_UPDATED' && evt.data.orderId === orderId) {
+      const current = getLocalOrder() || {};
+      const merged = { ...current, ...evt.data.updates };
+      callback(merged);
+    }
+  };
+  if (orderSyncChannel) {
+    orderSyncChannel.addEventListener('message', handleBroadcast);
+  }
+
+  // Cross-window localStorage sync listener
+  const handleStorage = (evt) => {
+    if (evt.key === `abar_khabo_order_${orderId}` || evt.key === 'abar_khabo_placed_orders') {
+      const updated = getLocalOrder();
+      if (updated) callback(updated);
+    }
+  };
+  if (typeof window !== 'undefined') {
+    window.addEventListener('storage', handleStorage);
+  }
+
+  return () => {
+    if (typeof unsubSnapshot === 'function') unsubSnapshot();
+    if (orderSyncChannel) {
+      orderSyncChannel.removeEventListener('message', handleBroadcast);
+    }
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('storage', handleStorage);
+    }
+  };
 }
 
 /**
@@ -285,6 +334,17 @@ export async function updateOnlineOrderStatus(arg1, arg2, arg3, arg4) {
     }
   } catch {}
 
+  // Broadcast instantly to all tabs (0ms latency cross-tab notification)
+  if (orderSyncChannel) {
+    try {
+      orderSyncChannel.postMessage({
+        type: 'ORDER_UPDATED',
+        orderId,
+        updates: { ...updates, updatedAt: new Date().toISOString() },
+      });
+    } catch {}
+  }
+
   // 1. Update root
   try {
     const rootRef = doc(db, 'onlineOrders', orderId);
@@ -317,6 +377,21 @@ export async function getOnlineOrdersAcrossRestaurants(phone) {
       const p = String(ord.customerPhone || '').replace(/\D/g, '').slice(-10);
       if (!cleanPhone || p === cleanPhone || p.endsWith(cleanPhone) || cleanPhone.endsWith(p)) {
         foundMap.set(ord.id, ord);
+      }
+    }
+    // Also scan individual cached order documents
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('abar_khabo_order_')) {
+        try {
+          const item = JSON.parse(localStorage.getItem(key) || 'null');
+          if (item && item.id) {
+            const p = String(item.customerPhone || '').replace(/\D/g, '').slice(-10);
+            if (!cleanPhone || p === cleanPhone || p.endsWith(cleanPhone) || cleanPhone.endsWith(p)) {
+              foundMap.set(item.id, item);
+            }
+          }
+        } catch {}
       }
     }
   } catch (e) {

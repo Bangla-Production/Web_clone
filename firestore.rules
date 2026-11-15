@@ -516,6 +516,7 @@ service cloud.firestore {
       // 1. Super Admin: full access
       // 2. Restaurant Staff: can update order status for their own restaurant (cannot alter totalAmount, items, or restaurantId)
       // 3. Assigned Rider: can only update delivery-specific fields (status, riderCoordinates, deliveryStatus, timestamps)
+      // 4. Customer Owner: can cancel order before dispatch (cannot alter totalAmount, items, or restaurantId)
       // Client updates CANNOT alter payment amounts, restaurant ownership, or ordered items!
       allow update: if isSuperAdmin() ||
         (isAuthenticated() && isRestaurantStaff(resource.data.restaurantId) &&
@@ -529,7 +530,13 @@ service cloud.firestore {
           'status', 'deliveryStatus', 'riderId', 'riderName', 'riderPhone',
           'riderPhoto', 'riderVehicle', 'riderVehicleNumber', 'isAadhaarVerified',
           'assignedAt', 'pickedUpAt', 'deliveredAt', 'updatedAt'
-        ]));
+        ])) ||
+        (isAuthenticated() && resource.data.get('customerId', '') == request.auth.uid &&
+         request.resource.data.get('status', '') == 'CANCELLED' &&
+         resource.data.get('status', '') in ['PLACED', 'CONFIRMED', 'PREPARING', 'READY', 'READY_FOR_PICKUP'] &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+           'status', 'deliveryStatus', 'cancellationReason', 'notes', 'updatedAt'
+         ]));
 
       // DELETE PERMISSIONS:
       // Only Super Admin or the Restaurant Admin of that specific restaurant
@@ -560,6 +567,7 @@ service cloud.firestore {
       // 1. Super Admin
       // 2. Restaurant Staff for their own restaurant's orders
       // 3. Assigned Rider updating GPS coordinates or delivery status
+      // 4. Customer Owner updating cancellation status
       allow update: if isSuperAdmin() ||
         (isAuthenticated() && isRestaurantStaff(resource.data.restaurantId)) ||
         (isAuthenticated() && (
@@ -567,7 +575,12 @@ service cloud.firestore {
           request.resource.data.get('riderId', '') == request.auth.uid
         ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'riderCoordinates', 'status', 'lastUpdatedAt', 'riderPhone', 'riderName', 'riderVehicle', 'riderPhoto', 'isAadhaarVerified'
-        ]));
+        ])) ||
+        (isAuthenticated() && resource.data.get('customerId', '') == request.auth.uid &&
+         request.resource.data.get('status', '') == 'CANCELLED' &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+           'status', 'lastUpdatedAt', 'cancellationReason'
+         ]));
 
       allow delete: if isSuperAdmin() ||
         (isAuthenticated() && isRestaurantAdmin(resource.data.restaurantId));

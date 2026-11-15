@@ -76,7 +76,7 @@ export function CustomerAuthProvider({ children }) {
 
   return (
     <CustomerAuthContext.Provider
-      value={{ customer, loading, isCustomerAuth: !!customer, register, login, logout, resetPassword, updateProfile }}
+      value={{ customer, loading, isCustomerAuth: !!(customer && !customer.isAnonymous), register, login, logout, resetPassword, updateProfile }}
     >
       {children}
     </CustomerAuthContext.Provider>

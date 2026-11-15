@@ -130,6 +130,23 @@ export async function acceptDeliveryOrder(orderId, riderProfile) {
     updatedAt: serverTimestamp(),
   }, { merge: true });
 
+  // Instantaneous cross-tab broadcast to live tracking pages
+  if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+    try {
+      const channel = new BroadcastChannel('abar_khabo_order_sync');
+      channel.postMessage({
+        type: 'ORDER_UPDATED',
+        orderId,
+        updates: {
+          ...riderInfo,
+          status: DELIVERY_STATUS.RIDER_ASSIGNED,
+          updatedAt: new Date().toISOString()
+        }
+      });
+      channel.close();
+    } catch {}
+  }
+
   return true;
 }
 
@@ -172,6 +189,24 @@ export async function updateDeliveryStep(orderId, nextStatus, riderId) {
       currentOrderId: null,
       updatedAt: serverTimestamp(),
     });
+  }
+
+  // Instantaneous cross-tab broadcast to live tracking pages
+  if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+    try {
+      const channel = new BroadcastChannel('abar_khabo_order_sync');
+      channel.postMessage({
+        type: 'ORDER_UPDATED',
+        orderId,
+        updates: {
+          ...updates,
+          status: updates.status || nextStatus,
+          deliveryStatus: nextStatus,
+          updatedAt: new Date().toISOString()
+        }
+      });
+      channel.close();
+    } catch {}
   }
 
   return true;

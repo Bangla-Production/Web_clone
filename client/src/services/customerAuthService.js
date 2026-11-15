@@ -14,11 +14,25 @@ import {
   serverTimestamp,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  signInAnonymously,
   signOut,
   sendPasswordResetEmail,
   sendEmailVerification,
   onAuthStateChanged,
 } from '../firebase/config';
+
+// ─── Anonymous Session Helper ─────────────────────────────────────────────────
+
+export async function ensureCustomerAuthSession() {
+  if (auth?.currentUser) return auth.currentUser;
+  try {
+    const cred = await signInAnonymously(auth);
+    return cred.user;
+  } catch (err) {
+    console.warn('ensureCustomerAuthSession warning:', err);
+    return null;
+  }
+}
 
 // ─── Register ─────────────────────────────────────────────────────────────────
 
@@ -114,23 +128,23 @@ export async function customerLogin(email, password) {
   }
 
   if (!snap || !snap.exists()) {
-    // Check if this is a staff user
+    // Check if user has a profile in users collection (e.g. staff/admin using Customer Portal)
+    let extraName = '';
+    let extraPhone = '';
     try {
       const userRef = doc(db, 'users', cred.user.uid);
       const userSnap = await getDoc(userRef);
-      if (userSnap.exists() && userSnap.data()?.role && userSnap.data()?.role !== 'customer') {
-        await signOut(auth);
-        throw new Error('This account is registered for staff access. Please use the staff login portal.');
+      if (userSnap.exists()) {
+        extraName = userSnap.data()?.name || '';
+        extraPhone = userSnap.data()?.phone || '';
       }
-    } catch (checkErr) {
-      if (checkErr.message?.includes('staff')) throw checkErr;
-    }
+    } catch (checkErr) {}
 
-    // Auto-heal missing profile document so user is never trapped in a deadlock
+    // Auto-heal / provision customer profile document so user can seamlessly access Customer Portal
     const newProfile = {
-      name: cred.user.displayName || cleanEmail.split('@')[0],
+      name: extraName || cred.user.displayName || cleanEmail.split('@')[0],
       email: cleanEmail,
-      phone: cred.user.phoneNumber || '',
+      phone: extraPhone || cred.user.phoneNumber || '',
       role: 'customer',
       emailVerified: Boolean(cred.user.emailVerified),
       createdAt: serverTimestamp(),
@@ -147,10 +161,6 @@ export async function customerLogin(email, password) {
   }
 
   const profile = snap.data();
-  if (profile.role && profile.role !== 'customer') {
-    await signOut(auth);
-    throw new Error('Please use the staff login portal.');
-  }
 
   // Update emailVerified flag lazily if needed
   if (!profile.emailVerified && cred.user.emailVerified) {
@@ -186,28 +196,38 @@ export function onCustomerAuthChange(callback) {
       return;
     }
 
+    // Anonymous guest session (for frictionless tracking and ordering)
+    if (fbUser.isAnonymous) {
+      callback({
+        uid: fbUser.uid,
+        name: 'Guest Customer',
+        email: '',
+        phone: '',
+        role: 'customer',
+        isAnonymous: true,
+      });
+      return;
+    }
+
     try {
       const ref = doc(db, 'customers', fbUser.uid);
       const snap = await getDoc(ref);
-      if (snap.exists() && snap.data().role === 'customer') {
-        callback({ uid: fbUser.uid, ...snap.data() });
+      if (snap.exists()) {
+        callback({ uid: fbUser.uid, ...snap.data(), role: 'customer' });
         return;
       }
 
-      // Check if this is a staff user
+      // Check if this is an existing staff/admin user
       const userRef = doc(db, 'users', fbUser.uid);
       const userSnap = await getDoc(userRef);
-      if (userSnap.exists() && userSnap.data()?.role && userSnap.data()?.role !== 'customer') {
-        callback(null);
-        return;
-      }
+      const staffData = userSnap.exists() ? userSnap.data() : null;
 
-      // Fallback customer profile synthesis
+      // Synthesize customer profile
       callback({
         uid: fbUser.uid,
-        name: fbUser.displayName || (fbUser.email || '').split('@')[0],
+        name: staffData?.name || fbUser.displayName || (fbUser.email || '').split('@')[0],
         email: (fbUser.email || '').toLowerCase(),
-        phone: fbUser.phoneNumber || '',
+        phone: staffData?.phone || fbUser.phoneNumber || '',
         role: 'customer',
         emailVerified: Boolean(fbUser.emailVerified),
       });
