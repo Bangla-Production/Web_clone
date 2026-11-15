@@ -68,13 +68,27 @@ export function DeliveryPartnerAuthProvider({ children }) {
     aadhaarPhoto,
     isAadhaarVerified
   }) => {
-    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    const cleanEmail = (email || '').trim().toLowerCase();
+    let cred;
+    try {
+      cred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+    } catch (err) {
+      if (err?.code === 'auth/email-already-in-use') {
+        try {
+          cred = await signInWithEmailAndPassword(auth, cleanEmail, password);
+        } catch (signInErr) {
+          throw new Error('This email is already registered to a delivery account. Please log in or use Forgot Password.');
+        }
+      } else {
+        throw err;
+      }
+    }
     const masked = aadhaarNumber ? maskAadhaar(aadhaarNumber) : '';
     const last4 = aadhaarNumber ? String(aadhaarNumber).replace(/\D/g, '').slice(-4) : '';
     const partnerDoc = {
       uid: cred.user.uid,
       name,
-      email,
+      email: cleanEmail,
       phone,
       photoUrl: photoUrl || '',
       // Security compliance: Do not store raw 12-digit Aadhaar number

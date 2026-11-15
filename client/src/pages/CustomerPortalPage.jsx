@@ -33,6 +33,9 @@ function AuthPanel({ onClose }) {
     e.preventDefault();
     setError(''); setSuccess('');
 
+    const cleanEmail = (email || '').trim();
+    const cleanName = (name || '').trim();
+
     if (mode === 'register') {
       const phoneCheck = validateIndianPhone(phone);
       if (!phoneCheck.isValid) {
@@ -44,19 +47,37 @@ function AuthPanel({ onClose }) {
     setLoading(true);
     try {
       if (mode === 'login') {
-        await login(email, password);
+        await login(cleanEmail, password);
         onClose();
       } else if (mode === 'register') {
         const phoneCheck = validateIndianPhone(phone);
-        await register({ name, email, phone: phoneCheck.cleaned, password });
-        setSuccess('Account created! Check your email to verify, then log in.');
-        setMode('login');
+        const result = await register({ name: cleanName, email: cleanEmail, phone: phoneCheck.cleaned, password });
+        if (result?.isExistingAuthUser) {
+          setSuccess('Account verified and logged in successfully!');
+          setTimeout(() => onClose(), 800);
+        } else {
+          setSuccess('Account created! Check your email to verify, then log in.');
+          setMode('login');
+        }
       } else {
-        await resetPassword(email);
+        await resetPassword(cleanEmail);
         setSuccess('Reset link sent — check your email.');
       }
     } catch (err) {
-      setError(err.message || 'Something went wrong.');
+      const code = err?.code || '';
+      let msg = err?.message || 'Something went wrong.';
+      if (code === 'auth/email-already-in-use') {
+        msg = 'This email is already registered. If you already have an account, please log in below.';
+      } else if (code === 'auth/invalid-email') {
+        msg = 'Please enter a valid email address.';
+      } else if (code === 'auth/weak-password') {
+        msg = 'Password must be at least 6 characters.';
+      } else if (code === 'auth/wrong-password' || code === 'auth/invalid-credential' || code === 'auth/invalid-login-credentials') {
+        msg = 'Incorrect email or password. Please try again.';
+      } else if (code === 'auth/user-not-found') {
+        msg = 'No customer account found for this email. Please create an account.';
+      }
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -79,7 +100,23 @@ function AuthPanel({ onClose }) {
           </div>
         </div>
 
-        {error   && <div className="mb-3 p-3 rounded-xl bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 text-xs flex gap-2 items-start"><AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0"/>{error}</div>}
+        {error && (
+          <div className="mb-3 p-3 rounded-xl bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 text-xs flex flex-col gap-1.5">
+            <div className="flex gap-2 items-start">
+              <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+              <span>{error}</span>
+            </div>
+            {mode === 'register' && error.includes('already registered') && (
+              <button
+                type="button"
+                onClick={() => { setMode('login'); setError(''); }}
+                className="self-start text-xs font-semibold text-amber-600 dark:text-amber-400 hover:underline pl-5"
+              >
+                Click here to Log in instead →
+              </button>
+            )}
+          </div>
+        )}
         {success && <div className="mb-3 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 text-xs flex gap-2 items-start"><CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0"/>{success}</div>}
 
         <form onSubmit={submit} className="space-y-3">

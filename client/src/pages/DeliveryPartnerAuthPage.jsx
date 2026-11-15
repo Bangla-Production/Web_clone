@@ -226,7 +226,11 @@ export default function DeliveryPartnerAuthPage({ defaultMode }) {
       navigate('/rider');
     } catch (err) {
       console.error(err);
-      setError(err.message || 'Authentication failed. Please check your credentials.');
+      let msg = err?.message || 'Authentication failed. Please check your credentials.';
+      if (err?.code === 'auth/email-already-in-use') {
+        msg = 'This email is already registered to an account. Please switch to Login.';
+      }
+      setError(msg);
     } finally {
       setLoading(false);
     }
