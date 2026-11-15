@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -37,6 +37,40 @@ const TIMELINE_STEPS = [
   { key: 'DELIVERED', label: 'Delivered', desc: 'Enjoy your food!' },
 ];
 
+// Web Audio API notification chime
+function playDispatchChime() {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+    osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.12); // A5
+    gain.gain.setValueAtTime(0.25, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.45);
+  } catch (e) {}
+}
+
+function sendBrowserNotification(title, body) {
+  try {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification(title, { body, icon: '/favicon.ico' });
+    } else if ('Notification' in window && Notification.permission !== 'denied') {
+      Notification.requestPermission().then((perm) => {
+        if (perm === 'granted') {
+          new Notification(title, { body, icon: '/favicon.ico' });
+        }
+      });
+    }
+  } catch (e) {}
+}
+
 export default function CustomerOrderTrackingPage() {
   const { orderId } = useParams();
   const navigate = useNavigate();
@@ -48,6 +82,8 @@ export default function CustomerOrderTrackingPage() {
   const [tracking, setTracking] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isSimulating, setIsSimulating] = useState(false);
+  const prevStatusRef = useRef(null);
+  const hasNotifiedInitialRef = useRef(false);
 
   // Subscribe to live order data
   useEffect(() => {
@@ -68,6 +104,40 @@ export default function CustomerOrderTrackingPage() {
       stopRiderLocationBroadcast();
     };
   }, [orderId]);
+
+  // Alert customer whenever order status transitions or rider is assigned
+  useEffect(() => {
+    const currentStatus = tracking?.status || order?.deliveryStatus || order?.status;
+    if (!currentStatus) return;
+
+    if (prevStatusRef.current && prevStatusRef.current !== currentStatus) {
+      const riderName = order?.riderName || tracking?.riderName || 'Delivery Partner';
+      if (currentStatus === 'RIDER_ASSIGNED') {
+        playDispatchChime();
+        toast.success(`🛵 Rider Assigned! ${riderName} has been assigned to your order.`);
+        sendBrowserNotification('🛵 Order Dispatched - Abar Khabo', `${riderName} is on the way to pick up your order!`);
+      } else if (currentStatus === 'PICKED_UP' || currentStatus === 'DISPATCHED') {
+        playDispatchChime();
+        toast.success(`🚀 Order Dispatched! ${riderName} has picked up your food and is on the way!`);
+        sendBrowserNotification('🚀 Order Dispatched - Abar Khabo', `${riderName} has picked up your food!`);
+      } else if (currentStatus === 'OUT_FOR_DELIVERY') {
+        playDispatchChime();
+        toast.info(`📍 Out for Delivery! ${riderName} is arriving at your doorstep.`);
+        sendBrowserNotification('📍 Out for Delivery - Abar Khabo', 'Your delivery partner is nearby!');
+      } else if (currentStatus === 'DELIVERED') {
+        playDispatchChime();
+        toast.success('🎉 Order Delivered! Enjoy your delicious meal.');
+        sendBrowserNotification('🎉 Order Delivered - Abar Khabo', 'Your order was successfully delivered!');
+      }
+    } else if (!hasNotifiedInitialRef.current && (order || tracking)) {
+      hasNotifiedInitialRef.current = true;
+      const riderName = order?.riderName || tracking?.riderName;
+      if (riderName && (currentStatus === 'RIDER_ASSIGNED' || currentStatus === 'OUT_FOR_DELIVERY' || currentStatus === 'PICKED_UP')) {
+        toast.info(`🛵 Order in progress: ${riderName} is assigned to your delivery.`);
+      }
+    }
+    prevStatusRef.current = currentStatus;
+  }, [tracking?.status, order?.deliveryStatus, order?.status, order?.riderName, tracking?.riderName]);
 
   const handleSimulateRider = () => {
     if (isSimulating) {
@@ -229,13 +299,13 @@ export default function CustomerOrderTrackingPage() {
         </section>
 
         {/* Delivery Partner Profile Card */}
-        {order.riderName && (
+        {(order.riderName || tracking?.riderName) && (
           <section className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <div className="flex items-center gap-3.5">
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white shadow-md overflow-hidden border border-cyan-400/40">
-                  {order.riderPhoto ? (
-                    <img src={order.riderPhoto} alt={order.riderName} className="w-full h-full object-cover" />
+                  {order.riderPhoto || tracking?.riderPhoto ? (
+                    <img src={order.riderPhoto || tracking?.riderPhoto} alt={order.riderName || tracking?.riderName} className="w-full h-full object-cover" />
                   ) : (
                     <Bike className="w-7 h-7" />
                   )}
@@ -243,21 +313,21 @@ export default function CustomerOrderTrackingPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="font-extrabold text-base text-slate-900 dark:text-white">
-                      {order.riderName}
+                      {order.riderName || tracking?.riderName}
                     </h3>
                     <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold flex items-center gap-1 shadow-sm">
-                      <ShieldCheck className="w-3 h-3" /> KYC Verified Partner
+                      <ShieldCheck className="w-3 h-3" /> {(order.isAadhaarVerified || tracking?.isAadhaarVerified) ? 'KYC Verified Partner' : 'Assigned Delivery Partner'}
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    {order.riderVehicle || 'Two Wheeler'} {order.riderVehicleNumber ? `• ${order.riderVehicleNumber}` : ''}
+                    {order.riderVehicle || tracking?.riderVehicle || 'Two Wheeler'} {order.riderVehicleNumber ? `• ${order.riderVehicleNumber}` : ''}
                   </p>
                 </div>
               </div>
 
-              {order.riderPhone && (
+              {(order.riderPhone || tracking?.riderPhone) && (
                 <a
-                  href={`tel:${order.riderPhone}`}
+                  href={`tel:${order.riderPhone || tracking?.riderPhone}`}
                   className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5"
                 >
                   <Phone className="w-3.5 h-3.5" /> Call Rider

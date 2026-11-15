@@ -116,7 +116,8 @@ export function AuthProvider({ children }) {
       if (result.ok) {
         applyUser(result.user);
       } else {
-        await signOut(auth);
+        // Not a staff user (e.g. Customer or Delivery Partner session).
+        // Clear staff state without forcefully terminating the Firebase Auth session.
         applyUser(null);
       }
       setLoading(false);

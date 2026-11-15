@@ -10,17 +10,55 @@ let simulationInterval = null;
  */
 export function subscribeToDeliveryTracking(orderId, callback) {
   if (!orderId) return () => {};
+
+  const getLocalTracking = () => {
+    try {
+      const raw = localStorage.getItem(`abar_khabo_tracking_${orderId}`);
+      if (raw) return JSON.parse(raw);
+      // Fallback from cached placed orders
+      const orders = JSON.parse(localStorage.getItem('abar_khabo_placed_orders') || '[]');
+      const ord = orders.find((o) => o.id === orderId);
+      if (ord) {
+        return {
+          id: ord.id,
+          orderId: ord.id,
+          status: ord.deliveryStatus || ord.status || 'PLACED',
+          restaurantCoordinates: ord.restaurantCoordinates || { lat: 22.5726, lng: 88.3639 },
+          customerCoordinates: ord.customerCoordinates || { lat: 22.5850, lng: 88.3750 },
+          deliveryAddress: ord.deliveryAddress,
+          riderName: ord.riderName || null,
+          riderPhone: ord.riderPhone || null,
+          riderVehicle: ord.riderVehicle || null,
+        };
+      }
+    } catch {}
+    return null;
+  };
+
+  const initialLocal = getLocalTracking();
+  if (initialLocal) {
+    callback(initialLocal);
+  }
+
   const docRef = doc(db, 'deliveryTracking', orderId);
-  return onSnapshot(docRef, (snap) => {
-    if (snap.exists()) {
-      callback({ id: snap.id, ...snap.data() });
-    } else {
-      callback(null);
+  return onSnapshot(
+    docRef,
+    (snap) => {
+      if (snap.exists()) {
+        const liveData = { id: snap.id, ...snap.data() };
+        try {
+          localStorage.setItem(`abar_khabo_tracking_${orderId}`, JSON.stringify(liveData));
+        } catch {}
+        callback(liveData);
+      } else {
+        callback(getLocalTracking());
+      }
+    },
+    (err) => {
+      console.warn('subscribeToDeliveryTracking error, using local fallback:', err);
+      callback(getLocalTracking());
     }
-  }, (err) => {
-    console.error('subscribeToDeliveryTracking error:', err);
-    callback(null);
-  });
+  );
 }
 
 /**

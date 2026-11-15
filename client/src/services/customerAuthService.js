@@ -87,7 +87,16 @@ export async function customerRegister({ name, email, phone, password }) {
     }
   }
 
-  return { user: cred.user, isExistingAuthUser };
+  const profile = {
+    uid: cred.user.uid,
+    name: cleanName || existingData.name || cleanEmail.split('@')[0],
+    email: cleanEmail,
+    phone: cleanPhone || existingData.phone || '',
+    role: 'customer',
+    emailVerified: Boolean(cred.user.emailVerified),
+  };
+
+  return { user: cred.user, profile, isExistingAuthUser };
 }
 
 // ─── Login ────────────────────────────────────────────────────────────────────
@@ -203,8 +212,15 @@ export function onCustomerAuthChange(callback) {
         emailVerified: Boolean(fbUser.emailVerified),
       });
     } catch (e) {
-      console.warn('onCustomerAuthChange error:', e);
-      callback(null);
+      console.warn('onCustomerAuthChange error, falling back to basic auth synthesis:', e);
+      callback({
+        uid: fbUser.uid,
+        name: fbUser.displayName || (fbUser.email || '').split('@')[0],
+        email: (fbUser.email || '').toLowerCase(),
+        phone: fbUser.phoneNumber || '',
+        role: 'customer',
+        emailVerified: Boolean(fbUser.emailVerified),
+      });
     }
   });
 }

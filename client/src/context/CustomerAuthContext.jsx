@@ -10,32 +10,60 @@ import {
 
 const CustomerAuthContext = createContext(null);
 
+const CUSTOMER_STORAGE_KEY = 'abar_khabo_customer';
+
 export function CustomerAuthProvider({ children }) {
-  const [customer, setCustomer] = useState(null);
+  const [customer, setCustomer] = useState(() => {
+    try {
+      const saved = localStorage.getItem(CUSTOMER_STORAGE_KEY);
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [loading, setLoading]   = useState(true);
 
   useEffect(() => {
     const unsub = onCustomerAuthChange((profile) => {
       setCustomer(profile);
+      if (profile) {
+        try {
+          localStorage.setItem(CUSTOMER_STORAGE_KEY, JSON.stringify(profile));
+        } catch {}
+      } else {
+        localStorage.removeItem(CUSTOMER_STORAGE_KEY);
+      }
       setLoading(false);
     });
     return () => unsub();
   }, []);
 
   const register = async (fields) => {
-    const user = await customerRegister(fields);
-    return user;
+    const result = await customerRegister(fields);
+    if (result?.profile) {
+      setCustomer(result.profile);
+      try {
+        localStorage.setItem(CUSTOMER_STORAGE_KEY, JSON.stringify(result.profile));
+      } catch {}
+    }
+    return result;
   };
 
   const login = async (email, password) => {
     const profile = await customerLogin(email, password);
     setCustomer(profile);
+    if (profile) {
+      try {
+        localStorage.setItem(CUSTOMER_STORAGE_KEY, JSON.stringify(profile));
+      } catch {}
+    }
     return profile;
   };
 
   const logout = async () => {
     await customerSignOut();
     setCustomer(null);
+    localStorage.removeItem(CUSTOMER_STORAGE_KEY);
   };
 
   const resetPassword = (email) => customerResetPassword(email);

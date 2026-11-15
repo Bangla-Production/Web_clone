@@ -40,6 +40,7 @@ export default function PublicMenuPage() {
   // restaurant id (/menu/<id>); on a staff device we reuse the last restaurant
   // that logged in there.
   const activeId = restaurantId || localStorage.getItem('restopulse_active_rest_id') || '';
+  const { customer } = useCustomerAuth();
 
   const [restaurant, setRestaurant] = useState(null);
   const [categories, setCategories] = useState([]);
@@ -131,6 +132,7 @@ export default function PublicMenuPage() {
     setOrderLoading(true);
     try {
       const result = await placeOnlineOrder(activeId, {
+        customerId: customer?.uid || '',
         customerName: orderName.trim(),
         customerPhone: phoneCheck.cleaned,
         deliveryAddress: orderType === 'DELIVERY' ? orderAddress.trim() : (restaurant?.address ? `Takeaway: ${restaurant.address}` : 'Takeaway - Self Pickup at Counter'),
@@ -146,6 +148,7 @@ export default function PublicMenuPage() {
 
       if (orderType === 'DELIVERY' && result?.id) {
         await initDeliveryTracking(result.id, {
+          customerId: customer?.uid || '',
           restaurantId: activeId,
           restaurantName: restaurant?.name || 'Restaurant',
           restaurantCoordinates: restaurant?.coordinates || {
@@ -171,7 +174,6 @@ export default function PublicMenuPage() {
 
   const { theme, toggleTheme } = useTheme();
   const toast = useToast();
-  const { customer } = useCustomerAuth();
 
   useEffect(() => {
     if (customer) {

@@ -7,7 +7,7 @@ import {
   ShoppingBag, Package, Bike, Truck, Navigation2, RefreshCw
 } from 'lucide-react';
 import { getAllRestaurants } from '../services/firestoreService';
-import { getOnlineOrdersAcrossRestaurants } from '../services/onlineOrderService';
+import { getOnlineOrdersAcrossRestaurants, subscribeToOnlineOrderById } from '../services/onlineOrderService';
 import { calculateDistanceKm, getSavedCustomerLocation } from '../services/locationService';
 import LocationPermissionModal from '../components/delivery/LocationPermissionModal';
 import AddressSelectorModal from '../components/delivery/AddressSelectorModal';
@@ -47,18 +47,14 @@ function AuthPanel({ onClose }) {
     setLoading(true);
     try {
       if (mode === 'login') {
-        await login(cleanEmail, password);
-        onClose();
+        const profile = await login(cleanEmail, password);
+        setSuccess(`Logged in successfully! Welcome, ${profile?.name || cleanEmail}!`);
+        setTimeout(() => onClose(), 600);
       } else if (mode === 'register') {
         const phoneCheck = validateIndianPhone(phone);
         const result = await register({ name: cleanName, email: cleanEmail, phone: phoneCheck.cleaned, password });
-        if (result?.isExistingAuthUser) {
-          setSuccess('Account verified and logged in successfully!');
-          setTimeout(() => onClose(), 800);
-        } else {
-          setSuccess('Account created! Check your email to verify, then log in.');
-          setMode('login');
-        }
+        setSuccess(`Account created & logged in! Welcome, ${cleanName || cleanEmail}!`);
+        setTimeout(() => onClose(), 700);
       } else {
         await resetPassword(cleanEmail);
         setSuccess('Reset link sent — check your email.');
@@ -195,16 +191,23 @@ function AuthPanel({ onClose }) {
 // ─── Customer Orders Modal ───────────────────────────────────────────────────
 
 function CustomerOrdersModal({ onClose, defaultPhone }) {
-  const [phone, setPhone] = useState(defaultPhone || '');
+  const [phone, setPhone] = useState(() => {
+    if (defaultPhone) return defaultPhone;
+    try {
+      const orders = JSON.parse(localStorage.getItem('abar_khabo_placed_orders') || '[]');
+      if (orders[0]?.customerPhone) return orders[0].customerPhone;
+    } catch {}
+    return '';
+  });
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
 
   const fetchOrders = async (phoneToQuery) => {
-    if (!phoneToQuery) return;
     setLoading(true);
     try {
-      const list = await getOnlineOrdersAcrossRestaurants(phoneToQuery.trim());
+      const targetPhone = phoneToQuery !== undefined ? phoneToQuery : phone;
+      const list = await getOnlineOrdersAcrossRestaurants(targetPhone ? targetPhone.trim() : '');
       setOrders(list);
     } catch (e) {
       console.error(e);
@@ -215,8 +218,10 @@ function CustomerOrdersModal({ onClose, defaultPhone }) {
   };
 
   useEffect(() => {
-    if (defaultPhone) {
-      fetchOrders(defaultPhone);
+    if (phone) {
+      fetchOrders(phone);
+    } else {
+      fetchOrders('');
     }
   }, [defaultPhone]);
 
@@ -298,16 +303,21 @@ function CustomerOrdersModal({ onClose, defaultPhone }) {
                   <span>{order.items?.length || 0} item(s)</span>
                 </div>
 
+                {order.riderName && (
+                  <div className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                    <Bike className="w-3.5 h-3.5 animate-pulse" />
+                    <span>Rider Assigned: <strong>{order.riderName}</strong> {order.riderPhone ? `(${order.riderPhone})` : ''}</span>
+                  </div>
+                )}
+
                 {order.orderType === 'DELIVERY' && (
-                  <div className="pt-1 border-t border-slate-200 dark:border-slate-700">
-                    <a
-                      href={`/track/${order.id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-xs font-bold text-cyan-600 dark:text-cyan-400 hover:underline"
+                  <div className="pt-1.5 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                    <Link
+                      to={`/track/${order.id}`}
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-600 dark:text-amber-400 hover:underline"
                     >
                       <Navigation2 className="w-3.5 h-3.5" /> Live GPS Map & Rider Tracking →
-                    </a>
+                    </Link>
                   </div>
                 )}
               </div>
@@ -405,6 +415,7 @@ export default function CustomerPortalPage() {
   const [customerLoc, setCustomerLoc]   = useState(() => getSavedCustomerLocation());
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [showAddressSelector, setShowAddressSelector] = useState(false);
+  const [activeDispatchedOrder, setActiveDispatchedOrder] = useState(null);
 
   useEffect(() => {
     document.title = 'Abar Khabo — Online Food Delivery & Takeaway';
@@ -412,6 +423,31 @@ export default function CustomerPortalPage() {
       .then((list) => setRestaurants(list.filter(r => r.status !== 'suspended')))
       .catch(console.error)
       .finally(() => setLoading(false));
+  }, []);
+
+  // Listen to the most recent placed order to notify customer when dispatched / rider assigned
+  useEffect(() => {
+    try {
+      const orders = JSON.parse(localStorage.getItem('abar_khabo_placed_orders') || '[]');
+      const active = orders.find(
+        (o) => o.status !== 'COMPLETED' && o.status !== 'CANCELLED' && o.deliveryStatus !== 'DELIVERED'
+      );
+      if (!active?.id) {
+        setActiveDispatchedOrder(null);
+        return;
+      }
+
+      const unsub = subscribeToOnlineOrderById(active.id, (liveOrder) => {
+        if (!liveOrder) return;
+        const status = liveOrder.deliveryStatus || liveOrder.status;
+        if (['RIDER_ASSIGNED', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'DISPATCHED'].includes(status)) {
+          setActiveDispatchedOrder(liveOrder);
+        } else {
+          setActiveDispatchedOrder(null);
+        }
+      });
+      return () => unsub();
+    } catch {}
   }, []);
 
   const filtered = restaurants.filter(r => {
@@ -477,13 +513,22 @@ export default function CustomerPortalPage() {
 
             {!authLoading && (
               customer ? (
-                <div className="flex items-center gap-2">
-                  <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700">
-                    <div className="w-5 h-5 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center">
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700">
+                    <div className="w-5 h-5 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shrink-0 shadow-sm">
                       <User className="w-3 h-3 text-white"/>
                     </div>
-                    <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">{customer.name || customer.email}</span>
+                    <span className="text-xs font-semibold text-amber-700 dark:text-amber-300 max-w-[100px] sm:max-w-[150px] truncate">
+                      {customer.name || customer.email}
+                    </span>
                   </div>
+                  <button
+                    onClick={() => setShowOrdersModal(true)}
+                    className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-slate-600 dark:text-slate-300 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
+                    title="My Orders & Live Tracking"
+                  >
+                    <Package className="w-4 h-4"/>
+                  </button>
                   <button
                     onClick={logout}
                     className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-red-100 dark:hover:bg-red-900/40 text-slate-600 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-400 transition-colors"
@@ -506,6 +551,25 @@ export default function CustomerPortalPage() {
         </div>
       </nav>
 
+      {/* Active Order Live Dispatch Notification Banner */}
+      {activeDispatchedOrder && (
+        <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 text-white px-4 py-2.5 text-xs font-bold shadow-md sticky top-14 z-30 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Bike className="w-4 h-4 animate-bounce shrink-0 text-white" />
+            <span>
+              Order #{activeDispatchedOrder.id.slice(-6).toUpperCase()} Dispatched!
+              {activeDispatchedOrder.riderName ? ` Rider ${activeDispatchedOrder.riderName} is on the way.` : ' Assigned rider is heading to pick up your order.'}
+            </span>
+          </div>
+          <Link
+            to={`/track/${activeDispatchedOrder.id}`}
+            className="px-3 py-1 bg-white text-orange-600 hover:bg-orange-50 rounded-lg text-xs font-extrabold shadow shrink-0 flex items-center gap-1 transition-all"
+          >
+            Track Live Map →
+          </Link>
+        </div>
+      )}
+
       {/* Hero */}
       <div className="bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-900 border-b border-amber-100 dark:border-slate-800">
         <div className="max-w-6xl mx-auto px-4 py-10 text-center">
@@ -513,6 +577,22 @@ export default function CustomerPortalPage() {
             <Sparkles className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400"/>
             <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">Takeaway · Delivery · Dine-In</span>
           </div>
+
+          {customer && (
+            <div className="mb-3 block">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300 font-semibold shadow-sm">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>Logged in as <strong>{customer.name || customer.email}</strong></span>
+                <button
+                  onClick={() => setShowOrdersModal(true)}
+                  className="underline ml-1 hover:text-emerald-600 dark:hover:text-emerald-200 cursor-pointer"
+                >
+                  View My Orders →
+                </button>
+              </div>
+            </div>
+          )}
+
           <h1 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white mb-2">
             Discover & Order from <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-500 to-orange-500">Every Restaurant</span>
           </h1>

@@ -98,6 +98,21 @@ export async function acceptDeliveryOrder(orderId, riderProfile) {
 
   await updateDoc(orderRef, riderInfo);
 
+  // Sync locally if present on this machine
+  try {
+    const orders = JSON.parse(localStorage.getItem('abar_khabo_placed_orders') || '[]');
+    const idx = orders.findIndex((o) => o.id === orderId);
+    if (idx >= 0) {
+      orders[idx] = { ...orders[idx], ...riderInfo, updatedAt: new Date().toISOString() };
+      localStorage.setItem('abar_khabo_placed_orders', JSON.stringify(orders));
+    }
+    const single = localStorage.getItem(`abar_khabo_order_${orderId}`);
+    if (single) {
+      const parsed = JSON.parse(single);
+      localStorage.setItem(`abar_khabo_order_${orderId}`, JSON.stringify({ ...parsed, ...riderInfo, updatedAt: new Date().toISOString() }));
+    }
+  } catch {}
+
   await setDoc(trackingRef, {
     status: DELIVERY_STATUS.RIDER_ASSIGNED,
     riderId: riderId,

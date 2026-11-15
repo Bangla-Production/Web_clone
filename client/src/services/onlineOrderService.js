@@ -8,6 +8,7 @@
  */
 
 import {
+  auth,
   db,
   collection,
   collectionGroup,
@@ -34,10 +35,12 @@ export async function placeOnlineOrder(restaurantId, orderData) {
   const rootColRef = collection(db, 'onlineOrders');
   const orderDocRef = doc(rootColRef);
   const orderId = orderDocRef.id;
+  const customerId = orderData.customerId || auth?.currentUser?.uid || null;
 
   const payload = {
     ...orderData,
     id: orderId,
+    customerId,
     restaurantId,
     status: 'PLACED',
     deliveryStatus: orderData.orderType === 'DELIVERY' ? 'PLACED' : null,
@@ -51,6 +54,22 @@ export async function placeOnlineOrder(restaurantId, orderData) {
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
+
+  // Cache locally right away for instant client-side retrieval & offline resilience
+  try {
+    const localOrder = {
+      ...payload,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    const saved = JSON.parse(localStorage.getItem('abar_khabo_placed_orders') || '[]');
+    const nextList = [localOrder, ...saved.filter(o => o.id !== orderId)].slice(0, 50);
+    localStorage.setItem('abar_khabo_placed_orders', JSON.stringify(nextList));
+    localStorage.setItem(`abar_khabo_order_${orderId}`, JSON.stringify(localOrder));
+    localStorage.setItem('abar_khabo_latest_order_id', orderId);
+  } catch (e) {
+    console.warn('Could not cache placed order to localStorage:', e);
+  }
 
   // 1. Write to root onlineOrders collection
   await setDoc(orderDocRef, payload);
@@ -160,30 +179,65 @@ export function subscribeToOnlineOrderById(arg1, arg2, arg3) {
     return () => {};
   }
 
+  // Local storage lookup for immediate initial rendering & offline resilience
+  const getLocalOrder = () => {
+    try {
+      const single = localStorage.getItem(`abar_khabo_order_${orderId}`);
+      if (single) return JSON.parse(single);
+      const orders = JSON.parse(localStorage.getItem('abar_khabo_placed_orders') || '[]');
+      return orders.find((o) => o.id === orderId) || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const initialLocal = getLocalOrder();
+  if (initialLocal) {
+    callback(initialLocal);
+  }
+
   // Listen to root onlineOrders document
   const rootDocRef = doc(db, 'onlineOrders', orderId);
   return onSnapshot(
     rootDocRef,
     (snap) => {
       if (snap.exists()) {
-        callback({ id: snap.id, ...snap.data() });
+        const liveData = { id: snap.id, ...snap.data() };
+        try {
+          localStorage.setItem(`abar_khabo_order_${orderId}`, JSON.stringify(liveData));
+          const orders = JSON.parse(localStorage.getItem('abar_khabo_placed_orders') || '[]');
+          const idx = orders.findIndex((o) => o.id === orderId);
+          if (idx >= 0) {
+            orders[idx] = { ...orders[idx], ...liveData };
+            localStorage.setItem('abar_khabo_placed_orders', JSON.stringify(orders));
+          } else {
+            orders.unshift(liveData);
+            localStorage.setItem('abar_khabo_placed_orders', JSON.stringify(orders.slice(0, 50)));
+          }
+        } catch {}
+        callback(liveData);
       } else if (restaurantId) {
         // Fallback to subcollection
         const subDocRef = doc(db, 'restaurants', restaurantId, 'onlineOrders', orderId);
-        getDoc(subDocRef).then((subSnap) => {
-          if (subSnap.exists()) {
-            callback({ id: subSnap.id, ...subSnap.data() });
-          } else {
-            callback(null);
-          }
-        });
+        getDoc(subDocRef)
+          .then((subSnap) => {
+            if (subSnap.exists()) {
+              const subData = { id: subSnap.id, ...subSnap.data() };
+              callback(subData);
+            } else {
+              callback(getLocalOrder());
+            }
+          })
+          .catch(() => {
+            callback(getLocalOrder());
+          });
       } else {
-        callback(null);
+        callback(getLocalOrder());
       }
     },
     (err) => {
-      console.warn('subscribeToOnlineOrderById error:', err);
-      callback(null);
+      console.warn('subscribeToOnlineOrderById error, using local fallback:', err);
+      callback(getLocalOrder());
     }
   );
 }
@@ -216,6 +270,21 @@ export async function updateOnlineOrderStatus(arg1, arg2, arg3, arg4) {
     updatedAt: serverTimestamp(),
   };
 
+  // Sync with local storage
+  try {
+    const single = localStorage.getItem(`abar_khabo_order_${orderId}`);
+    if (single) {
+      const parsed = JSON.parse(single);
+      localStorage.setItem(`abar_khabo_order_${orderId}`, JSON.stringify({ ...parsed, ...updates, updatedAt: new Date().toISOString() }));
+    }
+    const orders = JSON.parse(localStorage.getItem('abar_khabo_placed_orders') || '[]');
+    const idx = orders.findIndex((o) => o.id === orderId);
+    if (idx >= 0) {
+      orders[idx] = { ...orders[idx], ...updates, updatedAt: new Date().toISOString() };
+      localStorage.setItem('abar_khabo_placed_orders', JSON.stringify(orders));
+    }
+  } catch {}
+
   // 1. Update root
   try {
     const rootRef = doc(db, 'onlineOrders', orderId);
@@ -238,32 +307,89 @@ export async function updateOnlineOrderStatus(arg1, arg2, arg3, arg4) {
 // ─── Customer online-order history (by phone number) ──────────────────────────
 
 export async function getOnlineOrdersAcrossRestaurants(phone) {
+  const cleanPhone = String(phone || '').replace(/\D/g, '').slice(-10);
+  const foundMap = new Map();
+
+  // 1. Check local storage cache on this device
   try {
-    const cleanPhone = String(phone).replace(/\D/g, '').slice(-10);
-    // Query root collection
+    const localOrders = JSON.parse(localStorage.getItem('abar_khabo_placed_orders') || '[]');
+    for (const ord of localOrders) {
+      const p = String(ord.customerPhone || '').replace(/\D/g, '').slice(-10);
+      if (!cleanPhone || p === cleanPhone || p.endsWith(cleanPhone) || cleanPhone.endsWith(p)) {
+        foundMap.set(ord.id, ord);
+      }
+    }
+  } catch (e) {
+    console.warn('localStorage read error in getOnlineOrdersAcrossRestaurants:', e);
+  }
+
+  // 2. Query Firestore by customerId if user is authenticated
+  if (auth?.currentUser?.uid) {
+    try {
+      const q = query(
+        collection(db, 'onlineOrders'),
+        where('customerId', '==', auth.currentUser.uid)
+      );
+      const snap = await getDocs(q);
+      snap.docs.forEach((d) => {
+        const data = { id: d.id, ...d.data() };
+        const p = String(data.customerPhone || '').replace(/\D/g, '').slice(-10);
+        if (!cleanPhone || p === cleanPhone || p.endsWith(cleanPhone) || cleanPhone.endsWith(p)) {
+          foundMap.set(data.id, data);
+        }
+      });
+    } catch (authErr) {
+      console.warn('Authenticated customer orders query error:', authErr);
+    }
+  }
+
+  // 3. For any found order IDs, attempt fresh individual doc read to get latest live status
+  const orderIds = Array.from(foundMap.keys());
+  await Promise.all(
+    orderIds.map(async (oid) => {
+      try {
+        const snap = await getDoc(doc(db, 'onlineOrders', oid));
+        if (snap.exists()) {
+          const fresh = { id: snap.id, ...snap.data() };
+          foundMap.set(oid, fresh);
+        }
+      } catch (e) {}
+    })
+  );
+
+  // 4. Try root phone query (if permitted by rules)
+  try {
     const q = query(
       collection(db, 'onlineOrders'),
       where('customerPhone', 'in', [phone, cleanPhone, `+91${cleanPhone}`])
     );
     const snap = await getDocs(q);
-    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    list.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-    return list;
-  } catch (err) {
-    console.warn('getOnlineOrdersAcrossRestaurants fallback to collectionGroup:', err);
+    snap.docs.forEach((d) => {
+      foundMap.set(d.id, { id: d.id, ...d.data() });
+    });
+  } catch (err) {}
+
+  // 5. Try collectionGroup fallback if still empty
+  if (foundMap.size === 0) {
     try {
       const cg = collectionGroup(db, 'onlineOrders');
       const snap = await getDocs(cg);
-      const cleanPhone = String(phone).replace(/\D/g, '').slice(-10);
-      return snap.docs
-        .map((d) => ({ id: d.id, restaurantId: d.ref.parent.parent?.id, ...d.data() }))
-        .filter((o) => {
-          const p = String(o.customerPhone || '').replace(/\D/g, '').slice(-10);
-          return p === cleanPhone;
-        });
-    } catch (cgErr) {
-      console.warn('collectionGroup error:', cgErr);
-      return [];
-    }
+      snap.docs.forEach((d) => {
+        const data = d.data();
+        const p = String(data.customerPhone || '').replace(/\D/g, '').slice(-10);
+        if (p === cleanPhone) {
+          foundMap.set(d.id, { id: d.id, restaurantId: d.ref.parent.parent?.id, ...data });
+        }
+      });
+    } catch (cgErr) {}
   }
+
+  const list = Array.from(foundMap.values());
+  list.sort((a, b) => {
+    const tA = a.createdAt?.seconds ? a.createdAt.seconds * 1000 : (new Date(a.createdAt || 0).getTime() || 0);
+    const tB = b.createdAt?.seconds ? b.createdAt.seconds * 1000 : (new Date(b.createdAt || 0).getTime() || 0);
+    return tB - tA;
+  });
+
+  return list;
 }

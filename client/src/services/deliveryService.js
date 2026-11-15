@@ -100,9 +100,10 @@ export function calculateDeliveryEstimate(restaurant, customerLoc, subtotal = 0)
  */
 export async function initDeliveryTracking(orderId, trackingData) {
   try {
-    const trackingRef = doc(db, 'deliveryTracking', orderId);
-    await setDoc(trackingRef, {
+    const customerId = trackingData.customerId || '';
+    const trackingPayload = {
       orderId,
+      customerId,
       status: trackingData.status || DELIVERY_STATUS.PLACED,
       restaurantId: trackingData.restaurantId,
       restaurantName: trackingData.restaurantName || '',
@@ -116,7 +117,19 @@ export async function initDeliveryTracking(orderId, trackingData) {
       riderCoordinates: null,
       lastUpdatedAt: serverTimestamp(),
       createdAt: serverTimestamp(),
-    }, { merge: true });
+    };
+
+    // Cache locally
+    try {
+      localStorage.setItem(`abar_khabo_tracking_${orderId}`, JSON.stringify({
+        ...trackingPayload,
+        lastUpdatedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString()
+      }));
+    } catch {}
+
+    const trackingRef = doc(db, 'deliveryTracking', orderId);
+    await setDoc(trackingRef, trackingPayload, { merge: true });
     return true;
   } catch (err) {
     console.error('initDeliveryTracking error:', err);
