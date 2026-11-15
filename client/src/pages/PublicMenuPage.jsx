@@ -126,10 +126,6 @@ export default function PublicMenuPage() {
         toast.error('Please enter or detect your delivery address.');
         return;
       }
-      if (!deliveryEstimate.isServiceable) {
-        toast.error(`Delivery is unavailable beyond ${deliveryEstimate.maxRadius} km. Please select Takeaway.`);
-        return;
-      }
     }
 
     setOrderLoading(true);
@@ -911,13 +907,11 @@ export default function PublicMenuPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={orderLoading || cart.length === 0 || (orderType === 'DELIVERY' && !deliveryEstimate.isServiceable)}
+                  disabled={orderLoading || cart.length === 0}
                   className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold shadow-md disabled:opacity-50 flex items-center gap-2"
                 >
                   {orderLoading
                     ? 'Placing...'
-                    : orderType === 'DELIVERY' && !deliveryEstimate.isServiceable
-                    ? 'Out of Delivery Range'
                     : `Place ${orderType === 'DELIVERY' ? 'Delivery' : 'Takeaway'} Order (₹${grandTotal.toFixed(0)})`}
                 </button>
               </div>

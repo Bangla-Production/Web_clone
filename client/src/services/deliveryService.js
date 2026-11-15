@@ -45,8 +45,9 @@ export function calculateDeliveryEstimate(restaurant, customerLoc, subtotal = 0)
     distanceKm = calculateDistanceKm(customerLoc.lat, customerLoc.lng, rLat, rLng);
   }
 
-  const maxRadius = Number(restaurant?.deliveryRadiusKm) || 12;
-  const isServiceable = distanceKm <= maxRadius;
+  // Delivery is accepted from any address: distance-based pricing applies across all distances
+  const maxRadius = Number(restaurant?.deliveryRadiusKm) || 0;
+  const isServiceable = true;
 
   // Pricing rules configurable by restaurant admin:
   // Modes: 'DISTANCE_BASED' | 'FIXED' | 'FREE'

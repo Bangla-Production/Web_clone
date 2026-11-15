@@ -700,7 +700,7 @@ export default function SettingsPage() {
 
             <div>
               <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Max Service Radius (km)
+                Standard Service Radius (km)
               </label>
               <input
                 type="number"
@@ -710,7 +710,7 @@ export default function SettingsPage() {
                 placeholder="12"
                 className="w-full px-3 py-2 bg-pos-dark border border-pos-border rounded-xl text-slate-900 dark:text-white font-num focus:outline-none focus:border-emerald-500"
               />
-              <span className="text-[10px] text-slate-500">Orders beyond are blocked</span>
+              <span className="text-[10px] text-slate-500">Distance-based delivery fare applies to all addresses</span>
             </div>
 
             <div>

@@ -173,25 +173,16 @@ export default function CheckoutLocationSection({
         className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-cyan-500"
       />
 
-      {/* Delivery Distance & Serviceability Feedback */}
+      {/* Delivery Distance & Fare Feedback (Accepted from any address) */}
       {deliveryEstimate && (
-        deliveryEstimate.isServiceable ? (
-          <div className="p-2.5 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-between text-[11px]">
-            <span className="text-slate-300">
-              Est. Distance: <strong className="text-white">{deliveryEstimate.distanceKm} km</strong> · ~{deliveryEstimate.estimatedTimeMins} mins
-            </span>
-            <span className="text-emerald-400 font-bold">
-              {deliveryEstimate.isFree ? 'FREE Delivery' : `₹${deliveryEstimate.fee} fee`}
-            </span>
-          </div>
-        ) : (
-          <div className="p-2.5 rounded-xl bg-rose-950/50 border border-rose-800 text-rose-300 text-[11px] space-y-0.5">
-            <p className="font-bold">Outside Service Area</p>
-            <p className="text-rose-400 text-[10px]">
-              Distance ({deliveryEstimate.distanceKm} km) exceeds delivery radius ({deliveryEstimate.maxRadius} km). Please switch to Takeaway.
-            </p>
-          </div>
-        )
+        <div className="p-2.5 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-between text-[11px]">
+          <span className="text-slate-300">
+            Est. Distance: <strong className="text-white">{deliveryEstimate.distanceKm} km</strong> · ~{deliveryEstimate.estimatedTimeMins} mins
+          </span>
+          <span className="text-emerald-400 font-bold">
+            {deliveryEstimate.isFree ? 'FREE Delivery' : `₹${deliveryEstimate.fee} fee`}
+          </span>
+        </div>
       )}
     </div>
   );

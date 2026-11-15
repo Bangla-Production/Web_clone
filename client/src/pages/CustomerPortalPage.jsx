@@ -331,8 +331,7 @@ function RestaurantCard({ restaurant, customerLoc }) {
   if (customerLoc?.lat && customerLoc?.lng && rLat && rLng) {
     distanceKm = calculateDistanceKm(customerLoc.lat, customerLoc.lng, rLat, rLng);
   }
-  const maxRadius = restaurant.deliveryRadiusKm || 12;
-  const isServiceable = distanceKm !== null ? distanceKm <= maxRadius : true;
+  const isServiceable = true;
 
   return (
     <Link
@@ -368,11 +367,6 @@ function RestaurantCard({ restaurant, customerLoc }) {
       <div className="p-4">
         <div className="flex items-start justify-between gap-2">
           <h3 className="font-extrabold text-slate-900 dark:text-white text-base leading-tight group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">{restaurant.name}</h3>
-          {distanceKm !== null && !isServiceable && (
-            <span className="text-[10px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-950/50 px-2 py-0.5 rounded-md shrink-0">
-              Takeaway Only
-            </span>
-          )}
         </div>
 
         {cuisines && <p className="text-xs text-amber-600 dark:text-amber-400 font-semibold mt-0.5">{cuisines}</p>}

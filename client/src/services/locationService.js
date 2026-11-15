@@ -36,19 +36,16 @@ export function calculateDistanceKm(lat1, lon1, lat2, lon2) {
 }
 
 /**
- * Checks if a restaurant is within the customer's delivery radius.
- * Default max radius: 15 km.
+ * Checks if a restaurant is serviceable for the customer.
+ * By default, deliveries are accepted from any address.
  */
-export function isRestaurantServiceable(customerCoords, restaurantCoords, maxRadiusKm = 15) {
-  if (!customerCoords || !restaurantCoords) return true; // Default available if no coordinates set
-  const distance = calculateDistanceKm(
-    customerCoords.lat,
-    customerCoords.lng,
-    restaurantCoords.lat,
-    restaurantCoords.lng
-  );
-  if (distance === null) return true;
-  return distance <= maxRadiusKm;
+export function isRestaurantServiceable(customerCoords, restaurantCoords, maxRadiusKm = null) {
+  if (maxRadiusKm) {
+    if (!customerCoords || !restaurantCoords) return true;
+    const distance = calculateDistanceKm(customerCoords.lat, customerCoords.lng, restaurantCoords.lat, restaurantCoords.lng);
+    return distance === null || distance <= maxRadiusKm;
+  }
+  return true; // Orders accepted from any address
 }
 
 /**
